@@ -64,4 +64,4 @@ npm run typecheck
 npm run build
 ```
 
-This also regenerates `src/openapi.ts` from `../seclai-python/openapi/seclai.openapi.json`.
+This also regenerates `src/openapi.ts` from `openapi/seclai.openapi.json`.

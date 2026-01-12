@@ -29,7 +29,7 @@
   "scripts": {
     "version:apply": "node scripts/set-version.mjs apply",
     "version:restore": "node scripts/set-version.mjs restore",
-    "generate": "openapi-typescript ../seclai-python/openapi/seclai.openapi.json -o src/openapi.ts",
+    "generate": "openapi-typescript openapi/seclai.openapi.json -o src/openapi.ts",
     "build": "npm run generate && tsup src/index.ts --format esm,cjs --dts",
     "build:versioned": "npm run version:apply && npm run build && npm run version:restore",
     "publish:ci": "npm run version:apply && npm run build && npm publish --provenance --access public --ignore-scripts && npm run version:restore",
