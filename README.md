@@ -8,6 +8,18 @@ This is the official Seclai JavaScript SDK with TypeScript typings.
 npm install @seclai/sdk
 ```
 
+## API documentation
+
+Online API documentation (latest):
+
+https://seclai.github.io/seclai-javascript/latest/
+
+Generate HTML docs into `build/docs/`:
+
+```bash
+npm run docs
+```
+
 ## Usage
 
 ```ts

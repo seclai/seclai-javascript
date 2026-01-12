@@ -20,15 +20,15 @@
     "LICENSE",
     "README.md"
   ],
-  "homepage": "https://github.com/seclai/seclai-javascript",
+  "homepage": "https://seclai.github.io/seclai-javascript/latest/",
   "bugs": {
     "url": "https://github.com/seclai/seclai-javascript/issues",
     "email": "support@seclai.com"
   },
   "repository": "github:seclai/seclai-javascript",
   "scripts": {
-    "version:apply": "node scripts/set-version.mjs apply",
-    "version:restore": "node scripts/set-version.mjs restore",
+    "version:apply": "node scripts/set-version.mjs apply && node scripts/set-readme-version.mjs apply",
+    "version:restore": "node scripts/set-readme-version.mjs restore && node scripts/set-version.mjs restore",
     "generate": "openapi-typescript openapi/seclai.openapi.json -o src/openapi.ts",
     "build": "npm run generate && tsup src/index.ts --format esm,cjs --dts",
     "build:versioned": "npm run version:apply && npm run build && npm run version:restore",

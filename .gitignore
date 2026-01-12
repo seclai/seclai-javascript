@@ -6,3 +6,4 @@ dist
 build
 .DS_Store
 .version-backup.json
+.README.md.bak
