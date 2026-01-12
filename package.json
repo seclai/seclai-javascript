@@ -1,0 +1,48 @@
+{
+  "name": "@seclai/sdk",
+  "version": "0.0.0",
+  "description": "Seclai JavaScript SDK",
+  "keywords": ["Seclai", "ai", "agent", "vector", "knowledge base", "cloud"],
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "homepage": "https://github.com/seclai/seclai-javascript",
+  "bugs": {
+    "url": "https://github.com/seclai/seclai-javascript/issues",
+    "email": "support@seclai.com"
+  },
+  "repository": "github:seclai/seclai-javascript",
+  "scripts": {
+    "version:apply": "node scripts/set-version.mjs apply",
+    "version:restore": "node scripts/set-version.mjs restore",
+    "generate": "openapi-typescript openapi/seclai.openapi.json -o src/openapi.ts",
+    "build": "npm run generate && tsup src/index.ts --format esm,cjs --dts",
+    "build:versioned": "npm run version:apply && npm run build && npm run version:restore",
+    "publish:ci": "npm run version:apply && npm run build && npm publish --provenance --access public --ignore-scripts && npm run version:restore",
+    "docs": "npm run generate && typedoc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.9.1",
+    "typedoc": "^0.27.6",
+    "tsup": "^8.5.0",
+    "vitest": "^2.1.9",
+    "typescript": "^5.7.3"
+  }
+}
