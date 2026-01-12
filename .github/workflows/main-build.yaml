@@ -1,0 +1,163 @@
+name: Release Build
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  npm:
+    name: Build, Typecheck, and Publish to npm
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: write
+    outputs:
+      version: ${{ steps.next-tag.outputs.new_tag }}
+    steps:
+      - name: Checkout files
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: "0"
+
+      - name: Determine next version tag
+        id: next-tag
+        uses: seclai/github-tag-action@1.75.0
+        env:
+          DEFAULT_BUMP: patch
+          DRY_RUN: "true"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Publish package to npm
+        env:
+          VERSION: ${{ steps.next-tag.outputs.new_tag }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm run publish:ci
+
+      - name: Push tag
+        run: |
+          git tag ${{ steps.next-tag.outputs.new_tag }}
+          git push origin ${{ steps.next-tag.outputs.new_tag }}
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create ${{ steps.next-tag.outputs.new_tag }} \
+            --title "Release ${{ steps.next-tag.outputs.new_tag }}" \
+            --generate-notes
+
+  pages:
+    name: Publish Docs to GitHub Pages
+    needs: npm
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy-pages.outputs.page_url }}
+    permissions:
+      id-token: write
+      contents: write
+      pages: write
+    steps:
+      - name: Checkout files
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.npm.outputs.version }}
+          fetch-depth: "0"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate SDK documentation
+        env:
+          VERSION: ${{ needs.npm.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          npm run docs
+
+          # typedoc writes to build/docs; stage into versioned folders + latest
+          rm -rf build/docs_tmp
+          mv build/docs build/docs_tmp
+
+          mkdir -p "build/docs/${VERSION}" "build/docs/latest"
+          cp -R build/docs_tmp/* "build/docs/${VERSION}/"
+          cp -R build/docs_tmp/* build/docs/latest/
+
+          # root redirect to latest/
+          cat > build/docs/index.html <<'EOF'
+          <!doctype html>
+          <meta charset="utf-8" />
+          <meta http-equiv="refresh" content="0; url=latest/" />
+          <link rel="canonical" href="latest/" />
+          <title>Seclai JS SDK Docs</title>
+          <p><a href="latest/">Go to latest docs</a></p>
+          EOF
+
+      - name: Checkout gh-pages branch
+        uses: actions/checkout@v5
+        with:
+          ref: gh-pages
+          path: gh-pages
+          fetch-depth: 0
+
+      - name: Publish SDK docs to GitHub Pages (versioned)
+        env:
+          VERSION: ${{ needs.npm.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          touch gh-pages/.nojekyll
+
+          rm -rf "gh-pages/latest" "gh-pages/${VERSION}" "gh-pages/index.html"
+          cp -R "build/docs/latest" "gh-pages/latest"
+          cp -R "build/docs/${VERSION}" "gh-pages/${VERSION}"
+          cp "build/docs/index.html" "gh-pages/index.html"
+
+          cd gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No doc changes to publish."
+            exit 0
+          fi
+          git commit -m "Docs: ${VERSION}"
+          git push origin gh-pages
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload GitHub Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: gh-pages
+
+      - name: Deploy GitHub Pages
+        id: deploy-pages
+        uses: actions/deploy-pages@v4

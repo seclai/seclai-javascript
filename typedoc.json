@@ -1,0 +1,15 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": ["src/index.ts"],
+  "out": "build/docs",
+  "exclude": [
+    "src/openapi.ts",
+    "dist/**",
+    "node_modules/**"
+  ],
+  "excludePrivate": true,
+  "excludeProtected": true,
+  "excludeInternal": true,
+  "readme": "README.md",
+  "cleanOutputDir": true
+}
