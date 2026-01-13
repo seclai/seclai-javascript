@@ -2,11 +2,13 @@ import {
   SeclaiAPIStatusError,
   SeclaiAPIValidationError,
   SeclaiConfigurationError,
+  SeclaiError,
 } from "./errors";
 import type {
   AgentRunListResponse,
   AgentRunRequest,
   AgentRunResponse,
+  AgentRunStreamRequest,
   ContentDetailResponse,
   ContentEmbeddingsListResponse,
   FileUploadResponse,
@@ -64,6 +66,73 @@ async function safeJson(response: Response): Promise<unknown | undefined> {
   } catch {
     return undefined;
   }
+}
+
+type SseMessage = { event?: string; data?: string };
+
+function createSseParser(onMessage: (msg: SseMessage) => void) {
+  let buffer = "";
+  let eventName: string | undefined;
+  let dataLines: string[] = [];
+
+  function dispatch() {
+    if (!eventName && dataLines.length === 0) return;
+    const msg: SseMessage = { data: dataLines.join("\n") };
+    if (eventName !== undefined) msg.event = eventName;
+    onMessage(msg);
+    eventName = undefined;
+    dataLines = [];
+  }
+
+  function feed(textChunk: string) {
+    buffer += textChunk;
+    while (true) {
+      const newlineIdx = buffer.indexOf("\n");
+      if (newlineIdx === -1) return;
+
+      let line = buffer.slice(0, newlineIdx);
+      buffer = buffer.slice(newlineIdx + 1);
+
+      if (line.endsWith("\r")) line = line.slice(0, -1);
+
+      if (line === "") {
+        dispatch();
+        continue;
+      }
+
+      // Comments/keepalives begin with ':'
+      if (line.startsWith(":")) continue;
+
+      const colon = line.indexOf(":");
+      const field = colon === -1 ? line : line.slice(0, colon);
+      let value = colon === -1 ? "" : line.slice(colon + 1);
+      if (value.startsWith(" ")) value = value.slice(1);
+
+      if (field === "event") {
+        eventName = value;
+      } else if (field === "data") {
+        dataLines.push(value);
+      }
+    }
+  }
+
+  return { feed, end: dispatch };
+}
+
+function anySignal(signals: Array<AbortSignal | undefined>): AbortSignal | undefined {
+  const present = signals.filter(Boolean) as AbortSignal[];
+  if (present.length === 0) return undefined;
+  if (present.length === 1) return present[0];
+  const controller = new AbortController();
+  const onAbort = () => controller.abort();
+  for (const s of present) {
+    if (s.aborted) {
+      controller.abort();
+      break;
+    }
+    s.addEventListener("abort", onAbort, { once: true });
+  }
+  return controller.signal;
 }
 
 /**
@@ -195,6 +264,131 @@ export class Seclai {
   async runAgent(agentId: string, body: AgentRunRequest): Promise<AgentRunResponse> {
     const data = await this.request("POST", `/api/agents/${agentId}/runs`, { json: body });
     return data as AgentRunResponse;
+  }
+
+  /**
+   * Run an agent in streaming mode (SSE) and block until the final `done` event.
+   *
+   * @param agentId - Agent identifier.
+   * @param body - Streaming agent run request payload.
+   * @param opts - Optional timeout + abort signal.
+   * @returns Final agent run payload from the `done` event.
+   */
+  async runStreamingAgentAndWait(
+    agentId: string,
+    body: AgentRunStreamRequest,
+    opts?: { timeoutMs?: number; signal?: AbortSignal }
+  ): Promise<AgentRunResponse> {
+    const url = buildURL(this.baseUrl, `/api/agents/${agentId}/runs/stream`);
+
+    const headers: Record<string, string> = {
+      ...this.defaultHeaders,
+      [this.apiKeyHeader]: this.apiKey,
+      accept: "text/event-stream",
+      "content-type": "application/json",
+    };
+
+    const timeoutMs = opts?.timeoutMs ?? 60_000;
+    const timeoutController = new AbortController();
+    let timedOut = false;
+    const timeoutId = setTimeout(() => {
+      timedOut = true;
+      timeoutController.abort();
+    }, timeoutMs);
+
+    const signal = anySignal([opts?.signal, timeoutController.signal]);
+
+    try {
+      const init: RequestInit = {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+      };
+      if (signal) init.signal = signal;
+
+      const response = await this.fetcher(url, init);
+
+      const contentType = response.headers.get("content-type") ?? "";
+      const isJson = contentType.includes("application/json");
+
+      if (!response.ok) {
+        const responseText = await safeText(response);
+        if (response.status === 422) {
+          const validation = (await safeJson(response)) as HTTPValidationError | undefined;
+          throw new SeclaiAPIValidationError({
+            message: "Validation error",
+            statusCode: response.status,
+            method: "POST",
+            url: url.toString(),
+            responseText,
+            validationError: validation,
+          });
+        }
+        throw new SeclaiAPIStatusError({
+          message: `Request failed with status ${response.status}`,
+          statusCode: response.status,
+          method: "POST",
+          url: url.toString(),
+          responseText,
+        });
+      }
+
+      // Some servers may choose to return a JSON response even when we request SSE.
+      if (isJson) {
+        return (await response.json()) as AgentRunResponse;
+      }
+
+      if (!response.body) {
+        throw new SeclaiConfigurationError(
+          "Streaming response body is not available in this environment. Provide a fetch implementation that supports ReadableStream bodies."
+        );
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+
+      let final: AgentRunResponse | undefined;
+      let lastSeen: AgentRunResponse | undefined;
+
+      const parser = createSseParser((msg) => {
+        if (!msg.data) return;
+
+        // `init` and `done` messages contain JSON payloads in `data:`.
+        if (msg.event === "init" || msg.event === "done") {
+          try {
+            const parsed = JSON.parse(msg.data) as AgentRunResponse;
+            lastSeen = parsed;
+            if (msg.event === "done") {
+              final = parsed;
+            }
+          } catch {
+            // Ignore malformed JSON chunks.
+          }
+        }
+      });
+
+      while (!final) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        if (value) parser.feed(decoder.decode(value, { stream: true }));
+      }
+
+      parser.end();
+
+      if (final) return final;
+      if (lastSeen && (lastSeen as any).status && (lastSeen as any).status !== "pending") {
+        return lastSeen;
+      }
+
+      throw new SeclaiError("Stream ended before receiving a 'done' event.");
+    } catch (err) {
+      if (timedOut) {
+        throw new SeclaiError(`Timed out after ${timeoutMs}ms waiting for streaming agent run to complete.`);
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeoutId);
+    }
   }
 
   /**

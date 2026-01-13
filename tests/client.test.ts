@@ -5,6 +5,7 @@ import {
   SeclaiAPIStatusError,
   SeclaiAPIValidationError,
   SeclaiConfigurationError,
+  SeclaiError,
 } from "../src/index";
 
 type RecordedRequest = {
@@ -13,6 +14,7 @@ type RecordedRequest = {
   headers: Record<string, string>;
   bodyText?: string;
   body?: BodyInit;
+  signal?: AbortSignal | null;
 };
 
 function getHeader(headers: Headers, name: string): string | undefined {
@@ -34,8 +36,51 @@ function makeFetch(handler: (req: RecordedRequest) => Response | Promise<Respons
       bodyText = init.body;
     }
 
-    return await handler({ url, method, headers, bodyText, body: init?.body ?? undefined });
+    return await handler({
+      url,
+      method,
+      headers,
+      bodyText,
+      body: init?.body ?? undefined,
+      signal: init?.signal ?? null,
+    });
   };
+}
+
+function makeSseResponse(
+  chunks: string[],
+  opts?: { signal?: AbortSignal | null; contentType?: string }
+): Response {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      let cancelled = false;
+      const onAbort = () => {
+        cancelled = true;
+        try {
+          controller.error(new Error("aborted"));
+        } catch {
+          // ignore
+        }
+      };
+      opts?.signal?.addEventListener("abort", onAbort, { once: true });
+
+      (async () => {
+        for (const chunk of chunks) {
+          if (cancelled) return;
+          controller.enqueue(encoder.encode(chunk));
+          // Let the consumer process the chunk.
+          await Promise.resolve();
+        }
+        controller.close();
+      })().catch((e) => controller.error(e));
+    },
+  });
+
+  return new Response(stream as any, {
+    status: 200,
+    headers: { "content-type": opts?.contentType ?? "text/event-stream" },
+  });
 }
 
 describe("Seclai client", () => {
@@ -206,5 +251,51 @@ describe("Seclai client", () => {
         fileName: "a.bin",
       })
     ).rejects.toBeInstanceOf(SeclaiAPIValidationError);
+  });
+
+  test("runStreamingAgentAndWait parses SSE and returns done payload", async () => {
+    const fetch = makeFetch((req) => {
+      const u = new URL(req.url);
+      expect(u.pathname).toBe("/api/agents/ag_123/runs/stream");
+      expect(req.method).toBe("POST");
+      expect(req.headers["accept"]).toContain("text/event-stream");
+
+      const initPayload = JSON.stringify({ run_id: "run_123", status: "running" });
+      const donePayload = JSON.stringify({ run_id: "run_123", status: "completed", output: "ok" });
+
+      const sse = [
+        ": keepalive\n\n",
+        `event: init\ndata: ${initPayload}\n\n`,
+        `event: done\ndata: ${donePayload}\n\n`,
+      ];
+
+      return makeSseResponse(sse, { signal: req.signal });
+    });
+
+    const client = new Seclai({ apiKey: "k", baseUrl: "https://example.invalid", fetch });
+    const result = await client.runStreamingAgentAndWait(
+      "ag_123",
+      { input: "hello", metadata: {} as any },
+      { timeoutMs: 1_000 }
+    );
+
+    expect((result as any).run_id).toBe("run_123");
+    expect((result as any).status).toBe("completed");
+    expect((result as any).output).toBe("ok");
+  });
+
+  test("runStreamingAgentAndWait times out when no done event", async () => {
+    const fetch = makeFetch((req) => {
+      // Never send a `done` event; keep the stream open until aborted.
+      return makeSseResponse([": keepalive\n\n", "event: init\ndata: {}\n\n"], {
+        signal: req.signal,
+      });
+    });
+
+    const client = new Seclai({ apiKey: "k", baseUrl: "https://example.invalid", fetch });
+
+    await expect(
+      client.runStreamingAgentAndWait("ag_123", { input: "hello", metadata: {} as any }, { timeoutMs: 5 })
+    ).rejects.toBeInstanceOf(SeclaiError);
   });
 });

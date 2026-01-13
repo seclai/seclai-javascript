@@ -11,6 +11,8 @@ export type JSONValue =
 
 /** Request body for starting an agent run. */
 export type AgentRunRequest = components["schemas"]["AgentRunRequest"];
+/** Request body for starting an agent run in streaming mode (SSE). */
+export type AgentRunStreamRequest = components["schemas"]["AgentRunStreamRequest"];
 /** Response body describing an agent run. */
 export type AgentRunResponse = components["schemas"]["AgentRunResponse"];
 /** Paginated list response for agent runs. */

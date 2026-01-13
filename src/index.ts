@@ -15,6 +15,7 @@ export {
 export type {
   JSONValue,
   AgentRunRequest,
+  AgentRunStreamRequest,
   AgentRunResponse,
   AgentRunListResponse,
   ContentDetailResponse,

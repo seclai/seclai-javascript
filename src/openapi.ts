@@ -28,6 +28,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/agents/{agent_id}/runs/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run Streaming Agent
+         * @description Run an agent in priority mode and stream events via Server-Sent Events (SSE).
+         */
+        post: operations["run_streaming_agent_api_agents__agent_id__runs_stream_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/agents/{agent_id}/runs/{run_id}": {
         parameters: {
             query?: never;
@@ -225,6 +245,21 @@ export interface components {
             run_id: string;
             /** @description Current status of the agent run. */
             status: components["schemas"]["PendingProcessingCompletedFailedStatus"];
+        };
+        /** AgentRunStreamRequest */
+        AgentRunStreamRequest: {
+            /**
+             * Input
+             * @description Input to provide to the agent upon running for agents with dynamic triggers.
+             */
+            input: string | null;
+            /**
+             * Metadata
+             * @description Metadata to make available for string substitution expressions in agent tasks.
+             */
+            metadata: {
+                [key: string]: components["schemas"]["JsonValue"];
+            } | null;
         };
         /** Body_upload_file_to_source_api_sources__source_connection_id__upload_post */
         Body_upload_file_to_source_api_sources__source_connection_id__upload_post: {
@@ -681,6 +716,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AgentRunResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_streaming_agent_api_agents__agent_id__runs_stream_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentRunStreamRequest"];
+            };
+        };
+        responses: {
+            /**
+             * @description Streams agent run events via Server-Sent Events (SSE); run is always created as priority.
+             *
+             *     SSE events:
+             *     - `event: init` — `data` is an `AgentRunResponse` snapshot (includes `run_id`).
+             *     - `event: done` — `data` is the final `AgentRunResponse` snapshot (includes `output`, `credits`, etc).
+             *     - Other events (e.g. `status`, step events) are forwarded from the run event stream.
+             *     - On `timeout` / `error`, the payload includes `run_id` so clients can fetch status via `GET /api/agents/{agent_id}/runs/{run_id}`.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                    /**
+                     * @example : keepalive
+                     *
+                     *     event: init
+                     *     data: {"run_id":"...","status":"pending","error_count":0,"credits":0.0,"priority":true,"input":"...","output":null,"attempts":[]}
+                     *
+                     *     event: done
+                     *     data: {"run_id":"...","status":"completed","error_count":0,"credits":0.0,"priority":true,"input":"...","output":"...","attempts":[]}
+                     */
+                    "text/event-stream": string;
                 };
             };
             /** @description Validation Error */
