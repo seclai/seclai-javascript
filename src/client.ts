@@ -184,7 +184,7 @@ export class Seclai {
    * This is a low-level escape hatch. For most operations, prefer the typed convenience methods.
    *
    * @param method - HTTP method (e.g. `"GET"`, `"POST"`).
-   * @param path - Request path relative to `baseUrl` (e.g. `"/api/sources/"`).
+  * @param path - Request path relative to `baseUrl` (e.g. `"/sources/"`).
    * @param opts - Query params, JSON body, and per-request headers.
    * @returns Parsed JSON for JSON responses, raw text for non-JSON responses, or `null` for empty bodies.
    * @throws {@link SeclaiAPIValidationError} For validation errors (typically HTTP 422).
@@ -262,7 +262,7 @@ export class Seclai {
    * @returns The created agent run.
    */
   async runAgent(agentId: string, body: AgentRunRequest): Promise<AgentRunResponse> {
-    const data = await this.request("POST", `/api/agents/${agentId}/runs`, { json: body });
+    const data = await this.request("POST", `/agents/${agentId}/runs`, { json: body });
     return data as AgentRunResponse;
   }
 
@@ -279,7 +279,7 @@ export class Seclai {
     body: AgentRunStreamRequest,
     opts?: { timeoutMs?: number; signal?: AbortSignal }
   ): Promise<AgentRunResponse> {
-    const url = buildURL(this.baseUrl, `/api/agents/${agentId}/runs/stream`);
+    const url = buildURL(this.baseUrl, `/agents/${agentId}/runs/stream`);
 
     const headers: Record<string, string> = {
       ...this.defaultHeaders,
@@ -402,7 +402,7 @@ export class Seclai {
     agentId: string,
     opts: { page?: number; limit?: number } = {}
   ): Promise<AgentRunListResponse> {
-    const data = await this.request("GET", `/api/agents/${agentId}/runs`, {
+    const data = await this.request("GET", `/agents/${agentId}/runs`, {
       query: { page: opts.page ?? 1, limit: opts.limit ?? 50 },
     });
     return data as AgentRunListResponse;
@@ -416,7 +416,7 @@ export class Seclai {
    * @returns Agent run details.
    */
   async getAgentRun(agentId: string, runId: string): Promise<AgentRunResponse> {
-    const data = await this.request("GET", `/api/agents/${agentId}/runs/${runId}`);
+    const data = await this.request("GET", `/agents/${agentId}/runs/${runId}`);
     return data as AgentRunResponse;
   }
 
@@ -428,7 +428,7 @@ export class Seclai {
    * @returns Updated agent run record.
    */
   async deleteAgentRun(agentId: string, runId: string): Promise<AgentRunResponse> {
-    const data = await this.request("DELETE", `/api/agents/${agentId}/runs/${runId}`);
+    const data = await this.request("DELETE", `/agents/${agentId}/runs/${runId}`);
     return data as AgentRunResponse;
   }
 
@@ -447,7 +447,7 @@ export class Seclai {
   ): Promise<ContentDetailResponse> {
     const data = await this.request(
       "GET",
-      `/api/contents/${sourceConnectionContentVersion}`,
+      `/contents/${sourceConnectionContentVersion}`,
       { query: { start: opts.start ?? 0, end: opts.end ?? 5000 } }
     );
     return data as ContentDetailResponse;
@@ -459,7 +459,7 @@ export class Seclai {
    * @param sourceConnectionContentVersion - Content version identifier.
    */
   async deleteContent(sourceConnectionContentVersion: string): Promise<void> {
-    await this.request("DELETE", `/api/contents/${sourceConnectionContentVersion}`);
+    await this.request("DELETE", `/contents/${sourceConnectionContentVersion}`);
   }
 
   /**
@@ -475,7 +475,7 @@ export class Seclai {
   ): Promise<ContentEmbeddingsListResponse> {
     const data = await this.request(
       "GET",
-      `/api/contents/${sourceConnectionContentVersion}/embeddings`,
+      `/contents/${sourceConnectionContentVersion}/embeddings`,
       { query: { page: opts.page ?? 1, limit: opts.limit ?? 20 } }
     );
     return data as ContentEmbeddingsListResponse;
@@ -496,7 +496,7 @@ export class Seclai {
       accountId?: string | null;
     } = {}
   ): Promise<SourceListResponse> {
-    const data = await this.request("GET", "/api/sources/", {
+    const data = await this.request("GET", "/sources/", {
       query: {
         page: opts.page ?? 1,
         limit: opts.limit ?? 20,
@@ -528,7 +528,7 @@ export class Seclai {
       mimeType?: string;
     }
   ): Promise<FileUploadResponse> {
-    const url = buildURL(this.baseUrl, `/api/sources/${sourceConnectionId}/upload`);
+    const url = buildURL(this.baseUrl, `/sources/${sourceConnectionId}/upload`);
 
     const headers: Record<string, string> = {
       ...this.defaultHeaders,

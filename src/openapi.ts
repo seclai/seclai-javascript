@@ -4,7 +4,7 @@
  */
 
 export interface paths {
-    "/api/agents/{agent_id}/runs": {
+    "/agents/{agent_id}/runs": {
         parameters: {
             query?: never;
             header?: never;
@@ -28,7 +28,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/agents/{agent_id}/runs/stream": {
+    "/agents/{agent_id}/runs/stream": {
         parameters: {
             query?: never;
             header?: never;
@@ -48,7 +48,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/agents/{agent_id}/runs/{run_id}": {
+    "/agents/{agent_id}/runs/{run_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -72,7 +72,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/contents/{source_connection_content_version}": {
+    "/contents/{source_connection_content_version}": {
         parameters: {
             query?: never;
             header?: never;
@@ -96,7 +96,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/contents/{source_connection_content_version}/embeddings": {
+    "/contents/{source_connection_content_version}/embeddings": {
         parameters: {
             query?: never;
             header?: never;
@@ -116,7 +116,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/sources/": {
+    "/sources/": {
         parameters: {
             query?: never;
             header?: never;
@@ -136,7 +136,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/sources/{source_connection_id}/upload": {
+    "/sources/{source_connection_id}/upload": {
         parameters: {
             query?: never;
             header?: never;
@@ -751,7 +751,7 @@ export interface operations {
              *     - `event: init` — `data` is an `AgentRunResponse` snapshot (includes `run_id`).
              *     - `event: done` — `data` is the final `AgentRunResponse` snapshot (includes `output`, `credits`, etc).
              *     - Other events (e.g. `status`, step events) are forwarded from the run event stream.
-             *     - On `timeout` / `error`, the payload includes `run_id` so clients can fetch status via `GET /api/agents/{agent_id}/runs/{run_id}`.
+             *     - On `timeout` / `error`, the payload includes `run_id` so clients can fetch status via `GET /agents/{agent_id}/runs/{run_id}`.
              */
             200: {
                 headers: {

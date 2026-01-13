@@ -14,12 +14,6 @@ Online API documentation (latest):
 
 https://seclai.github.io/seclai-javascript/latest/
 
-Generate HTML docs into `build/docs/`:
-
-```bash
-npm run docs
-```
-
 ## Usage
 
 ```ts
@@ -29,6 +23,29 @@ const client = new Seclai({ apiKey: process.env.SECLAI_API_KEY });
 
 const sources = await client.listSources();
 console.log(sources.pagination, sources.data);
+```
+
+### Run an agent with SSE streaming (wait for final result)
+
+Use the SSE streaming endpoint and block until the final `done` event is received.
+
+If the stream ends before `done` or the timeout is reached, this method throws.
+
+```ts
+import { Seclai } from "@seclai/sdk";
+
+const client = new Seclai({ apiKey: process.env.SECLAI_API_KEY });
+
+const run = await client.runStreamingAgentAndWait(
+  "agent_id",
+  {
+    input: "Hello from streaming",
+    metadata: { app: "My App" },
+  },
+  { timeoutMs: 60_000 }
+);
+
+console.log(run);
 ```
 
 ### Upload a file
@@ -77,3 +94,11 @@ npm run build
 ```
 
 This also regenerates `src/openapi.ts` from `openapi/seclai.openapi.json`.
+
+### Generate docs
+
+Generate HTML docs into `build/docs/`:
+
+```bash
+npm run docs
+```

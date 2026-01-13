@@ -110,7 +110,7 @@ describe("Seclai client", () => {
     });
 
     const client = new Seclai({ apiKey: "test-key", baseUrl: "https://example.invalid", fetch });
-    await client.request("GET", "/api/sources/");
+    await client.request("GET", "/sources/");
   });
 
   test("uses SECLAI_API_URL env var when baseUrl not provided", async () => {
@@ -121,7 +121,7 @@ describe("Seclai client", () => {
     const fetch = makeFetch((req) => {
       const u = new URL(req.url);
       expect(u.origin).toBe("https://env.example.invalid");
-      expect(u.pathname).toBe("/api/sources/");
+      expect(u.pathname).toBe("/sources/");
       // listSources() always supplies defaults
       expect(u.searchParams.get("page")).toBe("1");
       expect(u.searchParams.get("limit")).toBe("20");
@@ -166,7 +166,7 @@ describe("Seclai client", () => {
   test("listSources builds query params", async () => {
     const fetch = makeFetch((req) => {
       const u = new URL(req.url);
-      expect(u.pathname).toBe("/api/sources/");
+      expect(u.pathname).toBe("/sources/");
       expect(u.searchParams.get("page")).toBe("2");
       expect(u.searchParams.get("limit")).toBe("10");
       expect(u.searchParams.get("sort")).toBe("created_at");
@@ -194,13 +194,13 @@ describe("Seclai client", () => {
     });
 
     const client = new Seclai({ apiKey: "k", baseUrl: "https://example.invalid", fetch });
-    await client.request("POST", "/api/agents/a/runs", { json: { hello: "world" } });
+    await client.request("POST", "/agents/a/runs", { json: { hello: "world" } });
   });
 
   test("uploadFileToSource sends multipart form data", async () => {
     const fetch = makeFetch((req) => {
       const u = new URL(req.url);
-      expect(u.pathname).toBe("/api/sources/sc_123/upload");
+      expect(u.pathname).toBe("/sources/sc_123/upload");
       expect(req.method).toBe("POST");
 
       // The SDK should NOT set content-type for FormData (fetch will add boundary).
@@ -256,7 +256,7 @@ describe("Seclai client", () => {
   test("runStreamingAgentAndWait parses SSE and returns done payload", async () => {
     const fetch = makeFetch((req) => {
       const u = new URL(req.url);
-      expect(u.pathname).toBe("/api/agents/ag_123/runs/stream");
+      expect(u.pathname).toBe("/agents/ag_123/runs/stream");
       expect(req.method).toBe("POST");
       expect(req.headers["accept"]).toContain("text/event-stream");
 
