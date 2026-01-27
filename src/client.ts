@@ -413,10 +413,19 @@ export class Seclai {
    *
    * @param agentId - Agent identifier.
    * @param runId - Run identifier.
+   * @param opts - Optional flags.
    * @returns Agent run details.
    */
-  async getAgentRun(agentId: string, runId: string): Promise<AgentRunResponse> {
-    const data = await this.request("GET", `/agents/${agentId}/runs/${runId}`);
+  async getAgentRun(
+    agentId: string,
+    runId: string,
+    opts: { includeStepOutputs?: boolean } = {}
+  ): Promise<AgentRunResponse> {
+    const data = await this.request(
+      "GET",
+      `/agents/${agentId}/runs/${runId}`,
+      opts.includeStepOutputs ? { query: { include_step_outputs: true } } : undefined
+    );
     return data as AgentRunResponse;
   }
 

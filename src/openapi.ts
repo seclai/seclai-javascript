@@ -284,6 +284,56 @@ export interface components {
             run_id: string;
             /** @description Current status of the agent run. */
             status: components["schemas"]["PendingProcessingCompletedFailedStatus"];
+            /**
+             * Steps
+             * @description Step outputs and per-step timing/credits. Only included when requested.
+             */
+            steps?: components["schemas"]["AgentRunStepResponse"][] | null;
+        };
+        /** AgentRunStepResponse */
+        AgentRunStepResponse: {
+            /**
+             * Agent Step Id
+             * @description Agent step identifier.
+             */
+            agent_step_id: string;
+            /**
+             * Credits Used
+             * @description Credits consumed by the step attempt, if applicable.
+             */
+            credits_used: number;
+            /**
+             * Duration Seconds
+             * @description Duration of the step attempt in seconds.
+             */
+            duration_seconds: number | null;
+            /**
+             * Ended At
+             * @description Timestamp when the step attempt ended.
+             */
+            ended_at: string | null;
+            /**
+             * Output
+             * @description Output produced by the step, if any.
+             */
+            output: string | null;
+            /**
+             * Output Content Type
+             * @description Content type of the step output, if any.
+             */
+            output_content_type: string | null;
+            /**
+             * Started At
+             * @description Timestamp when the step attempt started.
+             */
+            started_at: string | null;
+            /** @description Status of the step run. */
+            status: components["schemas"]["PendingProcessingCompletedFailedStatus"];
+            /**
+             * Step Type
+             * @description Type of the agent step.
+             */
+            step_type: string;
         };
         /** AgentRunStreamRequest */
         AgentRunStreamRequest: {
@@ -823,7 +873,10 @@ export interface operations {
     };
     get_agent_run_api_agents__agent_id__runs__run_id__get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description If true, include per-step outputs with timing, durations, and credits. */
+                include_step_outputs?: boolean;
+            };
             header?: never;
             path: {
                 agent_id: string;

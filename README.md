@@ -48,6 +48,26 @@ const run = await client.runStreamingAgentAndWait(
 console.log(run);
 ```
 
+### Get agent run details
+
+Fetch details for a specific agent run, optionally including per-step outputs:
+
+```ts
+import { Seclai } from "@seclai/sdk";
+
+const client = new Seclai({ apiKey: process.env.SECLAI_API_KEY });
+
+// Basic details
+const run = await client.getAgentRun("agent_id", "run_id");
+console.log(run);
+
+// Include per-step outputs with timing, durations, and credits
+const runWithSteps = await client.getAgentRun("agent_id", "run_id", {
+  includeStepOutputs: true,
+});
+console.log(runWithSteps);
+```
+
 ### Upload a file
 
 **Max file size:** 200 MiB.

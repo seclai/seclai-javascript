@@ -182,6 +182,35 @@ describe("Seclai client", () => {
     await client.listSources({ page: 2, limit: 10, order: "asc", accountId: "acc_123" });
   });
 
+  test("getAgentRun can include step outputs", async () => {
+    const fetch = makeFetch((req) => {
+      const u = new URL(req.url);
+      expect(u.pathname).toBe("/agents/ag_123/runs/run_123");
+      expect(u.searchParams.get("include_step_outputs")).toBe("true");
+
+      return new Response(
+        JSON.stringify({
+          run_id: "run_123",
+          status: "completed",
+          error_count: 0,
+          credits: null,
+          priority: false,
+          input: null,
+          output: null,
+          attempts: [],
+          steps: [],
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }
+      );
+    });
+
+    const client = new Seclai({ apiKey: "k", baseUrl: "https://example.invalid", fetch });
+    await client.getAgentRun("ag_123", "run_123", { includeStepOutputs: true });
+  });
+
   test("request sends JSON body and content-type", async () => {
     const fetch = makeFetch((req) => {
       expect(req.method).toBe("POST");
