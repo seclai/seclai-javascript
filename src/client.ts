@@ -17,7 +17,7 @@ import type {
 } from "./types";
 
 /** Default API base URL (can be overridden with `baseUrl` or `SECLAI_API_URL`). */
-export const SECLAI_API_URL = "https://seclai.com";
+export const SECLAI_API_URL = "https://api.seclai.com";
 
 /** A `fetch`-compatible function (e.g. `globalThis.fetch` or `undici.fetch`). */
 export type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -510,6 +510,31 @@ export class Seclai {
 
   /**
    * Upload a file to a specific source connection.
+    *
+    * Maximum file size: 200 MiB.
+    *
+    * Supported MIME types:
+    * - `application/epub+zip`
+    * - `application/json`
+    * - `application/msword`
+    * - `application/pdf`
+    * - `application/vnd.ms-excel`
+    * - `application/vnd.ms-outlook`
+    * - `application/vnd.ms-powerpoint`
+    * - `application/vnd.openxmlformats-officedocument.presentationml.presentation`
+    * - `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`
+    * - `application/vnd.openxmlformats-officedocument.wordprocessingml.document`
+    * - `application/xml`
+    * - `application/zip`
+    * - `audio/flac`, `audio/mp4`, `audio/mpeg`, `audio/ogg`, `audio/wav`
+    * - `image/bmp`, `image/gif`, `image/jpeg`, `image/png`, `image/tiff`, `image/webp`
+    * - `text/csv`, `text/html`, `text/markdown`, `text/x-markdown`, `text/plain`, `text/xml`
+    * - `video/mp4`, `video/quicktime`, `video/x-msvideo`
+    *
+    * Notes:
+    * - If `mimeType` is omitted, the upload is typically sent as `application/octet-stream`.
+    *   In that case, the server attempts to infer the type from the uploaded filename/extension,
+    *   so prefer providing `fileName` with a meaningful extension (e.g. `"recording.mp3"`).
    *
    * @param sourceConnectionId - Source connection identifier.
    * @param opts - File payload and optional metadata.

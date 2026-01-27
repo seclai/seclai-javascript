@@ -50,6 +50,28 @@ console.log(run);
 
 ### Upload a file
 
+**Max file size:** 200 MiB.
+
+**Supported MIME types:**
+- `application/epub+zip`
+- `application/json`
+- `application/msword`
+- `application/pdf`
+- `application/vnd.ms-excel`
+- `application/vnd.ms-outlook`
+- `application/vnd.ms-powerpoint`
+- `application/vnd.openxmlformats-officedocument.presentationml.presentation`
+- `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`
+- `application/vnd.openxmlformats-officedocument.wordprocessingml.document`
+- `application/xml`
+- `application/zip`
+- `audio/flac`, `audio/mp4`, `audio/mpeg`, `audio/ogg`, `audio/wav`
+- `image/bmp`, `image/gif`, `image/jpeg`, `image/png`, `image/tiff`, `image/webp`
+- `text/csv`, `text/html`, `text/markdown`, `text/x-markdown`, `text/plain`, `text/xml`
+- `video/mp4`, `video/quicktime`, `video/x-msvideo`
+
+If the upload is sent as `application/octet-stream`, the server attempts to infer the type from the file extension, so pass `fileName` with a meaningful extension.
+
 ```ts
 import { Seclai } from "@seclai/sdk";
 

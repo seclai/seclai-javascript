@@ -146,8 +146,47 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Upload File To Source
+         * Upload a file to a content source
          * @description Upload a file to a content source.
+         *
+         *     **Maximum file size:** 209715200 bytes.
+         *
+         *     **Supported MIME types:**
+         *     - `application/epub+zip`
+         *     - `application/json`
+         *     - `application/msword`
+         *     - `application/pdf`
+         *     - `application/vnd.ms-excel`
+         *     - `application/vnd.ms-outlook`
+         *     - `application/vnd.ms-powerpoint`
+         *     - `application/vnd.openxmlformats-officedocument.presentationml.presentation`
+         *     - `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`
+         *     - `application/vnd.openxmlformats-officedocument.wordprocessingml.document`
+         *     - `application/xml`
+         *     - `application/zip`
+         *     - `audio/flac`
+         *     - `audio/mp4`
+         *     - `audio/mpeg`
+         *     - `audio/ogg`
+         *     - `audio/wav`
+         *     - `image/bmp`
+         *     - `image/gif`
+         *     - `image/jpeg`
+         *     - `image/png`
+         *     - `image/tiff`
+         *     - `image/webp`
+         *     - `text/csv`
+         *     - `text/html`
+         *     - `text/markdown`
+         *     - `text/plain`
+         *     - `text/x-markdown`
+         *     - `text/xml`
+         *     - `video/mp4`
+         *     - `video/quicktime`
+         *     - `video/x-msvideo`
+         *
+         *     Notes:
+         *     - If the uploaded file's content type is `application/octet-stream`, the server attempts to infer the type from the file extension.
          */
         post: operations["upload_file_to_source_api_sources__source_connection_id__upload_post"];
         delete?: never;
@@ -751,7 +790,7 @@ export interface operations {
              *     - `event: init` — `data` is an `AgentRunResponse` snapshot (includes `run_id`).
              *     - `event: done` — `data` is the final `AgentRunResponse` snapshot (includes `output`, `credits`, etc).
              *     - Other events (e.g. `status`, step events) are forwarded from the run event stream.
-             *     - On `timeout` / `error`, the payload includes `run_id` so clients can fetch status via `GET /agents/{agent_id}/runs/{run_id}`.
+             *     - On `timeout` / `error`, the payload includes `run_id` so clients can fetch status via `GET /api/agents/{agent_id}/runs/{run_id}`.
              */
             200: {
                 headers: {
