@@ -411,19 +411,32 @@ export class Seclai {
   /**
    * Get details of a specific agent run.
    *
-   * @param agentId - Agent identifier.
    * @param runId - Run identifier.
    * @param opts - Optional flags.
    * @returns Agent run details.
    */
   async getAgentRun(
+    runId: string,
+    opts?: { includeStepOutputs?: boolean }
+  ): Promise<AgentRunResponse>;
+  /** @deprecated Backwards compatibility; agentId is no longer required. */
+  async getAgentRun(
     agentId: string,
     runId: string,
-    opts: { includeStepOutputs?: boolean } = {}
+    opts?: { includeStepOutputs?: boolean }
+  ): Promise<AgentRunResponse>;
+  async getAgentRun(
+    arg1: string,
+    arg2?: string | { includeStepOutputs?: boolean },
+    arg3: { includeStepOutputs?: boolean } = {}
   ): Promise<AgentRunResponse> {
+    const hasOldSignature = typeof arg2 === "string";
+    const runId = hasOldSignature ? (arg2 as string) : arg1;
+    const opts = hasOldSignature ? arg3 : ((arg2 as { includeStepOutputs?: boolean } | undefined) ?? {});
+
     const data = await this.request(
       "GET",
-      `/agents/${agentId}/runs/${runId}`,
+      `/agents/runs/${runId}`,
       opts.includeStepOutputs ? { query: { include_step_outputs: true } } : undefined
     );
     return data as AgentRunResponse;
@@ -432,12 +445,15 @@ export class Seclai {
   /**
    * Cancel an agent run.
    *
-   * @param agentId - Agent identifier.
    * @param runId - Run identifier.
    * @returns Updated agent run record.
    */
-  async deleteAgentRun(agentId: string, runId: string): Promise<AgentRunResponse> {
-    const data = await this.request("DELETE", `/agents/${agentId}/runs/${runId}`);
+  async deleteAgentRun(runId: string): Promise<AgentRunResponse>;
+  /** @deprecated Backwards compatibility; agentId is no longer required. */
+  async deleteAgentRun(agentId: string, runId: string): Promise<AgentRunResponse>;
+  async deleteAgentRun(arg1: string, arg2?: string): Promise<AgentRunResponse> {
+    const runId = arg2 ?? arg1;
+    const data = await this.request("DELETE", `/agents/runs/${runId}`);
     return data as AgentRunResponse;
   }
 

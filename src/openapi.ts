@@ -4,6 +4,30 @@
  */
 
 export interface paths {
+    "/agents/runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Agent Run
+         * @description Get agent run details.
+         */
+        get: operations["get_agent_run_api_agents_runs__run_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete Agent Run
+         * @description Cancel agent run.
+         */
+        delete: operations["delete_agent_run_api_agents_runs__run_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/agents/{agent_id}/runs": {
         parameters: {
             query?: never;
@@ -43,30 +67,6 @@ export interface paths {
          */
         post: operations["run_streaming_agent_api_agents__agent_id__runs_stream_post"];
         delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/agents/{agent_id}/runs/{run_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Agent Run
-         * @description Get agent run details.
-         */
-        get: operations["get_agent_run_api_agents__agent_id__runs__run_id__get"];
-        put?: never;
-        post?: never;
-        /**
-         * Delete Agent Run
-         * @description Cancel agent run.
-         */
-        delete: operations["delete_agent_run_api_agents__agent_id__runs__run_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -747,6 +747,71 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    get_agent_run_api_agents_runs__run_id__get: {
+        parameters: {
+            query?: {
+                /** @description If true, include per-step outputs with timing, durations, and credits. */
+                include_step_outputs?: boolean;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentRunResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_agent_run_api_agents_runs__run_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentRunResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_agent_runs_api_agents__agent_id__runs_get: {
         parameters: {
             query?: {
@@ -840,7 +905,7 @@ export interface operations {
              *     - `event: init` — `data` is an `AgentRunResponse` snapshot (includes `run_id`).
              *     - `event: done` — `data` is the final `AgentRunResponse` snapshot (includes `output`, `credits`, etc).
              *     - Other events (e.g. `status`, step events) are forwarded from the run event stream.
-             *     - On `timeout` / `error`, the payload includes `run_id` so clients can fetch status via `GET /api/agents/{agent_id}/runs/{run_id}`.
+             *     - On `timeout` / `error`, the payload includes `run_id` so clients can fetch status via `GET /api/agents/runs/{run_id}`.
              */
             200: {
                 headers: {
@@ -858,73 +923,6 @@ export interface operations {
                      *     data: {"run_id":"...","status":"completed","error_count":0,"credits":0.0,"priority":true,"input":"...","output":"...","attempts":[]}
                      */
                     "text/event-stream": string;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_agent_run_api_agents__agent_id__runs__run_id__get: {
-        parameters: {
-            query?: {
-                /** @description If true, include per-step outputs with timing, durations, and credits. */
-                include_step_outputs?: boolean;
-            };
-            header?: never;
-            path: {
-                agent_id: string;
-                run_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AgentRunResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_agent_run_api_agents__agent_id__runs__run_id__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                agent_id: string;
-                run_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AgentRunResponse"];
                 };
             };
             /** @description Validation Error */

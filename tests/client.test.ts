@@ -185,7 +185,7 @@ describe("Seclai client", () => {
   test("getAgentRun can include step outputs", async () => {
     const fetch = makeFetch((req) => {
       const u = new URL(req.url);
-      expect(u.pathname).toBe("/agents/ag_123/runs/run_123");
+      expect(u.pathname).toBe("/agents/runs/run_123");
       expect(u.searchParams.get("include_step_outputs")).toBe("true");
 
       return new Response(
@@ -208,7 +208,7 @@ describe("Seclai client", () => {
     });
 
     const client = new Seclai({ apiKey: "k", baseUrl: "https://example.invalid", fetch });
-    await client.getAgentRun("ag_123", "run_123", { includeStepOutputs: true });
+    await client.getAgentRun("run_123", { includeStepOutputs: true });
   });
 
   test("request sends JSON body and content-type", async () => {

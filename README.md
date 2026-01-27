@@ -58,11 +58,11 @@ import { Seclai } from "@seclai/sdk";
 const client = new Seclai({ apiKey: process.env.SECLAI_API_KEY });
 
 // Basic details
-const run = await client.getAgentRun("agent_id", "run_id");
+const run = await client.getAgentRun("run_id");
 console.log(run);
 
 // Include per-step outputs with timing, durations, and credits
-const runWithSteps = await client.getAgentRun("agent_id", "run_id", {
+const runWithSteps = await client.getAgentRun("run_id", {
   includeStepOutputs: true,
 });
 console.log(runWithSteps);
