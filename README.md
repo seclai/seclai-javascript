@@ -103,8 +103,31 @@ const upload = await client.uploadFileToSource("source_connection_id", {
   fileName: "hello.txt",
   mimeType: "text/plain",
   title: "Hello",
+  metadata: { category: "docs", author: "Ada" },
 });
 console.log(upload);
+```
+
+### Replace an existing content version with a new upload
+
+If you need to correct or update an uploaded document while keeping references stable,
+use `uploadFileToContent` to upload a new file and replace the content behind an existing
+`source_connection_content_version`.
+
+```ts
+import { Seclai } from "@seclai/sdk";
+
+const client = new Seclai({ apiKey: process.env.SECLAI_API_KEY });
+
+const replace = await client.uploadFileToContent("content_version_id", {
+  file: await fetch("https://example.invalid/updated.pdf").then((r) => r.arrayBuffer()),
+  fileName: "updated.pdf",
+  mimeType: "application/pdf",
+  title: "Updated document",
+  metadata: { revision: 2 },
+});
+
+console.log(replace);
 ```
 
 ## Development

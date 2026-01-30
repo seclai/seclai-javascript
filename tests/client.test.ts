@@ -241,6 +241,9 @@ describe("Seclai client", () => {
       const title = form.get("title");
       expect(title).toBe("My title");
 
+      const metadata = form.get("metadata");
+      expect(metadata).toBe(JSON.stringify({ category: "docs", author: "Ada" }));
+
       const file = form.get("file") as any;
       expect(file).toBeInstanceOf(Blob);
       expect(file.type).toBe("text/plain");
@@ -259,8 +262,50 @@ describe("Seclai client", () => {
     await client.uploadFileToSource("sc_123", {
       file: new Uint8Array([104, 101, 108, 108, 111]),
       title: "My title",
+      metadata: { category: "docs", author: "Ada" },
       fileName: "hello.txt",
       mimeType: "text/plain",
+    });
+  });
+
+  test("uploadFileToContent sends multipart form data", async () => {
+    const fetch = makeFetch((req) => {
+      const u = new URL(req.url);
+      expect(u.pathname).toBe("/contents/cv_123/upload");
+      expect(req.method).toBe("POST");
+
+      // The SDK should NOT set content-type for FormData (fetch will add boundary).
+      expect(req.headers["content-type"]).toBeUndefined();
+
+      expect(req.body).toBeInstanceOf(FormData);
+      const form = req.body as FormData;
+
+      const title = form.get("title");
+      expect(title).toBe("Updated title");
+
+      const metadata = form.get("metadata");
+      expect(metadata).toBe(JSON.stringify({ revision: 2 }));
+
+      const file = form.get("file") as any;
+      expect(file).toBeInstanceOf(Blob);
+      expect(file.type).toBe("application/pdf");
+      if (typeof file?.name === "string") {
+        expect(file.name).toBe("updated.pdf");
+      }
+
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    });
+
+    const client = new Seclai({ apiKey: "k", baseUrl: "https://example.invalid", fetch });
+    await client.uploadFileToContent("cv_123", {
+      file: new Uint8Array([1, 2, 3]),
+      title: "Updated title",
+      metadata: { revision: 2 },
+      fileName: "updated.pdf",
+      mimeType: "application/pdf",
     });
   });
 

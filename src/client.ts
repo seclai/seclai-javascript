@@ -565,6 +565,8 @@ export class Seclai {
    * @param opts - File payload and optional metadata.
    * @param opts.file - File payload as a `Blob`, `Uint8Array`, or `ArrayBuffer`.
    * @param opts.title - Optional title for the uploaded file.
+   * @param opts.metadata - Optional metadata object. This is sent as a JSON string form field named `metadata`.
+   *   Example: `{ category: "docs", author: "Ada" }`.
    * @param opts.fileName - Optional filename to send with the upload.
    * @param opts.mimeType - Optional MIME type to attach to the upload.
    * @returns Upload response details.
@@ -574,6 +576,7 @@ export class Seclai {
     opts: {
       file: Blob | Uint8Array | ArrayBuffer;
       title?: string;
+      metadata?: Record<string, unknown>;
       fileName?: string;
       mimeType?: string;
     }
@@ -603,6 +606,91 @@ export class Seclai {
 
     if (opts.title !== undefined) {
       form.set("title", opts.title);
+    }
+
+    if (opts.metadata !== undefined) {
+      form.set("metadata", JSON.stringify(opts.metadata));
+    }
+
+    const response = await this.fetcher(url, {
+      method: "POST",
+      headers,
+      body: form,
+    });
+
+    if (!response.ok) {
+      const responseText = await safeText(response);
+      if (response.status === 422) {
+        const validation = (await safeJson(response)) as HTTPValidationError | undefined;
+        throw new SeclaiAPIValidationError({
+          message: "Validation error",
+          statusCode: response.status,
+          method: "POST",
+          url: url.toString(),
+          responseText,
+          validationError: validation,
+        });
+      }
+      throw new SeclaiAPIStatusError({
+        message: `Request failed with status ${response.status}`,
+        statusCode: response.status,
+        method: "POST",
+        url: url.toString(),
+        responseText,
+      });
+    }
+
+    return (await response.json()) as FileUploadResponse;
+  }
+
+  /**
+   * Upload a new file and replace the content backing an existing content version.
+   *
+   * This endpoint is useful when you need to correct or update an uploaded document while keeping
+   * references stable (the content version ID stays the same).
+   *
+   * Notes:
+   * - `metadata` is sent as a JSON string form field named `metadata`.
+   * - `title` is a convenience field and may be merged into `metadata.title` by the server.
+   */
+  async uploadFileToContent(
+    sourceConnectionContentVersion: string,
+    opts: {
+      file: Blob | Uint8Array | ArrayBuffer;
+      title?: string;
+      metadata?: Record<string, unknown>;
+      fileName?: string;
+      mimeType?: string;
+    }
+  ): Promise<FileUploadResponse> {
+    const url = buildURL(this.baseUrl, `/contents/${sourceConnectionContentVersion}/upload`);
+
+    const headers: Record<string, string> = {
+      ...this.defaultHeaders,
+      [this.apiKeyHeader]: this.apiKey,
+    };
+
+    const form = new FormData();
+
+    let blob: Blob;
+    if (opts.file instanceof Blob) {
+      blob = opts.file;
+    } else if (opts.file instanceof ArrayBuffer) {
+      const blobOpts = opts.mimeType ? { type: opts.mimeType } : undefined;
+      blob = new Blob([new Uint8Array(opts.file)], blobOpts);
+    } else {
+      const blobOpts = opts.mimeType ? { type: opts.mimeType } : undefined;
+      blob = new Blob([opts.file as unknown as BlobPart], blobOpts);
+    }
+
+    const fileName = opts.fileName ?? "upload";
+    form.set("file", blob, fileName);
+
+    if (opts.title !== undefined) {
+      form.set("title", opts.title);
+    }
+    if (opts.metadata !== undefined) {
+      form.set("metadata", JSON.stringify(opts.metadata));
     }
 
     const response = await this.fetcher(url, {
