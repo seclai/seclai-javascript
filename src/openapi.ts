@@ -12,15 +12,25 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get Agent Run
-         * @description Get agent run details.
+         * Get an agent run
+         * @description Fetch the latest snapshot for an agent run created by `POST /agents/{agent_id}/runs` or `POST /agents/{agent_id}/runs/stream`.
+         *
+         *     The response includes `status`, `error_count`, and `output` once the run completes. Use `include_step_outputs=true` to include per-step outputs, timing, durations, and credits.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key`. You can only access runs belonging to your account.
          */
         get: operations["get_agent_run_api_agents_runs__run_id__get"];
         put?: never;
         post?: never;
         /**
-         * Delete Agent Run
-         * @description Cancel agent run.
+         * Cancel an agent run
+         * @description Cancel a running agent run.
+         *
+         *     If the run is already in a terminal state (`completed` or `failed`), cancellation will be rejected.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key`. You can only cancel runs belonging to your account.
          */
         delete: operations["delete_agent_run_api_agents_runs__run_id__delete"];
         options?: never;
@@ -36,14 +46,41 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List Agent Runs
-         * @description List agent runs for an agent with pagination.
+         * List agent runs
+         * @description List runs for a specific agent (most recent first), with pagination.
+         *
+         *     Typical use cases:
+         *     - Build a run history UI for an agent.
+         *     - Debug recent executions and inspect terminal statuses.
+         *
+         *     Notes:
+         *     - This endpoint returns a summary list. Fetch full details with `GET /agents/runs/{run_id}`.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key`. You can only list runs for agents in your account.
          */
         get: operations["list_agent_runs_api_agents__agent_id__runs_get"];
         put?: never;
         /**
-         * Run Agent
-         * @description Run an agent.
+         * Run an agent
+         * @description Start an agent run.
+         *
+         *     An *agent* is an automated workflow that can monitor content from your sources, process it with AI, and trigger actions. This endpoint creates a new run and returns a `run_id` you can poll to retrieve status and output.
+         *
+         *     When to use:
+         *     - Use this endpoint for request/response style integrations where polling is acceptable.
+         *     - Use `POST /agents/{agent_id}/runs/stream` if you need real-time progress via SSE.
+         *
+         *     Key fields:
+         *     - `priority`: set true for latency-sensitive, user-facing work.
+         *     - `metadata`: a JSON object that becomes available to agent steps for string substitution.
+         *
+         *     After starting:
+         *     - Poll `GET /agents/runs/{run_id}` until `status` is `completed` or `failed`.
+         *     - Use `include_step_outputs=true` to include per-step outputs, timing, and credits.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key`. All resources are scoped to the API key's account.
          */
         post: operations["run_agent_api_agents__agent_id__runs_post"];
         delete?: never;
@@ -62,8 +99,22 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Run Streaming Agent
-         * @description Run an agent in priority mode and stream events via Server-Sent Events (SSE).
+         * Run an agent (stream events)
+         * @description Start a **priority** agent run and stream run events using Server-Sent Events (SSE).
+         *
+         *     This is the best option for interactive UIs where you want progress updates as the run executes.
+         *
+         *     How it works:
+         *     - The first `init` event contains an `AgentRunResponse` snapshot, including the `run_id`.
+         *     - Subsequent events are forwarded from the run event stream (status changes, step events, etc).
+         *     - The final `done` event contains the terminal snapshot (including `output` and `credits` when available).
+         *
+         *     Client guidance:
+         *     - Keep the connection open and handle keepalive comments.
+         *     - On `timeout` or `error`, the payload includes `run_id` so clients can resume by polling `GET /agents/runs/{run_id}`.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key`. All resources are scoped to the API key's account.
          */
         post: operations["run_streaming_agent_api_agents__agent_id__runs_stream_post"];
         delete?: never;
@@ -80,15 +131,30 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get Content Detail
-         * @description Get detailed information about a specific content version.
+         * Get content details
+         * @description Get detailed information about a specific content item (a `SourceConnectionContentVersion`).
+         *
+         *     This is useful when you want to:
+         *     - Inspect the extracted text for debugging or review.
+         *     - Display content details in a UI.
+         *
+         *     Text range:
+         *     - `start` and `end` control the character range returned in `text_content` so clients can page through large documents.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key`. You can only access content belonging to your account.
          */
         get: operations["get_content_detail_api_contents__source_connection_content_version__get"];
         put?: never;
         post?: never;
         /**
-         * Delete Content
-         * @description Delete a specific content version.
+         * Delete content
+         * @description Delete a content item (a `SourceConnectionContentVersion`).
+         *
+         *     Use this to remove an uploaded or indexed item from your account. Deleting content can affect agents and knowledge base workflows that reference this item.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key`. You can only delete content belonging to your account.
          */
         delete: operations["delete_content_api_contents__source_connection_content_version__delete"];
         options?: never;
@@ -104,12 +170,84 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List Content Embeddings
-         * @description List embeddings for a specific content version.
+         * List content embeddings
+         * @description List the embeddings (chunk vectors) for a content item, with pagination.
+         *
+         *     Embeddings are used for semantic search and retrieval in knowledge base workflows. This endpoint is primarily useful for debugging chunking, indexing, and vector contents.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key`. You can only access embeddings for content belonging to your account.
          */
         get: operations["list_content_embeddings_api_contents__source_connection_content_version__embeddings_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/contents/{source_connection_content_version}/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Replace a content version with a new upload
+         * @description Upload a new file and replace the content backing an existing `SourceConnectionContentVersion`.
+         *
+         *     This behaves like a source file upload, but it targets an existing content version ID. This is useful when you want to correct or update an uploaded document while keeping references stable.
+         *
+         *     **Maximum file size:** 209715200 bytes.
+         *
+         *     **Supported MIME types:**
+         *     - `application/epub+zip`
+         *     - `application/json`
+         *     - `application/msword`
+         *     - `application/pdf`
+         *     - `application/vnd.ms-excel`
+         *     - `application/vnd.ms-outlook`
+         *     - `application/vnd.ms-powerpoint`
+         *     - `application/vnd.openxmlformats-officedocument.presentationml.presentation`
+         *     - `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`
+         *     - `application/vnd.openxmlformats-officedocument.wordprocessingml.document`
+         *     - `application/xml`
+         *     - `application/zip`
+         *     - `audio/flac`
+         *     - `audio/mp4`
+         *     - `audio/mpeg`
+         *     - `audio/ogg`
+         *     - `audio/wav`
+         *     - `image/bmp`
+         *     - `image/gif`
+         *     - `image/jpeg`
+         *     - `image/png`
+         *     - `image/tiff`
+         *     - `image/webp`
+         *     - `text/csv`
+         *     - `text/html`
+         *     - `text/markdown`
+         *     - `text/plain`
+         *     - `text/x-markdown`
+         *     - `text/xml`
+         *     - `video/mp4`
+         *     - `video/quicktime`
+         *     - `video/x-msvideo`
+         *
+         *     Notes:
+         *     - If the uploaded file's content type is `application/octet-stream`, the server attempts to infer the type from the file extension.
+         *     - Use `metadata` to attach an arbitrary JSON object of metadata (for example `metadata={"category":"docs"}`).
+         *     - `title` is a convenience field and is merged into the metadata as `metadata.title` (it does not override an existing `metadata.title`).
+         *     - For backwards compatibility, you can also pass form fields named `metadata_<key>` (for example `metadata_author=...`). These override keys from `metadata`.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key`. You can only replace content belonging to your account.
+         */
+        post: operations["upload_file_to_content_api_contents__source_connection_content_version__upload_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -124,8 +262,18 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List Sources
-         * @description List content sources with pagination.
+         * List sources
+         * @description List content sources for your account.
+         *
+         *     A *source* is where Seclai pulls or receives content from (for example RSS feeds, websites, file uploads, or custom indexes). Sources are the inputs that power your agents and knowledge base workflows.
+         *
+         *     Parameters:
+         *     - Pagination: `page` and `limit`.
+         *     - Sorting: `sort` (created_at/updated_at/name) and `order` (asc/desc).
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key`. Results are scoped to the API key's account.
+         *     - The optional `account_id` query param is only allowed when it matches the API key's account.
          */
         get: operations["list_sources_api_sources__get"];
         put?: never;
@@ -187,6 +335,12 @@ export interface paths {
          *
          *     Notes:
          *     - If the uploaded file's content type is `application/octet-stream`, the server attempts to infer the type from the file extension.
+         *     - Use `metadata` to attach an arbitrary JSON object of metadata (for example `metadata={"author":"Ada","category":"docs"}`).
+         *     - `title` is a convenience field and is merged into the metadata as `metadata.title` (it does not override an existing `metadata.title`).
+         *     - For backwards compatibility, you can also pass form fields named `metadata_<key>` (for example `metadata_author=...`). These override keys from `metadata`.
+         *
+         *     Response:
+         *     - `status` is `uploaded` for a new upload, or `duplicate` when the same file already exists for this source.
          */
         post: operations["upload_file_to_source_api_sources__source_connection_id__upload_post"];
         delete?: never;
@@ -350,6 +504,25 @@ export interface components {
                 [key: string]: components["schemas"]["JsonValue"];
             } | null;
         };
+        /** Body_upload_file_to_content_api_contents__source_connection_content_version__upload_post */
+        Body_upload_file_to_content_api_contents__source_connection_content_version__upload_post: {
+            /**
+             * File
+             * Format: binary
+             * @description File to upload
+             */
+            file: string;
+            /**
+             * Metadata
+             * @description Optional JSON object string of metadata. Example: `{"category":"docs","author":"Ada"}`. `title` will be merged into this dictionary as `metadata.title` if it is not already present.
+             */
+            metadata?: string | null;
+            /**
+             * Title
+             * @description Optional title for the content
+             */
+            title?: string;
+        };
         /** Body_upload_file_to_source_api_sources__source_connection_id__upload_post */
         Body_upload_file_to_source_api_sources__source_connection_id__upload_post: {
             /**
@@ -358,6 +531,11 @@ export interface components {
              * @description File to upload
              */
             file: string;
+            /**
+             * Metadata
+             * @description Optional JSON object string of metadata. Example: `{"author":"Ada","category":"docs"}`. `title` will be merged into this dictionary as `metadata.title` if it is not already present.
+             */
+            metadata?: string | null;
             /**
              * Title
              * @description Optional title for the content
@@ -383,32 +561,6 @@ export interface components {
             text_start: number;
             /** Vector */
             vector: number[];
-        };
-        /**
-         * FileUploadResponse
-         * @description Response model for file upload
-         */
-        FileUploadResponse: {
-            /**
-             * Content Version Id
-             * @description ID of the created content version
-             */
-            content_version_id: string | null;
-            /**
-             * Filename
-             * @description Original filename
-             */
-            filename: string;
-            /**
-             * Source Connection Content Version Id
-             * @description ID of the duplicate source connection content version
-             */
-            source_connection_content_version_id: string | null;
-            /**
-             * Status
-             * @description Processing status
-             */
-            status: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -730,6 +882,58 @@ export interface components {
             pagination: components["schemas"]["PaginationResponse"];
         };
         /**
+         * FileUploadResponse
+         * @description Response model for content file replacement upload.
+         */
+        routers__api__contents__FileUploadResponse: {
+            /**
+             * Content Version Id
+             * @description ID of the content version being replaced
+             */
+            content_version_id: string | null;
+            /**
+             * Filename
+             * @description Original filename
+             */
+            filename: string;
+            /**
+             * Source Connection Content Version Id
+             * @description ID of the source connection content version
+             */
+            source_connection_content_version_id: string | null;
+            /**
+             * Status
+             * @description Processing status
+             */
+            status: string;
+        };
+        /**
+         * FileUploadResponse
+         * @description Response model for file upload
+         */
+        routers__api__sources__FileUploadResponse: {
+            /**
+             * Content Version Id
+             * @description ID of the created content version
+             */
+            content_version_id: string | null;
+            /**
+             * Filename
+             * @description Original filename
+             */
+            filename: string;
+            /**
+             * Source Connection Content Version Id
+             * @description ID of the duplicate source connection content version
+             */
+            source_connection_content_version_id: string | null;
+            /**
+             * Status
+             * @description Processing status
+             */
+            status: string;
+        };
+        /**
          * SourceListResponse
          * @description Response model for paginated source list
          */
@@ -1033,6 +1237,41 @@ export interface operations {
             };
         };
     };
+    upload_file_to_content_api_contents__source_connection_content_version__upload_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_connection_content_version: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_file_to_content_api_contents__source_connection_content_version__upload_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["routers__api__contents__FileUploadResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_sources_api_sources__get: {
         parameters: {
             query?: {
@@ -1094,7 +1333,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["FileUploadResponse"];
+                    "application/json": components["schemas"]["routers__api__sources__FileUploadResponse"];
                 };
             };
             /** @description Validation Error */

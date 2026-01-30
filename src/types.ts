@@ -26,8 +26,24 @@ export type ContentEmbeddingsListResponse =
 
 /** Paginated list response for sources. */
 export type SourceListResponse = components["schemas"]["routers__api__sources__SourceListResponse"];
-/** Upload response for source uploads. */
-export type FileUploadResponse = components["schemas"]["FileUploadResponse"];
+/** Upload response for uploads (source upload and content replacement upload). */
+export type FileUploadResponse = components["schemas"] extends { FileUploadResponse: infer T }
+  ? T
+  : components["schemas"] extends { routers__api__sources__FileUploadResponse: infer T }
+    ? T
+    : components["schemas"] extends { routers__api__contents__FileUploadResponse: infer T }
+      ? T
+      : never;
+
+/** Upload response specifically for source uploads (/sources/{id}/upload). */
+export type SourceFileUploadResponse = components["schemas"] extends { routers__api__sources__FileUploadResponse: infer T }
+  ? T
+  : FileUploadResponse;
+
+/** Upload response specifically for content replacement uploads (/contents/{id}/upload). */
+export type ContentFileUploadResponse = components["schemas"] extends { routers__api__contents__FileUploadResponse: infer T }
+  ? T
+  : FileUploadResponse;
 
 /** Standard OpenAPI validation error shape (typically HTTP 422). */
 export type HTTPValidationError = components["schemas"]["HTTPValidationError"];

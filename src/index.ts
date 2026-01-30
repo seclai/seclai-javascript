@@ -22,5 +22,7 @@ export type {
   ContentEmbeddingsListResponse,
   SourceListResponse,
   FileUploadResponse,
+  SourceFileUploadResponse,
+  ContentFileUploadResponse,
   HTTPValidationError,
 } from "./types";
