@@ -4,6 +4,210 @@
  */
 
 export interface paths {
+    "/agents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List agents
+         * @description List agents for the account with pagination.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key`. All resources are scoped to the API key's account.
+         */
+        get: operations["list_agents_api_agents_get"];
+        put?: never;
+        /**
+         * Create an agent
+         * @description Create a new agent.
+         *
+         *     Trigger types:
+         *     - `dynamic_input`: triggered via API with user-provided input
+         *     - `template_input`: triggered via API with a predefined template
+         *     - `schedule`: triggered on a schedule
+         *     - `new_content`: triggered when new content arrives
+         *
+         *     Templates: `blank`, `retrieval_example`, `simple_qa`, `summarizer`, `json_extractor`, `content_change_notifier`, `scheduled_report`, `webhook_pipeline`
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key`. Agent is created in the API key's account.
+         */
+        post: operations["create_agent_api_agents_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/evaluation-criteria/{criteria_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Evaluation Criteria
+         * @description Get a single evaluation criteria by ID.
+         *
+         *     Returns the full criteria configuration including type-specific fields,
+         *     current enabled state, and a summary of recent evaluation results.
+         */
+        get: operations["get_evaluation_criteria_api_agents_evaluation_criteria__criteria_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete Evaluation Criteria
+         * @description Delete an evaluation criteria and all associated evaluation results.
+         *
+         *     This action is permanent and cannot be undone.  All historical result
+         *     records tied to the criteria are removed as well.
+         */
+        delete: operations["delete_evaluation_criteria_api_agents_evaluation_criteria__criteria_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Evaluation Criteria
+         * @description Update an evaluation criteria.
+         *
+         *     Accepts a partial update – only the fields included in the request body
+         *     are modified.  Use this to toggle enabled/disabled, change the
+         *     evaluation prompt, adjust retries, or rename the criteria.
+         */
+        patch: operations["update_evaluation_criteria_api_agents_evaluation_criteria__criteria_id__patch"];
+        trace?: never;
+    };
+    "/agents/evaluation-criteria/{criteria_id}/compatible-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Compatible Runs
+         * @description List agent runs that have a completed step matching the criteria's target step.
+         *
+         *     Returns runs whose step output can be used for testing or replaying the
+         *     evaluation criteria.  Results are ordered newest-first and paginated.
+         */
+        get: operations["list_compatible_runs_api_agents_evaluation_criteria__criteria_id__compatible_runs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/evaluation-criteria/{criteria_id}/results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Evaluation Results
+         * @description List evaluation results for a criteria with optional filtering.
+         *
+         *     Supports filtering by status (pending, passed, failed, skipped, error),
+         *     flagged-only mode, and an optional time range.  Results are paginated
+         *     with configurable page size.
+         */
+        get: operations["list_evaluation_results_api_agents_evaluation_criteria__criteria_id__results_get"];
+        put?: never;
+        /**
+         * Create Evaluation Result
+         * @description Record an evaluation result for a criteria.
+         *
+         *     Use this endpoint to push results from external test harnesses, CI/CD
+         *     pipelines, or custom evaluation logic.  Each result is linked to an
+         *     agent run and optionally a specific step run.
+         */
+        post: operations["create_evaluation_result_api_agents_evaluation_criteria__criteria_id__results_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/evaluation-criteria/{criteria_id}/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Evaluation Summary
+         * @description Get an aggregated summary of evaluation results for a criteria.
+         *
+         *     Returns total, passed, failed, error, and flagged counts alongside the
+         *     average score, giving a quick overview of how the criteria is performing.
+         */
+        get: operations["get_evaluation_summary_api_agents_evaluation_criteria__criteria_id__summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/evaluation-results/non-manual-summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Non Manual Evaluation Summary
+         * @description Get account-level evaluation summary for API key clients.
+         *
+         *     Returns aggregated pass/fail/flagged counts and pass rates for each evaluation mode (eval_and_retry, sample_and_flag).
+         */
+        get: operations["get_non_manual_evaluation_summary_api_agents_evaluation_results_non_manual_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/runs/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Search agent traces
+         * @description Search agent traces using semantic similarity.
+         *
+         *     Finds step-run outputs that are most semantically similar to the query.
+         *     Results include the matching text, agent/step metadata, and a similarity score.
+         *
+         *     Agent traces are automatically indexed when runs complete. The first 7 days of storage are free; extended retention is billed.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key`. Searches only within your account's traces.
+         */
+        post: operations["search_agent_runs_api_agents_runs_search_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/agents/runs/{run_id}": {
         parameters: {
             query?: never;
@@ -38,6 +242,335 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/agents/{agent_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get an agent
+         * @description Fetch an agent's metadata (name, description, trigger type, timestamps).
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key`. You can only access agents belonging to your account.
+         */
+        get: operations["get_agent_metadata_api_agents__agent_id__get"];
+        /**
+         * Update agent metadata
+         * @description Update an agent's name, description, evaluation settings, and model lifecycle settings.
+         *
+         *     Evaluation settings: `evaluation_mode` ('output_expectation', 'eval_and_retry', 'sample_and_flag'), `default_evaluation_tier` ('fast', 'balanced', 'thorough'), `max_retries`, `retry_on_failure`, `sampling_config`.
+         *
+         *     Model lifecycle settings: `prompt_model_auto_upgrade_strategy` ('none', 'early_adopter', 'middle_of_road', 'cautious_adopter'), `prompt_model_auto_rollback_enabled`, `prompt_model_auto_rollback_triggers` (list of 'agent_eval_fail', 'governance_flag', 'governance_block', 'agent_run_failed').
+         *
+         *     At least one field must be provided.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key`. You can only update agents belonging to your account.
+         */
+        put: operations["update_agent_api_agents__agent_id__put"];
+        post?: never;
+        /**
+         * Delete an agent
+         * @description Soft-delete an agent. The agent will no longer appear in listings or be accessible via the API.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key`. You can only delete agents belonging to your account.
+         */
+        delete: operations["delete_agent_api_agents__agent_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/{agent_id}/ai-assistant/conversations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get AI conversation history
+         * @description Fetch the AI assistant conversation history for a specific step of an agent.
+         *
+         *     Returns past conversation turns (user inputs, AI responses, accept/decline status) ordered oldest first. Use `step_type` to filter by step type, and optionally `step_id` to narrow to a specific step instance.
+         *
+         *     Auth & scoping:
+         *     - Requires a user-scoped `X-API-Key`. Only agents belonging to your account can be queried.
+         */
+        get: operations["get_ai_conversation_history_api_agents__agent_id__ai_assistant_conversations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/{agent_id}/ai-assistant/generate-steps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Generate agent workflow
+         * @description Use the AI assistant to generate a full agent step workflow from a natural language description.
+         *
+         *     Provide a description of what the agent should do, along with optional context (current steps, trigger type). The AI produces a complete set of agent steps.
+         *     Use mode 'generate_full' for new workflows or 'modify_workflow' to refine existing ones.
+         *
+         *     Auth & scoping:
+         *     - Requires a user-scoped `X-API-Key`. Only agents belonging to your account can be used.
+         */
+        post: operations["generate_agent_steps_api_agents__agent_id__ai_assistant_generate_steps_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/{agent_id}/ai-assistant/step-config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Generate step configuration
+         * @description Use the AI assistant to generate or refine a single step's configuration.
+         *
+         *     Provide the step type, a natural language instruction, and optionally the current configuration. The AI will produce a proposed configuration along with an explanation. The suggestion is stored as a conversation turn that can be accepted or declined separately via the mark endpoint.
+         *
+         *     Auth & scoping:
+         *     - Requires a user-scoped `X-API-Key`. Only agents belonging to your account can be used.
+         */
+        post: operations["generate_step_config_api_agents__agent_id__ai_assistant_step_config_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/{agent_id}/ai-assistant/{conversation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Accept or decline suggestion
+         * @description Accept or decline a proposed AI assistant configuration for a conversation turn.
+         *
+         *     This only updates the tracking status on the conversation record. To actually apply the proposed configuration, use the agent definition update endpoint separately.
+         *
+         *     Auth & scoping:
+         *     - Requires a user-scoped `X-API-Key`. The conversation must belong to one of your agents.
+         */
+        patch: operations["mark_ai_suggestion_api_agents__agent_id__ai_assistant__conversation_id__patch"];
+        trace?: never;
+    };
+    "/agents/{agent_id}/definition": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get agent definition
+         * @description Fetch the current agent definition from the main branch.
+         *
+         *     The response includes `change_id` which must be provided when updating the definition (optimistic locking).
+         *
+         *     The definition contains the agent's step workflow. Available step types:
+         *     - `prompt_call`: Call an LLM with a prompt template
+         *     - `retrieval`: Search a knowledge base
+         *     - `transform`: Reshape data with a Liquid template
+         *     - `gate`: Evaluate conditions, stop or continue child execution
+         *     - `retry`: Re-execute from a target ancestor step (for quality-control loops; pair with a `gate` step for conditional retrying. Fields: `target_step_id` (ancestor step ID), `max_retries` (1–10))
+         *     - `evaluate_step`: Score a selected previous step output and emit JSON with `score`, `passed`, and `pass_threshold` (fields: `target_step_id`, `evaluation_prompt`, `pass_threshold`, optional `evaluation_tier`, optional `expectation_config`)
+         *     - `insight`: Progressively read and analyze large input
+         *     - `extract_json` / `extract_html` / `extract_xml`: Extract structured data
+         *     - `send_email`: Send email with step output
+         *     - `webhook_call`: POST data to an external URL
+         *     - `write_aws_s3_object`: Write output to S3
+         *     - `call_agent`: Invoke another agent
+         *     - `write_metadata`: Write a value to content metadata (for filtering/gates; content-triggered agents only. Fields: `metadata_key`, `content`)
+         *     - `write_content_attachment`: Write a file-backed attachment to content (optionally indexed for retrieval; content-triggered agents only. Fields: `attachment_key`, `content`, `content_type`, `indexed`)
+         *     - `load_content_attachment`: Load a previously written attachment (content-triggered agents only. Fields: `attachment_key`)
+         *     - `load_content`: Load the full text body of a source document (typically used with content-triggered agents; can also load by explicit `content_version_id`. Fields: `content_version_id` optional)
+         *     - `display_result`: Show output to the user
+         *     - `join`: Merge parallel branches
+         *     - `combinator`: Combine multiple inputs
+         *     - `text`: Static text literal
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key`. You can only access agents belonging to your account.
+         */
+        get: operations["get_agent_definition_api_agents__agent_id__definition_get"];
+        /**
+         * Update agent definition
+         * @description Update the agent's definition on the main branch.
+         *
+         *     Uses **optimistic locking**: provide `expected_change_id` from the last `GET /api/agents/{agent_id}/definition`. Returns `409 Conflict` if the definition was modified since your last read.
+         *
+         *     The definition contains the agent's step workflow. Step types include `prompt_call`, `retrieval`, `transform`, `gate`, `retry`, `evaluate_step`, `insight`, `extract_json`, `extract_html`, `extract_xml`, `send_email`, `webhook_call`, `write_aws_s3_object`, `call_agent`, `write_metadata`, `write_content_attachment`, `load_content_attachment`, `load_content`, `display_result`, `join`, `combinator`, and `text`. Non-composite step types (`display_result`, `join`, `retry`, `evaluate_step`) cannot contain child steps.
+         *
+         *     **Retry steps** re-execute from a target ancestor step for quality-control loops. Configure with `target_step_id` (ancestor step ID) and `max_retries` (1–10). Best practice: place a `gate` step before the retry to make retries conditional.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key`. You can only update agents belonging to your account.
+         */
+        put: operations["update_agent_definition_api_agents__agent_id__definition_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/{agent_id}/evaluation-criteria": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Evaluation Criteria
+         * @description List all evaluation criteria configured for an agent.
+         *
+         *     Returns every criteria with its type, configuration, and a summary of
+         *     results (pass / fail counts).  Criteria can be filtered client-side by
+         *     type or enabled status.
+         */
+        get: operations["list_evaluation_criteria_api_agents__agent_id__evaluation_criteria_get"];
+        put?: never;
+        /**
+         * Create Evaluation Criteria
+         * @description Create new step evaluation settings for an agent.
+         *
+         *     The evaluation mode, retry settings, and sample frequency are inherited
+         *     from the agent and stored on the criteria row for historical reference.
+         */
+        post: operations["create_evaluation_criteria_api_agents__agent_id__evaluation_criteria_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/{agent_id}/evaluation-criteria/test-draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Test Draft Evaluation
+         * @description Run an ephemeral evaluation against provided step output without persisting results.
+         *
+         *     Use this to interactively test evaluation prompts and expectation
+         *     configurations while editing criteria.  No credits are consumed because
+         *     the result is not recorded.
+         */
+        post: operations["test_draft_evaluation_api_agents__agent_id__evaluation_criteria_test_draft_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/{agent_id}/evaluation-results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Agent Evaluation Results
+         * @description List evaluation results across all criteria configured on an agent.
+         *
+         *     Returns a paginated list of evaluation results with optional filtering by status, criteria, and date range. Results include score, pass/fail status, and details.
+         */
+        get: operations["list_agent_evaluation_results_api_agents__agent_id__evaluation_results_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/{agent_id}/evaluation-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Evaluation Runs
+         * @description List evaluation results grouped by agent run.
+         *
+         *     Returns paginated per-run summaries with pass/fail counts and optional
+         *     filtering by evaluation outcome, step, or date range.
+         */
+        get: operations["list_evaluation_runs_api_agents__agent_id__evaluation_runs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/{agent_id}/input-uploads/{upload_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get upload status
+         * @description Poll the processing status of a file upload created via `POST /agents/{agent_id}/upload-input`.
+         *
+         *     Possible `status` values: `processing`, `ready`, `failed`.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key`. All resources are scoped to the API key's account.
+         */
+        get: operations["api_get_agent_input_upload_status_api_agents__agent_id__input_uploads__upload_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/agents/{agent_id}/runs": {
         parameters: {
             query?: never;
@@ -50,7 +583,7 @@ export interface paths {
          * @description List runs for a specific agent (most recent first), with pagination.
          *
          *     Typical use cases:
-         *     - Build a run history UI for an agent.
+         *     - Build a traces UI for an agent.
          *     - Debug recent executions and inspect terminal statuses.
          *
          *     Notes:
@@ -72,6 +605,8 @@ export interface paths {
          *     - Use `POST /agents/{agent_id}/runs/stream` if you need real-time progress via SSE.
          *
          *     Key fields:
+         *     - `input`: text input for agents with a `dynamic_input` trigger.
+         *     - `input_upload_id`: alternatively, reference a file previously uploaded via `POST /agents/{agent_id}/upload-input` (mutually exclusive with `input`).
          *     - `priority`: set true for latency-sensitive, user-facing work.
          *     - `metadata`: a JSON object that becomes available to agent steps for string substitution.
          *
@@ -109,6 +644,10 @@ export interface paths {
          *     - Subsequent events are forwarded from the run event stream (status changes, step events, etc).
          *     - The final `done` event contains the terminal snapshot (including `output` and `credits` when available).
          *
+         *     Input options (for `dynamic_input` triggers):
+         *     - `input`: text input passed directly.
+         *     - `input_upload_id`: reference a file uploaded via `POST /agents/{agent_id}/upload-input` (mutually exclusive with `input`).
+         *
          *     Client guidance:
          *     - Keep the connection open and handle keepalive comments.
          *     - On `timeout` or `error`, the payload includes `run_id` so clients can resume by polling `GET /agents/runs/{run_id}`.
@@ -117,6 +656,536 @@ export interface paths {
          *     - Requires `X-API-Key`. All resources are scoped to the API key's account.
          */
         post: operations["run_streaming_agent_api_agents__agent_id__runs_stream_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/{agent_id}/runs/{run_id}/evaluation-results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Run Evaluation Results
+         * @description List all evaluation results recorded for a specific agent run.
+         *
+         *     Returns results across all evaluation criteria for the given run,
+         *     useful for getting a complete quality snapshot of a single execution.
+         */
+        get: operations["list_run_evaluation_results_api_agents__agent_id__runs__run_id__evaluation_results_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/{agent_id}/upload-input": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload file input
+         * @description Upload a file to use as input for a `dynamic_input` agent run.
+         *
+         *     Supports the same file types as content source uploads: text, PDF, DOCX, audio, video, images, etc.  Text and document files are processed synchronously; audio/video are submitted for asynchronous transcription.
+         *
+         *     **Size limit:** 200 MB per file.
+         *
+         *     **Supported extensions:** txt, html, md, csv, xml, json, pdf, msg, docx, doc, pptx, ppt, xlsx, xls, zip, epub, png, jpg, gif, bmp, tiff, webp, mp3, wav, m4a, flac, ogg, mp4, mov, avi.
+         *
+         *     After uploading, poll `GET /agents/{agent_id}/input-uploads/{upload_id}` until `status` is `ready`, then pass `input_upload_id` to `POST /agents/{agent_id}/runs`.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key`. All resources are scoped to the API key's account.
+         */
+        post: operations["api_upload_agent_input_api_agents__agent_id__upload_input_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ai-assistant/feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit AI assistant feedback
+         * @description Submit thumbs-up/down feedback on any AI assistant interaction. Negative feedback with a comment is analyzed for concerning issues.
+         *
+         *     Auth: requires ``X-API-Key``.
+         */
+        post: operations["api_ai_feedback_api_ai_assistant_feedback_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ai-assistant/knowledge-base": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Generate a knowledge base plan (standalone)
+         * @description Generate a knowledge base creation/modification plan without requiring an existing solution. May also propose prerequisite source creation actions.
+         *
+         *     Auth: requires ``X-API-Key``.
+         */
+        post: operations["api_ai_knowledge_base_api_ai_assistant_knowledge_base_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ai-assistant/memory-bank": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Generate a memory bank configuration (standalone)
+         * @description Generate a memory bank configuration suggestion via the AI assistant. The AI proposes name, type, mode, compaction prompt, and retention settings.
+         *
+         *     Auth: requires ``X-API-Key``.
+         */
+        post: operations["api_ai_memory_bank_api_ai_assistant_memory_bank_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ai-assistant/memory-bank/last-conversation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Fetch memory bank AI conversation history
+         * @description Fetch the most recent memory bank AI assistant conversation turns for the authenticated user. Returns turns in oldest-first order with a total count for pagination via limit/offset query parameters.
+         *
+         *     Auth: requires ``X-API-Key``.
+         */
+        get: operations["api_ai_memory_bank_history_api_ai_assistant_memory_bank_last_conversation_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ai-assistant/memory-bank/{conversation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Accept or decline a memory bank AI suggestion
+         * @description Update the acceptance status of a memory bank AI assistant conversation turn. Set ``accepted`` to true to accept the proposed configuration, or false to decline it. The accepted status is recorded for audit purposes.
+         *
+         *     Auth: requires ``X-API-Key``.
+         */
+        patch: operations["api_ai_memory_bank_accept_api_ai_assistant_memory_bank__conversation_id__patch"];
+        trace?: never;
+    };
+    "/ai-assistant/solution": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Generate a solution plan (standalone)
+         * @description Generate a complete solution plan covering sources, knowledge bases, and agents without requiring an existing solution. Supports SSE streaming when ``Accept: text/event-stream`` is set.
+         *
+         *     Auth: requires ``X-API-Key``.
+         */
+        post: operations["api_ai_solution_api_ai_assistant_solution_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ai-assistant/source": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Generate a source plan (standalone)
+         * @description Generate a content source creation/modification plan without requiring an existing solution. The AI proposes actions for the user to review before any changes are made.
+         *
+         *     Auth: requires ``X-API-Key``.
+         */
+        post: operations["api_ai_source_api_ai_assistant_source_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ai-assistant/{conversation_id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept and execute a standalone plan
+         * @description Accept and execute a previously proposed standalone plan. If the plan contains destructive actions (deletions), ``confirm_deletions`` must be set to true.
+         *
+         *     Auth: requires ``X-API-Key``.
+         */
+        post: operations["api_ai_accept_api_ai_assistant__conversation_id__accept_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ai-assistant/{conversation_id}/decline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decline a standalone plan
+         * @description Decline a previously proposed standalone plan. No resources are modified. The conversation is marked as declined.
+         *
+         *     Auth: requires ``X-API-Key``.
+         */
+        post: operations["api_ai_decline_api_ai_assistant__conversation_id__decline_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/alerts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List alerts
+         * @description List alerts for the account with optional filters.
+         *
+         *     Filters:
+         *     - `status`: triggered, acknowledged, resolved, dismissed
+         *     - `agent_id`: filter by agent
+         *     - `source_connection_id`: filter by source
+         *     - `time_from` / `time_to`: ISO 8601 date range
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key` with user association. Results are scoped to the API key's account.
+         */
+        get: operations["list_alerts_api_alerts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/alerts/configs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List alert configs
+         * @description List alert configurations.
+         *
+         *     Filters:
+         *     - `agent_id`: list configs for a specific agent
+         *     - `source_connection_id`: list configs for a specific source
+         *     - Neither: list account-level agent alert configs
+         *     - `scope=source`: list account-level source alert configs
+         *
+         *     Credits alerts (`credits_low_threshold`, `credits_runout_prediction`, `credits_usage_spike`) are account-level alert configs. They are evaluated by the credits alert sweep and default-enabled configs may be auto-created for active accounts at runtime.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key` with user association.
+         */
+        get: operations["list_alert_configs_api_alerts_configs_get"];
+        put?: never;
+        /**
+         * Create alert config
+         * @description Create a new alert configuration.
+         *
+         *     Agent alert types: run_failed, consecutive_failures, error_rate_spike, run_burst, slow_run, credits_low_threshold, credits_runout_prediction, credits_usage_spike, non_manual_eval_failed, non_manual_eval_flagged, governance_flagged, governance_blocked, model_newer_available, model_deprecated, model_sunset.
+         *     Source alert types: pull_failed, consecutive_pull_failures, pull_error_rate_spike.
+         *
+         *     Distribution types: owner, owner_admins, selected_members. Organization accounts are normalized to owner_admins.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key` with user association.
+         */
+        post: operations["create_alert_config_api_alerts_configs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/alerts/configs/{config_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get alert config
+         * @description Get a specific alert configuration by ID.
+         *
+         *     Returns all fields including type, enabled state, threshold, cooldown, distribution type, and recipient list.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key` with user association.
+         */
+        get: operations["get_alert_config_api_alerts_configs__config_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete alert config
+         * @description Delete an alert configuration. This permanently removes the config and stops any future alerts of this type from being triggered.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key` with user association.
+         */
+        delete: operations["delete_alert_config_api_alerts_configs__config_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update alert config
+         * @description Update an alert configuration. Only provided fields are updated.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key` with user association.
+         */
+        patch: operations["update_alert_config_api_alerts_configs__config_id__patch"];
+        trace?: never;
+    };
+    "/alerts/organization-preferences/list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List organization alert delivery preferences
+         * @description List per-organization alert delivery preferences for the API key's associated user.
+         *
+         *     By default, only explicit override rows are returned. Set `include_defaults=true` to return the effective subscribed state for every alert type in every organization the user can manage.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key` with user association.
+         *     - Only organizations where the user is an owner or administrator are included.
+         */
+        get: operations["list_organization_preferences_api_alerts_organization_preferences_list_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/alerts/organization-preferences/{organization_id}/{alert_type}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update organization alert delivery preference
+         * @description Update the API key user's personal delivery preference for one alert type in one organization.
+         *
+         *     Setting `subscribed=false` stores an explicit opt-out override. Setting `subscribed=true` removes the override and restores the default subscribed behavior.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key` with user association.
+         *     - Only owners and administrators can update preferences for an organization.
+         */
+        patch: operations["update_organization_preference_api_alerts_organization_preferences__organization_id___alert_type__patch"];
+        trace?: never;
+    };
+    "/alerts/{alert_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get alert detail
+         * @description Get full alert detail including history, comments, and subscribers.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key` with user association.
+         */
+        get: operations["get_alert_detail_api_alerts__alert_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/alerts/{alert_id}/comments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add alert comment
+         * @description Add a comment to an alert. Comments are visible to all subscribers and are included in the alert detail response.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key` with user association.
+         */
+        post: operations["add_alert_comment_api_alerts__alert_id__comments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/alerts/{alert_id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Change alert status
+         * @description Change the status of an alert. Valid statuses: triggered, acknowledged, resolved, dismissed.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key` with user association.
+         */
+        post: operations["change_alert_status_api_alerts__alert_id__status_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/alerts/{alert_id}/subscribe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Subscribe to alert
+         * @description Subscribe the current user to an alert. Subscribed users receive email notifications when the alert status changes or new comments are added.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key` with user association.
+         */
+        post: operations["subscribe_to_alert_api_alerts__alert_id__subscribe_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/alerts/{alert_id}/unsubscribe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Unsubscribe from alert
+         * @description Unsubscribe the current user from an alert. The user will no longer receive email notifications for status changes or new comments on this alert.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key` with user association.
+         */
+        post: operations["unsubscribe_from_alert_api_alerts__alert_id__unsubscribe_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -145,7 +1214,27 @@ export interface paths {
          *     - Requires `X-API-Key`. You can only access content belonging to your account.
          */
         get: operations["get_content_detail_api_contents__source_connection_content_version__get"];
-        put?: never;
+        /**
+         * Replace a content version with inline text
+         * @description Replace a content version using a small inline text payload.
+         *
+         *     **Maximum payload size:** 8192 bytes (UTF-8).
+         *
+         *     **Supported content types:**
+         *     - `application/json`
+         *     - `application/xml`
+         *     - `text/csv`
+         *     - `text/html`
+         *     - `text/markdown`
+         *     - `text/plain`
+         *     - `text/x-markdown`
+         *     - `text/xml`
+         *
+         *     Notes:
+         *     - Use this endpoint for small text payloads; larger files should use `/upload`.
+         *     - `title` is merged into `metadata.title` when not already present.
+         */
+        put: operations["replace_content_with_inline_text_api_contents__source_connection_content_version__put"];
         post?: never;
         /**
          * Delete content
@@ -254,6 +1343,918 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/governance/ai-assistant": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Generate a governance plan
+         * @description Send a natural-language request to the governance AI assistant to generate a plan of policy changes. Returns a conversation with proposed actions that can be accepted or declined.
+         *
+         *     Auth: requires `X-API-Key` with governance access.
+         */
+        post: operations["governance_ai_generate_api_governance_ai_assistant_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/governance/ai-assistant/conversations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List AI assistant conversations
+         * @description Return recent governance AI assistant conversations for the account, ordered by most recent first.
+         *
+         *     Auth: requires `X-API-Key` with governance access.
+         */
+        get: operations["list_governance_ai_conversations_api_governance_ai_assistant_conversations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/governance/ai-assistant/{conversation_id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept a governance plan
+         * @description Execute the proposed policy changes from a governance AI assistant conversation. Each action is applied in order and results are returned.
+         *
+         *     Auth: requires `X-API-Key` with governance access.
+         */
+        post: operations["governance_ai_accept_api_governance_ai_assistant__conversation_id__accept_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/governance/ai-assistant/{conversation_id}/decline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decline a governance plan
+         * @description Reject a previously proposed governance AI assistant plan without applying any changes. The conversation is marked as declined and no policy modifications are made.
+         *
+         *     Auth: requires `X-API-Key` with governance access.
+         */
+        post: operations["governance_ai_decline_api_governance_ai_assistant__conversation_id__decline_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/knowledge_bases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Knowledge Bases
+         * @description List knowledge bases for the account.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key`. All resources are scoped to the API key's account.
+         */
+        get: operations["list_knowledge_bases_api_knowledge_bases_get"];
+        put?: never;
+        /**
+         * Create Knowledge Base
+         * @description Create a new knowledge base.
+         *
+         *     At least one `source_id` is required. The source connections must belong to the same account.
+         */
+        post: operations["create_knowledge_base_api_knowledge_bases_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/knowledge_bases/{knowledge_base_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Knowledge Base
+         * @description Fetch a knowledge base by ID.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key`. You can only access knowledge bases belonging to your account.
+         */
+        get: operations["get_knowledge_base_api_knowledge_bases__knowledge_base_id__get"];
+        /**
+         * Update Knowledge Base
+         * @description Update a knowledge base's configuration. Only provided fields are changed; omitted fields are left unchanged.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key`. You can only update knowledge bases belonging to your account.
+         */
+        put: operations["update_knowledge_base_api_knowledge_bases__knowledge_base_id__put"];
+        post?: never;
+        /**
+         * Delete Knowledge Base
+         * @description Soft-delete a knowledge base. This action cannot be undone.
+         *
+         *     Fails if the knowledge base is referenced by any agent definitions. Remove the knowledge base from agents first.
+         */
+        delete: operations["delete_knowledge_base_api_knowledge_bases__knowledge_base_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/memory_banks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Memory Banks
+         * @description List memory banks for the account.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key`. All resources are scoped to the API key's account.
+         */
+        get: operations["list_memory_banks_api_memory_banks_get"];
+        put?: never;
+        /**
+         * Create Memory Bank
+         * @description Create a new memory bank.
+         *
+         *     Modes: `fast_and_cheap` (256-dim), `balanced` (512-dim), `slow_and_thorough` (1024-dim), or `custom` (supply your own embedding params).
+         */
+        post: operations["create_memory_bank_api_memory_banks_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/memory_banks/ai-assistant": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Generate a memory bank configuration
+         * @description Generate a memory bank configuration suggestion via the AI assistant. The AI proposes name, type, mode, compaction prompt, and retention settings based on the user's description.
+         *
+         *     Auth: requires `X-API-Key`.
+         */
+        post: operations["memory_bank_ai_generate_api_memory_banks_ai_assistant_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/memory_banks/ai-assistant/last-conversation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Fetch memory bank AI conversation history
+         * @description Fetch the most recent memory bank AI assistant conversation turns for the current user. Supports pagination via limit/offset.
+         *
+         *     Auth: requires `X-API-Key`.
+         */
+        get: operations["memory_bank_ai_last_conversation_api_memory_banks_ai_assistant_last_conversation_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/memory_banks/ai-assistant/{conversation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Accept or decline a memory bank AI suggestion
+         * @description Update the acceptance status of a memory bank AI assistant conversation turn. Set ``accepted`` to true to accept the proposed configuration, or false to decline it. The accepted status is recorded for audit purposes.
+         *
+         *     Auth: requires `X-API-Key`.
+         */
+        patch: operations["memory_bank_ai_accept_api_memory_banks_ai_assistant__conversation_id__patch"];
+        trace?: never;
+    };
+    "/memory_banks/templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Templates
+         * @description Return pre-built template configurations for common memory bank use cases.
+         *
+         *     Each template includes a name, description, suggested use case, and full default settings that can be used directly with the create endpoint.
+         */
+        get: operations["list_templates_api_memory_banks_templates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/memory_banks/test-compaction": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Test Compaction Prompt Standalone
+         * @description Test a compaction prompt by running the summarizer and evaluating the result with an LLM-as-judge. Returns original entries, compaction summary, surviving entries, and a structured quality evaluation with verdict, score, and reasoning.
+         */
+        post: operations["test_compaction_prompt_standalone_api_memory_banks_test_compaction_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/memory_banks/{memory_bank_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Memory Bank
+         * @description Fetch a memory bank by ID.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key`. You can only access memory banks belonging to your account.
+         */
+        get: operations["get_memory_bank_api_memory_banks__memory_bank_id__get"];
+        /**
+         * Update Memory Bank
+         * @description Update a memory bank's configuration. Only provided fields are changed; omitted fields are left unchanged.
+         *
+         *     Note: the embedding `mode` cannot be changed after creation because it determines the vector dimensions used to store entries.
+         */
+        put: operations["update_memory_bank_api_memory_banks__memory_bank_id__put"];
+        post?: never;
+        /**
+         * Delete Memory Bank
+         * @description Soft-delete a memory bank. This action is permanent and cannot be undone.
+         *
+         *     The linked content source and all stored conversation memory entries will also be removed.
+         */
+        delete: operations["delete_memory_bank_api_memory_banks__memory_bank_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/memory_banks/{memory_bank_id}/agents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Agents Using Bank
+         * @description List agents whose current definition references this memory bank.
+         *
+         *     Returns an array of `{agent_id, agent_name}` objects.
+         */
+        get: operations["get_agents_using_bank_api_memory_banks__memory_bank_id__agents_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/memory_banks/{memory_bank_id}/compact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Compact Memory Bank
+         * @description Trigger an on-demand compaction run for a memory bank.
+         *
+         *     The bank must have at least one compaction threshold configured (max_age_days, max_turns, or max_size_tokens). Compaction runs asynchronously — the response confirms scheduling, not completion.
+         */
+        post: operations["compact_memory_bank_api_memory_banks__memory_bank_id__compact_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/memory_banks/{memory_bank_id}/source": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Memory Bank Source
+         * @description Delete the content source linked to a memory bank, removing all stored memory entries.
+         *
+         *     A new content source is automatically created on the next write. Use this to reset a bank's data without deleting the bank itself.
+         */
+        delete: operations["delete_memory_bank_source_api_memory_banks__memory_bank_id__source_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/memory_banks/{memory_bank_id}/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Memory Bank Entry Stats
+         * @description Return aggregated entry statistics for a memory bank, including total counts, token/age/entries-per-key distributions (avg, p95, min, max), and top conversation keys, group keys, speakers, and tags. Supports time-range filtering via `days`, `start_date`, and `end_date` query parameters.
+         */
+        get: operations["get_memory_bank_entry_stats_api_memory_banks__memory_bank_id__stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/memory_banks/{memory_bank_id}/test-compaction": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Test Compaction Prompt
+         * @description Test a compaction prompt by running the summarizer and evaluating the result with an LLM-as-judge. Returns original entries, compaction summary, surviving entries, and a structured quality evaluation with verdict, score, and reasoning.
+         */
+        post: operations["test_compaction_prompt_api_memory_banks__memory_bank_id__test_compaction_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/models/alerts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Alerts
+         * @description List model lifecycle alerts for the account.
+         *
+         *     Returns in-app notifications about model deprecations, sunsets, and newer model availability. Supports filtering by agent, unread-only, and pagination.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key`. Alerts are scoped to the API key's account.
+         */
+        get: operations["list_alerts_api_models_alerts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/models/alerts/mark-all-read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark All Read
+         * @description Mark all model lifecycle alerts as read for the account.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key`. Scoped to the API key's account.
+         */
+        post: operations["mark_all_read_api_models_alerts_mark_all_read_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/models/alerts/unread-count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Alert Unread Count
+         * @description Get the count of unread model lifecycle alerts.
+         *
+         *     Useful for badge indicators in UIs and dashboards.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key`. Count is scoped to the API key's account.
+         */
+        get: operations["get_alert_unread_count_api_models_alerts_unread_count_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/models/alerts/{alert_id}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Mark Read
+         * @description Mark a single model lifecycle alert as read (dismissed).
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key`. The alert must belong to the API key's account.
+         */
+        patch: operations["mark_read_api_models_alerts__alert_id__read_patch"];
+        trace?: never;
+    };
+    "/models/{model_id}/recommendations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Recommendations
+         * @description Get replacement/upgrade recommendations for a model.
+         *
+         *     Returns a designated successor (if any), same-family upgrades, and cross-provider/cross-family alternatives.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key`.
+         */
+        get: operations["get_recommendations_api_models__model_id__recommendations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search resources
+         * @description Search across all resource types in your account.  Accepts a free-text keyword query or a UUID.  UUIDs are matched exactly; keywords are matched by name and description (case-insensitive substring).  Results are ranked: name-prefix > name-substring > description-substring.  Searchable types: agent, knowledge_base, source_connection, solution, memory_bank, alert, api_key, governance_policy.
+         */
+        get: operations["search_api_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/solutions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List solutions
+         * @description List solutions for your account.
+         *
+         *     A *solution* groups agents, knowledge bases, and content sources into a cohesive unit. Use solutions to organise related resources and leverage AI assistants for automated setup.
+         *
+         *     Parameters:
+         *     - Pagination: `page` and `limit`.
+         *     - Sorting: `sort` (created_at/updated_at/name) and `order` (asc/desc).
+         *     - Filtering: `search` to filter by solution name (case-insensitive partial match).
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key`. Results are scoped to the API key's account.
+         */
+        get: operations["list_solutions_api_solutions_get"];
+        put?: never;
+        /**
+         * Create a solution
+         * @description Create a new solution for the API key's account.
+         *
+         *     A *solution* groups agents, knowledge bases, and content sources into a cohesive unit. Provide a `name` and optional `description` in the request body. Requires `X-API-Key`.
+         */
+        post: operations["create_solution_api_solutions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/solutions/{solution_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a solution
+         * @description Retrieve a solution by its ID, including all linked agents, knowledge bases, and source connections.
+         *
+         *     Returns the full solution detail with nested resource information. Requires `X-API-Key`.
+         */
+        get: operations["get_solution_api_solutions__solution_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a solution
+         * @description Delete a solution by its ID.
+         *
+         *     This permanently removes the solution and all its resource associations (agent links, knowledge base links, source connection links). The underlying resources themselves are not deleted. Requires `X-API-Key`.
+         */
+        delete: operations["delete_solution_api_solutions__solution_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update a solution
+         * @description Update an existing solution's name or description.
+         *
+         *     Pass the fields you wish to change in the request body. Fields not included remain unchanged. Requires `X-API-Key`.
+         */
+        patch: operations["update_solution_api_solutions__solution_id__patch"];
+        trace?: never;
+    };
+    "/solutions/{solution_id}/agents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Link agents
+         * @description Link one or more agents to a solution by their IDs.
+         *
+         *     Pass a JSON body with an `ids` array of agent UUIDs. Already-linked agents are silently ignored. Returns the updated solution with all linked resources. Requires `X-API-Key`.
+         */
+        post: operations["link_agents_api_solutions__solution_id__agents_post"];
+        /**
+         * Unlink agents
+         * @description Unlink one or more agents from a solution by their IDs.
+         *
+         *     Pass a JSON body with an `ids` array of agent UUIDs to remove. Agents not currently linked are silently ignored. Returns the updated solution with remaining linked resources. Requires `X-API-Key`.
+         */
+        delete: operations["unlink_agents_api_solutions__solution_id__agents_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/solutions/{solution_id}/ai-assistant/generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Generate solution plan
+         * @description Generate a comprehensive solution management plan via the solution AI assistant.
+         *
+         *     This is the most powerful assistant — it can propose changes across sources, knowledge bases, and agents. Describe your goal in natural language and the assistant will create a multi-step plan. Review the proposed actions and use the accept or decline endpoint. Requires `X-API-Key`.
+         *
+         *     Supports SSE streaming when `Accept: text/event-stream` is set.
+         */
+        post: operations["ai_assistant_generate_api_solutions__solution_id__ai_assistant_generate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/solutions/{solution_id}/ai-assistant/knowledge-base": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Generate knowledge base plan
+         * @description Generate a knowledge base plan via the KB AI assistant.
+         *
+         *     Describe what knowledge bases you need in natural language and the assistant will propose a plan with create, update, or delete actions. The assistant may also propose creating new sources if needed. Review the proposed actions and use the accept or decline endpoint. Requires `X-API-Key`.
+         */
+        post: operations["ai_assistant_knowledge_base_api_solutions__solution_id__ai_assistant_knowledge_base_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/solutions/{solution_id}/ai-assistant/source": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Generate source plan
+         * @description Generate a content source plan via the source AI assistant.
+         *
+         *     Describe what sources you need in natural language and the assistant will propose a plan with create, update, or delete actions. Review the proposed actions and use the accept or decline endpoint to execute or discard the plan. Requires `X-API-Key`.
+         */
+        post: operations["ai_assistant_source_api_solutions__solution_id__ai_assistant_source_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/solutions/{solution_id}/ai-assistant/{conversation_id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept plan
+         * @description Accept and execute a proposed plan generated by one of the AI assistant endpoints.
+         *
+         *     Executes all proposed actions in the plan and returns the results of each action. If the plan contains destructive actions (e.g. deletions), you must set `confirm_deletions` to `true` in the request body. Returns a summary of executed actions with success/failure status. Requires `X-API-Key`.
+         */
+        post: operations["ai_assistant_accept_api_solutions__solution_id__ai_assistant__conversation_id__accept_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/solutions/{solution_id}/ai-assistant/{conversation_id}/decline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decline plan
+         * @description Decline a proposed plan generated by one of the AI assistant endpoints.
+         *
+         *     Marks the conversation as declined without executing any actions. The conversation history is preserved for reference. You can generate a new plan afterwards if needed. Requires `X-API-Key`.
+         */
+        post: operations["ai_assistant_decline_api_solutions__solution_id__ai_assistant__conversation_id__decline_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/solutions/{solution_id}/conversations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List conversations
+         * @description List AI assistant conversation history for a solution.
+         *
+         *     Returns all conversation turns for the given solution, including user inputs, AI responses, proposed actions, and acceptance status. Requires `X-API-Key`.
+         */
+        get: operations["list_conversations_api_solutions__solution_id__conversations_get"];
+        put?: never;
+        /**
+         * Add conversation turn
+         * @description Add a conversation turn to a solution's AI assistant history.
+         *
+         *     Records a user input and optional AI response and actions taken. This is typically called internally by AI assistant endpoints, but can also be used to manually log interactions. Requires `X-API-Key`.
+         */
+        post: operations["add_conversation_turn_api_solutions__solution_id__conversations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/solutions/{solution_id}/conversations/{conversation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Mark conversation turn
+         * @description Mark a conversation turn as accepted or declined.
+         *
+         *     Updates the `accepted` field on an existing conversation turn. Use this after reviewing a proposed plan to record whether it was accepted or declined by the user. Requires `X-API-Key`.
+         */
+        patch: operations["mark_conversation_turn_api_solutions__solution_id__conversations__conversation_id__patch"];
+        trace?: never;
+    };
+    "/solutions/{solution_id}/knowledge-bases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Link knowledge bases
+         * @description Link one or more knowledge bases to a solution by their IDs.
+         *
+         *     Pass a JSON body with an `ids` array of knowledge base UUIDs. Already-linked knowledge bases are silently ignored. Returns the updated solution with all linked resources. Requires `X-API-Key`.
+         */
+        post: operations["link_knowledge_bases_api_solutions__solution_id__knowledge_bases_post"];
+        /**
+         * Unlink knowledge bases
+         * @description Unlink one or more knowledge bases from a solution by their IDs.
+         *
+         *     Pass a JSON body with an `ids` array of knowledge base UUIDs to remove. Knowledge bases not currently linked are silently ignored. Returns the updated solution. Requires `X-API-Key`.
+         */
+        delete: operations["unlink_knowledge_bases_api_solutions__solution_id__knowledge_bases_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/solutions/{solution_id}/source-connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Link source connections
+         * @description Link one or more source connections to a solution by their IDs.
+         *
+         *     Pass a JSON body with an `ids` array of source connection UUIDs. Already-linked sources are silently ignored. Returns the updated solution with all linked resources. Requires `X-API-Key`.
+         */
+        post: operations["link_source_connections_api_solutions__solution_id__source_connections_post"];
+        /**
+         * Unlink source connections
+         * @description Unlink one or more source connections from a solution by their IDs.
+         *
+         *     Pass a JSON body with an `ids` array of source connection UUIDs to remove. Sources not currently linked are silently ignored. Returns the updated solution. Requires `X-API-Key`.
+         */
+        delete: operations["unlink_source_connections_api_solutions__solution_id__source_connections_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Source
+         * @description Create a new content source.
+         *
+         *     Source types: `rss`, `website`, `file_uploads`, `custom_index`.
+         *
+         *     For RSS and website sources, provide the URL. For file upload and custom index sources, the URL is created automatically.
+         */
+        post: operations["create_source_api_sources_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/sources/": {
         parameters: {
             query?: never;
@@ -276,6 +2277,226 @@ export interface paths {
          *     - The optional `account_id` query param is only allowed when it matches the API key's account.
          */
         get: operations["list_sources_api_sources__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sources/{source_connection_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Source
+         * @description Fetch a content source by ID.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key`. You can only access sources belonging to your account.
+         */
+        get: operations["get_source_api_sources__source_connection_id__get"];
+        /**
+         * Update Source
+         * @description Update a content source's configuration. Only provided fields are changed; omitted fields are left unchanged.
+         *
+         *     System-managed sources only allow `retention_days` updates.
+         */
+        put: operations["update_source_api_sources__source_connection_id__put"];
+        /**
+         * Upload inline text to a content source
+         * @description Upload a small text payload to a content source (no multipart/form-data required).
+         *
+         *     **Maximum payload size:** 8192 bytes (UTF-8).
+         *
+         *     **Supported content types:**
+         *     - `application/json`
+         *     - `application/xml`
+         *     - `text/csv`
+         *     - `text/html`
+         *     - `text/markdown`
+         *     - `text/plain`
+         *     - `text/x-markdown`
+         *     - `text/xml`
+         *
+         *     Notes:
+         *     - Use this endpoint for small text payloads; larger files should use `/upload`.
+         *     - `title` is merged into `metadata.title` when not already present.
+         */
+        post: operations["upload_inline_text_to_source_api_sources__source_connection_id__post"];
+        /**
+         * Delete Source
+         * @description Soft-delete a content source. This action cannot be undone.
+         *
+         *     System-managed sources (such as agent history or conversation memory) cannot be deleted through this endpoint.
+         */
+        delete: operations["delete_source_api_sources__source_connection_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sources/{source_connection_id}/embedding-migration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Source Embedding Migration
+         * @description Get the latest embedding migration status for a custom-index source.
+         *
+         *     Returns `null` when no migration has ever been started for this source.
+         */
+        get: operations["get_source_embedding_migration_api_sources__source_connection_id__embedding_migration_get"];
+        put?: never;
+        /**
+         * Start Source Embedding Migration
+         * @description Start an embedding model migration for a custom-index source.
+         *
+         *     The migration runs asynchronously in the background.  Poll `GET /api/sources/{id}/embedding-migration` to track progress.
+         *
+         *     Optionally override chunking configuration (`chunk_size`, `chunk_overlap`, `chunk_language`, `chunk_separators`, `chunk_regex_separators`).  When a chunking field is omitted (null), the current source's value is preserved.
+         *
+         *     Constraints:
+         *     - Only `custom_index` source types support migration.
+         *     - A migration cannot be started while another is already active.
+         *     - The target model + dimensions must differ from the source's current settings.
+         */
+        post: operations["start_source_embedding_migration_api_sources__source_connection_id__embedding_migration_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sources/{source_connection_id}/embedding-migration/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Source Embedding Migration
+         * @description Cancel an active embedding migration for a custom-index source.
+         *
+         *     Only pending, running, or switching migrations can be cancelled.
+         */
+        post: operations["cancel_source_embedding_migration_api_sources__source_connection_id__embedding_migration_cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sources/{source_connection_id}/exports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List exports
+         * @description List all export jobs for a source connection, ordered newest first.  Supports pagination via ``page`` and ``limit`` query parameters.  Returns status, progress, and file metadata for each export.
+         */
+        get: operations["list_source_exports_api_sources__source_connection_id__exports_get"];
+        put?: never;
+        /**
+         * Create export
+         * @description Start an asynchronous export job. Poll GET .../exports/{export_id} until status becomes completed, then use /download to retrieve the file.
+         */
+        post: operations["create_source_export_api_sources__source_connection_id__exports_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sources/{source_connection_id}/exports/estimate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Estimate export size
+         * @description Return an order-of-magnitude size estimate (in bytes) for an export without creating a job.  Use this to show users how large the download will be before they commit to running the export.
+         */
+        post: operations["estimate_source_export_api_sources__source_connection_id__exports_estimate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sources/{source_connection_id}/exports/{export_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get export status
+         * @description Retrieve the current status and progress of an export job.  Returns all metadata including progress counters, file size, item count, and expiration time once completed.
+         */
+        get: operations["get_source_export_api_sources__source_connection_id__exports__export_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete export
+         * @description Delete an export job and remove the associated file from S3.  This is a soft-delete: the database record is retained for audit purposes but the backing file is permanently removed.
+         */
+        delete: operations["delete_source_export_api_sources__source_connection_id__exports__export_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sources/{source_connection_id}/exports/{export_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel export
+         * @description Cancel a pending or running export.  The background task will stop at the next chunk boundary.  Completed, failed, expired, or already-cancelled exports cannot be cancelled.
+         */
+        post: operations["cancel_source_export_api_sources__source_connection_id__exports__export_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sources/{source_connection_id}/exports/{export_id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download export
+         * @description Stream the completed export file.  Returns the file content with appropriate Content-Type and Content-Disposition headers.  Returns 409 if the export is not yet completed and 410 if it has expired.
+         */
+        get: operations["download_source_export_api_sources__source_connection_id__exports__export_id__download_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -353,6 +2574,64 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AddConversationTurnRequest */
+        AddConversationTurnRequest: {
+            /**
+             * Actions Taken
+             * @description Actions taken by the AI
+             */
+            actions_taken?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Ai Response
+             * @description AI response text
+             */
+            ai_response?: string | null;
+            /**
+             * User Input
+             * @description User input text
+             */
+            user_input: string;
+        };
+        /** AgentDefinitionResponse */
+        AgentDefinitionResponse: {
+            /**
+             * Change Id
+             * @description Current change ID (use as expected_change_id when updating).
+             */
+            change_id: string;
+            /**
+             * Definition
+             * @description The agent definition containing name, description, tags, and step workflow tree. Step types include prompt_call, retrieval, transform, gate, retry, evaluate_step, insight, extract_json, send_email, webhook_call, call_agent, write_metadata, write_content_attachment, load_content_attachment, load_content, display_result, and others.
+             */
+            definition: {
+                [key: string]: unknown;
+            };
+            /**
+             * Schema Version
+             * @description Agent schema version.
+             */
+            schema_version: string;
+            /**
+             * Warnings
+             * @description Validation warnings, if any.
+             */
+            warnings?: {
+                [key: string]: string;
+            }[] | null;
+        };
+        /**
+         * AgentEvaluationTier
+         * @description Controls model selection for agent evaluation.
+         *
+         *     Labels shown in UI:
+         *       FAST      → "Fast and cheap"
+         *       BALANCED  → "Balanced speed and cost"
+         *       THOROUGH  → "Slow and thorough"
+         * @enum {string}
+         */
+        AgentEvaluationTier: "fast" | "balanced" | "thorough";
         /** AgentRunAttemptResponse */
         AgentRunAttemptResponse: {
             /**
@@ -384,12 +2663,17 @@ export interface components {
              * Input
              * @description Input to provide to the agent upon running for agents with dynamic triggers.
              */
-            input: string | null;
+            input?: string | null;
+            /**
+             * Input Upload Id
+             * @description ID of a previously uploaded file (via POST /{agent_id}/upload-input) to use as the run input for dynamic-input triggers. Mutually exclusive with the 'input' field.
+             */
+            input_upload_id?: string | null;
             /**
              * Metadata
              * @description Metadata to make available for string substitution expressions in agent tasks.
              */
-            metadata: {
+            metadata?: {
                 [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /**
@@ -495,14 +2779,239 @@ export interface components {
              * Input
              * @description Input to provide to the agent upon running for agents with dynamic triggers.
              */
-            input: string | null;
+            input?: string | null;
+            /**
+             * Input Upload Id
+             * @description ID of a previously uploaded file (via POST /{agent_id}/upload-input) to use as the run input for dynamic-input triggers. Mutually exclusive with the 'input' field.
+             */
+            input_upload_id?: string | null;
             /**
              * Metadata
              * @description Metadata to make available for string substitution expressions in agent tasks.
              */
-            metadata: {
+            metadata?: {
                 [key: string]: components["schemas"]["JsonValue"];
             } | null;
+        };
+        /** AgentSummaryResponse */
+        AgentSummaryResponse: {
+            /**
+             * Created At
+             * @description ISO 8601 creation timestamp.
+             */
+            created_at: string;
+            /**
+             * Default Evaluation Tier
+             * @description Default evaluation tier: fast, balanced, or thorough.
+             */
+            default_evaluation_tier?: string | null;
+            /**
+             * Description
+             * @description Agent description.
+             */
+            description: string | null;
+            /**
+             * Evaluation Mode
+             * @description Evaluation mode: output_expectation, eval_and_retry, or sample_and_flag.
+             * @default eval_and_retry
+             */
+            evaluation_mode: string;
+            /**
+             * Id
+             * @description Unique agent identifier.
+             */
+            id: string;
+            /**
+             * Max Retries
+             * @description Max retries for eval_and_retry mode.
+             * @default 3
+             */
+            max_retries: number;
+            /**
+             * Name
+             * @description Agent name.
+             */
+            name: string;
+            /**
+             * Prompt Model Auto Rollback Enabled
+             * @description Whether automatic rollback is enabled for upgraded models.
+             * @default false
+             */
+            prompt_model_auto_rollback_enabled: boolean;
+            /**
+             * Prompt Model Auto Rollback Triggers
+             * @description Failure signals that trigger rollback. Defaults to agent_eval_fail, governance_block, agent_run_failed when null.
+             */
+            prompt_model_auto_rollback_triggers?: string[] | null;
+            /**
+             * Prompt Model Auto Upgrade Strategy
+             * @description Auto-upgrade strategy: none, early_adopter, middle_of_road, cautious_adopter.
+             * @default none
+             */
+            prompt_model_auto_upgrade_strategy: string;
+            /**
+             * Retry On Failure
+             * @description Whether to retry on evaluation failure.
+             * @default true
+             */
+            retry_on_failure: boolean;
+            /**
+             * Sampling Config
+             * @description Sampling configuration for sample_and_flag mode.
+             */
+            sampling_config?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Trigger Type
+             * @description Trigger type for the agent.
+             */
+            trigger_type: string | null;
+            /**
+             * Updated At
+             * @description ISO 8601 last-updated timestamp.
+             */
+            updated_at: string;
+        };
+        /** AgentTraceMatchResponse */
+        AgentTraceMatchResponse: {
+            /**
+             * Agent Id
+             * @description Agent ID.
+             */
+            agent_id: string | null;
+            /**
+             * Agent Run Id
+             * @description Agent run ID.
+             */
+            agent_run_id: string | null;
+            /**
+             * Agent Run Status
+             * @description Status of the agent run.
+             */
+            agent_run_status: string | null;
+            /**
+             * Agent Step Id
+             * @description Step identifier.
+             */
+            agent_step_id: string | null;
+            /**
+             * Agent Step Run Id
+             * @description Agent step run ID.
+             */
+            agent_step_run_id: string | null;
+            /**
+             * Agent Step Type
+             * @description Type of the step.
+             */
+            agent_step_type: string | null;
+            /**
+             * Score
+             * @description Similarity score (0-1, higher is better).
+             */
+            score: number;
+            /**
+             * Text
+             * @description Matching text chunk.
+             */
+            text: string;
+            /**
+             * Title
+             * @description Title of the indexed entry.
+             */
+            title: string | null;
+        };
+        /** AgentTraceSearchResponse */
+        AgentTraceSearchResponse: {
+            /**
+             * Matches
+             * @description List of matching entries.
+             */
+            matches: components["schemas"]["AgentTraceMatchResponse"][];
+            /**
+             * Total
+             * @description Number of matches returned.
+             */
+            total: number;
+        };
+        /**
+         * AiAssistantFeedbackResponse
+         * @description Response after submitting feedback.
+         */
+        AiAssistantFeedbackResponse: {
+            /**
+             * Feedback Id
+             * Format: uuid
+             */
+            feedback_id: string;
+            /** Flag Reason */
+            flag_reason?: string | null;
+            /** Flagged */
+            flagged: boolean;
+        };
+        /**
+         * AiAssistantGenerateRequest
+         * @description Request body for AI assistant generate endpoints.
+         */
+        AiAssistantGenerateRequest: {
+            /**
+             * User Input
+             * @description User input describing what to do
+             */
+            user_input: string;
+        };
+        /** AiConversationHistoryResponse */
+        AiConversationHistoryResponse: {
+            /**
+             * Total
+             * @description Total number of conversation turns available.
+             */
+            total: number;
+            /**
+             * Turns
+             * @description Conversation turns, ordered oldest first.
+             */
+            turns: components["schemas"]["AiConversationTurnResponse"][];
+        };
+        /** AiConversationTurnResponse */
+        AiConversationTurnResponse: {
+            /**
+             * Accepted
+             * @description Whether the user accepted this proposal (null if pending).
+             */
+            accepted: boolean | null;
+            /**
+             * Ai Note
+             * @description AI explanation from this turn.
+             */
+            ai_note: string | null;
+            /**
+             * Conversation Id
+             * @description Unique conversation turn ID.
+             */
+            conversation_id: string;
+            /**
+             * Resulting Config
+             * @description The proposed configuration from this turn.
+             */
+            resulting_config: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Step Id
+             * @description Step ID for this conversation.
+             */
+            step_id: string | null;
+            /**
+             * Step Type
+             * @description Step type for this conversation.
+             */
+            step_type: string | null;
+            /**
+             * User Input
+             * @description User input for this turn.
+             */
+            user_input: string;
         };
         /** Body_upload_file_to_content_api_contents__source_connection_content_version__upload_post */
         Body_upload_file_to_content_api_contents__source_connection_content_version__upload_post: {
@@ -542,6 +3051,108 @@ export interface components {
              */
             title?: string;
         };
+        /** ChangeStatusRequest */
+        ChangeStatusRequest: {
+            /**
+             * Note
+             * @description Optional note
+             */
+            note?: string | null;
+            /**
+             * Status
+             * @description New alert status
+             */
+            status: string;
+        };
+        /**
+         * CompactionEvaluationModel
+         * @description Structured LLM-as-judge evaluation result.
+         */
+        CompactionEvaluationModel: {
+            /**
+             * Reasoning
+             * @description Explanation of the evaluation.
+             */
+            reasoning: string;
+            /**
+             * Score
+             * @description Quality score from 1 to 5.
+             */
+            score: number;
+            /**
+             * Verdict
+             * @description 'pass' or 'fail'.
+             */
+            verdict: string;
+        };
+        /**
+         * CompactionTestResponseModel
+         * @description Response from a compaction prompt test.
+         */
+        CompactionTestResponseModel: {
+            /**
+             * Compaction Summary
+             * @description The generated compaction summary.
+             */
+            compaction_summary: string | null;
+            /** @description LLM-as-judge quality evaluation. */
+            evaluation: components["schemas"]["CompactionEvaluationModel"];
+            /**
+             * Generated
+             * @description True when entries were LLM-generated rather than real.
+             */
+            generated: boolean;
+            /**
+             * Original Entries
+             * @description Entries fed into the compactor.
+             */
+            original_entries: string[];
+            /**
+             * Surviving Entries
+             * @description Entries that survived after compaction.
+             */
+            surviving_entries: string[];
+        };
+        /**
+         * CompatibleRunListResponse
+         * @description Paginated list of compatible runs.
+         */
+        CompatibleRunListResponse: {
+            /** Data */
+            data: components["schemas"]["CompatibleRunResponse"][];
+            /** Limit */
+            limit: number;
+            /** Page */
+            page: number;
+            /** Total */
+            total: number;
+        };
+        /**
+         * CompatibleRunResponse
+         * @description A run that has a completed step matching a criteria's step_id.
+         */
+        CompatibleRunResponse: {
+            /**
+             * Agent Run Id
+             * Format: uuid
+             */
+            agent_run_id: string;
+            /**
+             * Agent Step Run Id
+             * Format: uuid
+             */
+            agent_step_run_id: string;
+            /** Completed At */
+            completed_at: string | null;
+            /** Input Preview */
+            input_preview?: string | null;
+            /** Output Storage Key */
+            output_storage_key: string | null;
+            /** Run Status */
+            run_status?: string | null;
+            /** Started At */
+            started_at?: string | null;
+        };
         /**
          * ContentEmbeddingResponse
          * @description Response model for content embedding.
@@ -562,12 +3173,1036 @@ export interface components {
             /** Vector */
             vector: number[];
         };
+        /** CreateAlertConfigRequest */
+        CreateAlertConfigRequest: {
+            /**
+             * Agent Id
+             * @description Agent ID (for agent alerts)
+             */
+            agent_id?: string | null;
+            /**
+             * Alert Type
+             * @description Alert type
+             */
+            alert_type: string;
+            /**
+             * Cooldown Minutes
+             * @description Cooldown period in minutes
+             * @default 60
+             */
+            cooldown_minutes: number;
+            /**
+             * Distribution Type
+             * @description Distribution type (owner, owner_admins, selected_members)
+             * @default owner
+             */
+            distribution_type: string;
+            /**
+             * Enabled
+             * @description Whether the alert config is enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Recipient User Ids
+             * @description User IDs for selected_members distribution
+             */
+            recipient_user_ids?: string[] | null;
+            /**
+             * Source Connection Id
+             * @description Source connection ID (for source alerts)
+             */
+            source_connection_id?: string | null;
+            /**
+             * Threshold
+             * @description Threshold configuration
+             */
+            threshold?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /**
+         * CreateEvaluationCriteriaRequest
+         * @description Request body for creating an evaluation criteria.
+         *
+         *     The evaluation mode, retry settings, and sample frequency are set at the
+         *     agent level, not per-criteria.
+         */
+        CreateEvaluationCriteriaRequest: {
+            /** Description */
+            description?: string | null;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /** Evaluation Prompt */
+            evaluation_prompt?: string | null;
+            evaluation_tier?: components["schemas"]["AgentEvaluationTier"] | null;
+            /** Expectation Config */
+            expectation_config?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Pass Threshold
+             * @default 0.5
+             */
+            pass_threshold: number;
+            /** Step Id */
+            step_id: string;
+        };
+        /**
+         * CreateEvaluationResultRequest
+         * @description Request body for recording an evaluation result.
+         */
+        CreateEvaluationResultRequest: {
+            /**
+             * Agent Run Id
+             * Format: uuid
+             */
+            agent_run_id: string;
+            /** Agent Step Run Id */
+            agent_step_run_id?: string | null;
+            /** Details */
+            details?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Flagged
+             * @default false
+             */
+            flagged: boolean;
+            /**
+             * Retry Count
+             * @default 0
+             */
+            retry_count: number;
+            /**
+             * Retry Triggered
+             * @default false
+             */
+            retry_triggered: boolean;
+            /** Score */
+            score?: number | null;
+            status: components["schemas"]["EvaluationStatus"];
+        };
+        /**
+         * CreateKnowledgeBaseBody
+         * @description Request body for creating a knowledge base.
+         */
+        CreateKnowledgeBaseBody: {
+            /**
+             * Default Score Threshold
+             * @description Default minimum rerank score threshold.
+             */
+            default_score_threshold?: number | null;
+            /**
+             * Default Top K
+             * @description Default results after reranking.
+             */
+            default_top_k?: number | null;
+            /**
+             * Default Top N
+             * @description Default number of results.
+             */
+            default_top_n?: number | null;
+            /**
+             * Description
+             * @description Optional description.
+             */
+            description?: string | null;
+            /**
+             * Name
+             * @description Knowledge base name.
+             */
+            name: string;
+            /**
+             * Reranker Model
+             * @description Reranker model to use (null for no reranking).
+             */
+            reranker_model?: string | null;
+            /**
+             * Source Ids
+             * @description List of source connection IDs to link.
+             */
+            source_ids: string[];
+        };
+        /**
+         * CreateMemoryBankBody
+         * @description Request body for creating a memory bank.
+         */
+        CreateMemoryBankBody: {
+            /**
+             * Chunk Overlap
+             * @description Chunk overlap (custom mode only).
+             */
+            chunk_overlap?: number | null;
+            /**
+             * Chunk Size
+             * @description Chunk size (custom mode only).
+             */
+            chunk_size?: number | null;
+            /**
+             * Compaction Prompt
+             * @description Custom prompt used when compacting older entries. When set, entries that exceed a threshold are summarized into a new entry before being soft-deleted.
+             */
+            compaction_prompt?: string | null;
+            /**
+             * Description
+             * @description Optional description of the bank's purpose.
+             */
+            description?: string | null;
+            /**
+             * Dimensions
+             * @description Embedding dimensions (custom mode only).
+             */
+            dimensions?: number | null;
+            /**
+             * Embedding Model
+             * @description Custom embedding model (custom mode only).
+             */
+            embedding_model?: string | null;
+            /**
+             * Max Age Days
+             * @description Max entry age in days before compaction. Checked inline after each write and by the hourly background sweep.
+             */
+            max_age_days?: number | null;
+            /**
+             * Max Size Tokens
+             * @description Max total tokens (per partition) before compaction. Checked inline after each write and by the hourly background sweep.
+             */
+            max_size_tokens?: number | null;
+            /**
+             * Max Turns
+             * @description Max conversation turns (per partition) before compaction. Checked inline after each write and by the hourly background sweep.
+             */
+            max_turns?: number | null;
+            /**
+             * Mode
+             * @description Embedding quality / cost trade-off. One of: fast_and_cheap, balanced, slow_and_thorough, custom.
+             * @default fast_and_cheap
+             */
+            mode: string;
+            /**
+             * Name
+             * @description Memory bank name.
+             */
+            name: string;
+            /**
+             * Retention Days
+             * @description Content source retention in days.
+             * @default 30
+             */
+            retention_days: number | null;
+            /**
+             * Type
+             * @description Bank type. 'conversation' for chat-turn data with conversation_key + speaker; 'general' for flat entries with optional group_key.
+             * @default conversation
+             */
+            type: string;
+        };
+        /**
+         * CreateSolutionRequest
+         * @description Request model for creating a new solution
+         */
+        CreateSolutionRequest: {
+            /**
+             * Description
+             * @description Description of the solution
+             * @default
+             */
+            description: string;
+            /**
+             * Name
+             * @description Name of the solution
+             */
+            name: string;
+        };
+        /**
+         * CreateSourceBody
+         * @description Request body for creating a content source.
+         */
+        CreateSourceBody: {
+            /**
+             * Chunk Overlap
+             * @description Chunk overlap for content processing.
+             */
+            chunk_overlap?: number | null;
+            /**
+             * Chunk Size
+             * @description Chunk size for content processing.
+             */
+            chunk_size?: number | null;
+            /**
+             * Content Filter
+             * @description Content filter type.
+             */
+            content_filter?: string | null;
+            /**
+             * Dimensions
+             * @description Embedding dimensions override.
+             */
+            dimensions?: number | null;
+            /**
+             * Embedding Model
+             * @description Embedding model override.
+             */
+            embedding_model?: string | null;
+            /**
+             * Name
+             * @description Source name.
+             */
+            name: string;
+            /**
+             * Polling
+             * @description Polling interval (e.g. hourly, daily).
+             */
+            polling?: string | null;
+            /**
+             * Polling Action
+             * @description Polling action.
+             */
+            polling_action?: string | null;
+            /**
+             * Polling Max Items
+             * @description Max items per poll.
+             */
+            polling_max_items?: number | null;
+            /**
+             * Retention
+             * @description Retention period in days.
+             */
+            retention?: number | null;
+            /**
+             * Source Type
+             * @description Source type: rss, website, file_uploads, or custom_index.
+             */
+            source_type: string;
+            /**
+             * Url Id
+             * @description URL record ID (required for rss/website sources).
+             */
+            url_id?: string | null;
+        };
+        /**
+         * EvaluationCriteriaResponse
+         * @description Response schema for evaluation criteria.
+         */
+        EvaluationCriteriaResponse: {
+            /**
+             * Account Id
+             * Format: uuid
+             */
+            account_id: string;
+            /**
+             * Agent Id
+             * Format: uuid
+             */
+            agent_id: string;
+            /** Created At */
+            created_at: string;
+            /** Description */
+            description: string | null;
+            /** Enabled */
+            enabled: boolean;
+            /**
+             * Evaluation Mode
+             * @description Runtime behavior mode. output_expectation (manual validation), eval_and_retry (every run + retry), sample_and_flag (sampled monitoring).
+             */
+            evaluation_mode: string;
+            /** Evaluation Prompt */
+            evaluation_prompt: string | null;
+            /** Evaluation Tier */
+            evaluation_tier: string | null;
+            /** Expectation Config */
+            expectation_config: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Max Retries */
+            max_retries: number;
+            /**
+             * Pass Threshold
+             * @description Score cutoff for pass/fail, inclusive (0.0 to 1.0).
+             */
+            pass_threshold: number;
+            /** Result Summary */
+            result_summary: {
+                [key: string]: number;
+            };
+            /** Retry On Failure */
+            retry_on_failure: boolean;
+            /** Step Id */
+            step_id: string | null;
+            /** Updated At */
+            updated_at: string;
+        };
+        /**
+         * EvaluationResultListResponse
+         * @description Paginated list of evaluation results.
+         */
+        EvaluationResultListResponse: {
+            /** Data */
+            data: components["schemas"]["EvaluationResultResponse"][];
+            /** Limit */
+            limit: number;
+            /** Page */
+            page: number;
+            /** Total */
+            total: number;
+        };
+        /**
+         * EvaluationResultResponse
+         * @description Response schema for a single evaluation result.
+         */
+        EvaluationResultResponse: {
+            /**
+             * Agent Run Id
+             * Format: uuid
+             */
+            agent_run_id: string;
+            /** Agent Step Run Id */
+            agent_step_run_id: string | null;
+            /** Created At */
+            created_at: string;
+            /**
+             * Criteria Id
+             * Format: uuid
+             */
+            criteria_id: string;
+            /**
+             * Details
+             * @description Evaluation details including explanation and raw LLM response.
+             */
+            details?: {
+                [key: string]: unknown;
+            } | null;
+            /** Evaluated At */
+            evaluated_at: string;
+            /**
+             * Flagged
+             * @description True when the result was flagged for human review.
+             */
+            flagged: boolean;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Retry Count */
+            retry_count: number;
+            /** Retry Triggered */
+            retry_triggered: boolean;
+            /**
+             * Score
+             * @description LLM-assigned quality score between 0.0 (worst) and 1.0 (best).
+             */
+            score?: number | null;
+            /**
+             * Status
+             * @description Outcome status: pending, passed, failed, skipped, or error.
+             */
+            status: string;
+        };
+        /**
+         * EvaluationResultSummaryResponse
+         * @description Aggregated pass/fail/error counts and average score for a criteria.
+         */
+        EvaluationResultSummaryResponse: {
+            /**
+             * Average Score
+             * @description Mean score across all evaluated results, or null if none.
+             */
+            average_score?: number | null;
+            /** Error */
+            error: number;
+            /** Failed */
+            failed: number;
+            /** Flagged */
+            flagged: number;
+            /** Passed */
+            passed: number;
+            /** Total */
+            total: number;
+        };
+        /**
+         * EvaluationResultWithCriteriaListResponse
+         * @description Paginated list of evaluation results with criteria context.
+         */
+        EvaluationResultWithCriteriaListResponse: {
+            /** Data */
+            data: components["schemas"]["EvaluationResultWithCriteriaResponse"][];
+            /** Limit */
+            limit: number;
+            /** Page */
+            page: number;
+            /** Total */
+            total: number;
+        };
+        /**
+         * EvaluationResultWithCriteriaResponse
+         * @description Evaluation result including criteria context for aggregated listing.
+         */
+        EvaluationResultWithCriteriaResponse: {
+            /**
+             * Agent Run Id
+             * Format: uuid
+             */
+            agent_run_id: string;
+            /** Agent Step Run Id */
+            agent_step_run_id: string | null;
+            /** Created At */
+            created_at: string;
+            /** Criteria Description */
+            criteria_description: string | null;
+            /**
+             * Criteria Id
+             * Format: uuid
+             */
+            criteria_id: string;
+            /**
+             * Details
+             * @description Evaluation details including explanation and raw LLM response.
+             */
+            details?: {
+                [key: string]: unknown;
+            } | null;
+            /** Evaluated At */
+            evaluated_at: string;
+            /**
+             * Flagged
+             * @description True when the result was flagged for human review.
+             */
+            flagged: boolean;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Retry Count */
+            retry_count: number;
+            /** Retry Triggered */
+            retry_triggered: boolean;
+            /**
+             * Score
+             * @description LLM-assigned quality score between 0.0 (worst) and 1.0 (best).
+             */
+            score?: number | null;
+            /**
+             * Status
+             * @description Outcome status: pending, passed, failed, skipped, or error.
+             */
+            status: string;
+            /** Step Id */
+            step_id: string | null;
+        };
+        /**
+         * EvaluationRunSummaryListResponse
+         * @description Paginated list of per-run evaluation summaries.
+         */
+        EvaluationRunSummaryListResponse: {
+            /** Data */
+            data: components["schemas"]["EvaluationRunSummaryResponse"][];
+            /** Limit */
+            limit: number;
+            /** Page */
+            page: number;
+            /** Total */
+            total: number;
+        };
+        /**
+         * EvaluationRunSummaryResponse
+         * @description Per-run evaluation summary with pass/fail/error breakdown.
+         */
+        EvaluationRunSummaryResponse: {
+            /**
+             * Agent Run Id
+             * Format: uuid
+             */
+            agent_run_id: string;
+            /** Error Count */
+            error_count: number;
+            /** Failed Count */
+            failed_count: number;
+            /** Flagged Count */
+            flagged_count: number;
+            /** Passed Count */
+            passed_count: number;
+            /** Run Created At */
+            run_created_at: string;
+            /**
+             * Run Status
+             * @description Status of the agent run (processing, completed, failed).
+             */
+            run_status: string;
+            /** Skipped Count */
+            skipped_count: number;
+            /** Total Evaluations */
+            total_evaluations: number;
+        };
+        /**
+         * EvaluationStatus
+         * @description Result status of a single evaluation run.
+         * @enum {string}
+         */
+        EvaluationStatus: "pending" | "passed" | "failed" | "skipped" | "error";
+        ExamplePrompt: {
+            [key: string]: string;
+        };
+        /**
+         * ExportFormat
+         * @description Supported export file formats.
+         * @enum {string}
+         */
+        ExportFormat: "jsonl" | "csv" | "parquet" | "zip";
+        /**
+         * ExportListResponse
+         * @description Paginated list of export jobs.
+         */
+        ExportListResponse: {
+            /** Data */
+            data: unknown[];
+            pagination: components["schemas"]["PaginationResponse"];
+        };
+        /** GenerateAgentStepsRequest */
+        GenerateAgentStepsRequest: {
+            /**
+             * Agent Description
+             * @description Agent description for additional AI context.
+             */
+            agent_description?: string | null;
+            /**
+             * Agent Steps
+             * @description Current agent step hierarchy for context when modifying.
+             */
+            agent_steps?: {
+                [key: string]: unknown;
+            }[] | null;
+            /**
+             * Mode
+             * @description 'generate_full' to create from scratch, 'modify_workflow' to refine.
+             * @default generate_full
+             */
+            mode: string;
+            /**
+             * Trigger Type
+             * @description Agent trigger type for context (e.g. 'dynamic_input', 'content_added').
+             */
+            trigger_type?: string | null;
+            /**
+             * User Input
+             * @description Natural language description of the desired agent workflow.
+             */
+            user_input: string;
+        };
+        /** GenerateAgentStepsResponse */
+        GenerateAgentStepsResponse: {
+            /**
+             * Agent Config
+             * @description Suggested agent-level configuration, if any.
+             */
+            agent_config?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Conversation Id
+             * @description Conversation turn ID for tracking.
+             */
+            conversation_id: string;
+            /**
+             * Example Prompts
+             * @description Example natural-language prompts that demonstrate the capabilities of this AI assistant for the given mode.
+             */
+            example_prompts?: components["schemas"]["ExamplePrompt"][];
+            /**
+             * Note
+             * @description AI explanation of the proposed workflow.
+             */
+            note: string;
+            /**
+             * Steps
+             * @description Generated agent steps.
+             */
+            steps: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Success
+             * @description Whether steps were successfully generated.
+             */
+            success: boolean;
+        };
+        /** GenerateStepConfigRequest */
+        GenerateStepConfigRequest: {
+            /**
+             * Agent Steps
+             * @description Current agent step hierarchy for context.
+             */
+            agent_steps?: {
+                [key: string]: unknown;
+            }[] | null;
+            /**
+             * Current Config
+             * @description Current step configuration to refine, if any.
+             */
+            current_config?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Step Id
+             * @description ID of the specific step to refine. Omit for new steps.
+             */
+            step_id?: string | null;
+            /**
+             * Step Type
+             * @description The step type to generate config for (e.g. 'transform', 'gate', 'text', 'prompt_call', 'retrieval').
+             */
+            step_type: string;
+            /**
+             * User Input
+             * @description Natural language description of what the step should do.
+             */
+            user_input: string;
+        };
+        /** GenerateStepConfigResponse */
+        GenerateStepConfigResponse: {
+            /**
+             * Conversation Id
+             * @description Conversation turn ID for tracking.
+             */
+            conversation_id: string;
+            /**
+             * Example Prompts
+             * @description Example natural-language prompts that demonstrate the capabilities of this AI assistant for the given step type.
+             */
+            example_prompts?: components["schemas"]["ExamplePrompt"][];
+            /**
+             * Note
+             * @description AI explanation of the proposed configuration.
+             */
+            note: string;
+            /**
+             * Resulting Config
+             * @description The proposed step configuration.
+             */
+            resulting_config?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Step Type
+             * @description The step type that was generated.
+             */
+            step_type: string;
+            /**
+             * Success
+             * @description Whether a valid configuration was generated.
+             */
+            success: boolean;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /**
+         * InlineTextReplaceRequest
+         * @description Request model for inline text content replacement.
+         */
+        InlineTextReplaceRequest: {
+            /**
+             * Content Type
+             * @description MIME type for the text content
+             * @default text/plain
+             */
+            content_type: string | null;
+            /**
+             * Metadata
+             * @description Optional metadata object
+             */
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Text
+             * @description Text content to upload
+             */
+            text: string;
+            /**
+             * Title
+             * @description Optional title
+             */
+            title?: string | null;
+        };
+        /**
+         * InlineTextUploadRequest
+         * @description Request model for inline text uploads.
+         */
+        InlineTextUploadRequest: {
+            /**
+             * Content Type
+             * @description MIME type for the text content
+             * @default text/plain
+             */
+            content_type: string | null;
+            /**
+             * Metadata
+             * @description Optional metadata object
+             */
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Text
+             * @description Text content to upload
+             */
+            text: string;
+            /**
+             * Title
+             * @description Optional title
+             */
+            title?: string | null;
+        };
         JsonValue: unknown;
+        /**
+         * KnowledgeBaseListResponseModel
+         * @description Paginated list of knowledge bases.
+         */
+        KnowledgeBaseListResponseModel: {
+            /**
+             * Knowledge Bases
+             * @description List of knowledge bases on this page.
+             */
+            knowledge_bases: components["schemas"]["KnowledgeBaseResponseModel"][];
+            /**
+             * Limit
+             * @description Items per page.
+             */
+            limit: number;
+            /**
+             * Page
+             * @description Current page number (1-based).
+             */
+            page: number;
+            /**
+             * Total
+             * @description Total number of knowledge bases.
+             */
+            total: number;
+        };
+        /**
+         * KnowledgeBase
+         * @description Response model for a single knowledge base.
+         */
+        KnowledgeBaseResponseModel: {
+            /**
+             * Created At
+             * @description ISO-8601 creation timestamp.
+             */
+            created_at: string;
+            /**
+             * Default Score Threshold
+             * @description Default minimum rerank score.
+             */
+            default_score_threshold?: number | null;
+            /**
+             * Default Top K
+             * @description Default results after reranking.
+             */
+            default_top_k?: number | null;
+            /**
+             * Default Top N
+             * @description Default number of results to return.
+             */
+            default_top_n?: number | null;
+            /**
+             * Description
+             * @description Optional description.
+             */
+            description?: string | null;
+            /**
+             * Id
+             * @description Unique knowledge base identifier.
+             */
+            id: string;
+            /**
+             * Name
+             * @description Human-readable name.
+             */
+            name: string;
+            /**
+             * Readonly
+             * @description Whether the knowledge base is read-only.
+             * @default false
+             */
+            readonly: boolean;
+            /**
+             * Reranker Model
+             * @description Reranker model in use.
+             */
+            reranker_model?: string | null;
+            /**
+             * Sources
+             * @description Linked source connections.
+             */
+            sources?: components["schemas"]["SourceConnectionResponseModel"][];
+            /**
+             * Updated At
+             * @description ISO-8601 last-update timestamp.
+             */
+            updated_at: string;
+        };
+        /** LinkResourcesRequest */
+        LinkResourcesRequest: {
+            /**
+             * Ids
+             * @description Resource IDs to link
+             */
+            ids: string[];
+        };
+        /** MarkAiSuggestionRequest */
+        MarkAiSuggestionRequest: {
+            /**
+             * Accepted
+             * @description True to accept the suggestion, false to decline it.
+             */
+            accepted: boolean;
+        };
+        /** MarkConversationTurnRequest */
+        MarkConversationTurnRequest: {
+            /**
+             * Accepted
+             * @description Whether the suggestion was accepted
+             */
+            accepted: boolean;
+        };
+        /**
+         * MemoryBankListResponseModel
+         * @description Paginated list of memory banks.
+         */
+        MemoryBankListResponseModel: {
+            /**
+             * Limit
+             * @description Items per page.
+             */
+            limit: number;
+            /**
+             * Memory Banks
+             * @description List of memory banks on this page.
+             */
+            memory_banks: components["schemas"]["MemoryBankResponseModel"][];
+            /**
+             * Page
+             * @description Current page number (1-based).
+             */
+            page: number;
+            /**
+             * Total
+             * @description Total number of memory banks.
+             */
+            total: number;
+        };
+        /**
+         * MemoryBank
+         * @description Response model for a single memory bank.
+         */
+        MemoryBankResponseModel: {
+            /**
+             * Chunk Overlap
+             * @description Character overlap between chunks.
+             */
+            chunk_overlap?: number | null;
+            /**
+             * Chunk Size
+             * @description Characters per chunk.
+             */
+            chunk_size?: number | null;
+            /**
+             * Compaction Prompt
+             * @description Custom prompt used when compacting older entries. When set, entries that exceed a threshold are summarized into a new entry before being soft-deleted.
+             */
+            compaction_prompt?: string | null;
+            /**
+             * Created At
+             * @description ISO-8601 creation timestamp.
+             */
+            created_at: string;
+            /**
+             * Description
+             * @description Optional description of the memory bank's purpose.
+             */
+            description?: string | null;
+            /**
+             * Dimensions
+             * @description Vector embedding dimensions.
+             */
+            dimensions?: number | null;
+            /**
+             * Embedding Model
+             * @description Embedding model identifier.
+             */
+            embedding_model?: string | null;
+            /**
+             * Id
+             * @description Unique memory bank identifier.
+             */
+            id: string;
+            /**
+             * Max Age Days
+             * @description Max entry age in days before compaction. Checked both inline after each write and by the hourly background sweep.
+             */
+            max_age_days?: number | null;
+            /**
+             * Max Size Tokens
+             * @description Max total tokens (per partition) before compaction. Checked both inline after each write and by the hourly background sweep.
+             */
+            max_size_tokens?: number | null;
+            /**
+             * Max Turns
+             * @description Max conversation turns (per partition) before compaction. Checked both inline after each write and by the hourly background sweep.
+             */
+            max_turns?: number | null;
+            /**
+             * Mode
+             * @description Embedding mode: fast_and_cheap, balanced, slow_and_thorough, or custom.
+             */
+            mode: string;
+            /**
+             * Name
+             * @description Human-readable name.
+             */
+            name: string;
+            /**
+             * Retention Days
+             * @description Content retention period in days (null = indefinite).
+             */
+            retention_days?: number | null;
+            /**
+             * Source Connection Id
+             * @description Linked content source ID (null if not yet provisioned).
+             */
+            source_connection_id?: string | null;
+            /**
+             * Type
+             * @description Bank type: conversation (chat-turn with speaker) or general (flat entries).
+             */
+            type: string;
+            /**
+             * Updated At
+             * @description ISO-8601 last-update timestamp.
+             */
+            updated_at: string;
+        };
+        /** OrganizationAlertPreferenceListResponse */
+        OrganizationAlertPreferenceListResponse: {
+            /** Preferences */
+            preferences: components["schemas"]["routers__api__alerts__OrganizationAlertPreferenceResponse"][];
+            /** Total */
+            total: number;
+        };
         /**
          * PaginationResponse
          * @description Pagination information.
@@ -591,6 +4226,146 @@ export interface components {
          * @enum {string}
          */
         PendingProcessingCompletedFailedStatus: "pending" | "processing" | "completed" | "failed";
+        /**
+         * PromptModelAutoUpgradeStrategy
+         * @enum {string}
+         */
+        PromptModelAutoUpgradeStrategy: "none" | "early_adopter" | "middle_of_road" | "cautious_adopter";
+        /** SolutionSourceConnectionResponse */
+        SolutionSourceConnectionResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+        };
+        /**
+         * SolutionSummaryResponse
+         * @description Response model for solution summary.
+         */
+        SolutionSummaryResponse: {
+            /**
+             * Agent Count
+             * @description Number of linked agents.
+             */
+            agent_count: number;
+            /**
+             * Created At
+             * @description Timestamp when the solution was created.
+             */
+            created_at: string;
+            /**
+             * Description
+             * @description Description of the solution.
+             */
+            description: string;
+            /**
+             * Id
+             * Format: uuid
+             * @description Unique identifier for the solution.
+             */
+            id: string;
+            /**
+             * Knowledge Base Count
+             * @description Number of linked knowledge bases.
+             */
+            knowledge_base_count: number;
+            /**
+             * Memory Bank Count
+             * @description Number of linked memory banks.
+             */
+            memory_bank_count: number;
+            /**
+             * Name
+             * @description Name of the solution.
+             */
+            name: string;
+            /**
+             * Source Connection Count
+             * @description Number of linked source connections.
+             */
+            source_connection_count: number;
+            /**
+             * Updated At
+             * @description Timestamp when the solution was last updated.
+             */
+            updated_at: string;
+        };
+        /**
+         * SourceConnectionResponseModel
+         * @description Nested source connection summary within a knowledge base response.
+         */
+        SourceConnectionResponseModel: {
+            /**
+             * Id
+             * @description Source connection identifier.
+             */
+            id: string;
+            /**
+             * Name
+             * @description Source connection name.
+             */
+            name: string;
+            /**
+             * Polling
+             * @description Polling configuration.
+             */
+            polling?: string | null;
+            /**
+             * Source Type
+             * @description Type of source (rss, website, etc.).
+             */
+            source_type: string;
+            /**
+             * Url
+             * @description Source URL.
+             */
+            url: string;
+        };
+        /**
+         * SourceEmbeddingMigrationResponse
+         * @description Response model for source embedding migration status.
+         */
+        SourceEmbeddingMigrationResponse: {
+            /** Completed At */
+            completed_at: string | null;
+            /** Created At */
+            created_at: string;
+            /** Failure Message */
+            failure_message: string | null;
+            /** Id */
+            id: string;
+            /** Notification Recipients */
+            notification_recipients: string[] | null;
+            /** Phase */
+            phase: string;
+            /** Progress Current */
+            progress_current: number;
+            /** Progress Message */
+            progress_message: string | null;
+            /** Progress Total */
+            progress_total: number;
+            /** Source Connection Id */
+            source_connection_id: string;
+            /** Source Id New */
+            source_id_new: string;
+            /** Source Id Old */
+            source_id_old: string;
+            /** Started At */
+            started_at: string | null;
+            /** Status */
+            status: string;
+            /** Target Dimensions */
+            target_dimensions: number;
+            /** Target Embedding Model */
+            target_embedding_model: string;
+            /** Task Execution Id */
+            task_execution_id: string | null;
+            /** Updated At */
+            updated_at: string;
+        };
         /**
          * SourceResponse
          * @description Response model for source data.
@@ -669,6 +4444,11 @@ export interface components {
              */
             embedding_model_type?: string | null;
             /**
+             * Free Retention Days
+             * @description Number of days content is stored for free before billing applies.
+             */
+            free_retention_days?: number | null;
+            /**
              * Has Historical Data
              * @description Indicates if the source connection has historical data.
              * @default false
@@ -726,6 +4506,12 @@ export interface components {
              */
             source_type: string;
             /**
+             * System Managed
+             * @description Indicates if this source is automatically managed by the system (e.g., agent traces).
+             * @default false
+             */
+            system_managed: boolean;
+            /**
              * Updated At
              * @description Timestamp when the source connection was last updated.
              */
@@ -736,6 +4522,408 @@ export interface components {
              */
             url: string | null;
         };
+        /**
+         * StandaloneTestCompactionRequest
+         * @description Request body for testing a compaction prompt *without* an existing bank.
+         *
+         *     Used on the create-memory-bank page where no bank ID exists yet.
+         *     ``compaction_prompt`` is required (no bank to fall back to).
+         *     Content must come from ``sample_entries`` or ``generate_direction``
+         *     (no existing entries to fetch).
+         */
+        StandaloneTestCompactionRequest: {
+            /**
+             * Bank Type
+             * @description Memory bank type ('conversation' or 'general') — controls the style of generated entries.
+             * @default conversation
+             */
+            bank_type: string;
+            /**
+             * Compaction Prompt
+             * @description Compaction prompt to test.
+             */
+            compaction_prompt: string;
+            /**
+             * Entry Count
+             * @description Number of entries to generate when using generate_direction.
+             * @default 5
+             */
+            entry_count: number;
+            /**
+             * Generate Direction
+             * @description Direction for the LLM to generate sample entries.
+             */
+            generate_direction?: string | null;
+            /**
+             * Sample Entries
+             * @description Explicit sample entries to compact.
+             */
+            sample_entries?: string[] | null;
+        };
+        /**
+         * StartSourceEmbeddingMigrationRequest
+         * @description Request payload to start a source embedding migration.
+         */
+        StartSourceEmbeddingMigrationRequest: {
+            /**
+             * Chunk Language
+             * @description Language-specific chunking language code
+             */
+            chunk_language?: string | null;
+            /**
+             * Chunk Overlap
+             * @description Override chunk overlap (characters)
+             */
+            chunk_overlap?: number | null;
+            /**
+             * Chunk Regex Separators
+             * @description Whether chunk separators are regex patterns
+             */
+            chunk_regex_separators?: boolean | null;
+            /**
+             * Chunk Separators
+             * @description Custom chunk separators (JSON-encoded list)
+             */
+            chunk_separators?: string | null;
+            /**
+             * Chunk Size
+             * @description Override chunk size (characters per chunk)
+             */
+            chunk_size?: number | null;
+            /**
+             * Notification Recipients
+             * @description Optional notification recipient emails
+             */
+            notification_recipients?: string[] | null;
+            /**
+             * Target Dimensions
+             * @description Target embedding dimensions
+             */
+            target_dimensions: number;
+            /**
+             * Target Embedding Model
+             * @description Target embedding model enum
+             */
+            target_embedding_model: string;
+        };
+        /**
+         * TestCompactionRequest
+         * @description Request body for testing a compaction prompt against an existing bank.
+         *
+         *     The user may supply a ``compaction_prompt`` to override (or provide when
+         *     the bank has none).  Content can come from three sources:
+         *
+         *     1. Existing entries in the bank (default when neither field is set).
+         *     2. ``sample_entries`` – caller-provided list of strings.
+         *     3. ``generate_direction`` – an instruction to the LLM to generate sample
+         *        memory entries.  Useful for trying a prompt before any real data
+         *        exists.
+         *
+         *     At most one of ``sample_entries`` / ``generate_direction`` may be given.
+         */
+        TestCompactionRequest: {
+            /**
+             * Compaction Prompt
+             * @description Compaction prompt to test.  Falls back to the bank's current prompt when omitted.
+             */
+            compaction_prompt?: string | null;
+            /**
+             * Entry Count
+             * @description Number of entries to generate when using generate_direction.
+             * @default 5
+             */
+            entry_count: number;
+            /**
+             * Generate Direction
+             * @description Direction for the LLM to generate sample entries (e.g. 'Generate 5 entries about a customer support interaction').
+             */
+            generate_direction?: string | null;
+            /**
+             * Sample Entries
+             * @description Explicit sample entries to compact.
+             */
+            sample_entries?: string[] | null;
+        };
+        /**
+         * TestDraftEvaluationRequest
+         * @description Request body for ephemeral (non-persisted) evaluation testing.
+         *
+         *     Provide either ``step_output`` (raw text) **or** ``agent_step_run_id``
+         *     (to load output from storage).  Exactly one must be supplied.
+         */
+        TestDraftEvaluationRequest: {
+            /**
+             * Agent Input
+             * @description The original agent run input for context.  When agent_step_run_id is supplied this is loaded automatically from the parent run if omitted.
+             */
+            agent_input?: string | null;
+            /**
+             * Agent Step Run Id
+             * @description Load step output from this completed step run instead of supplying text.
+             */
+            agent_step_run_id?: string | null;
+            /** Evaluation Prompt */
+            evaluation_prompt?: string | null;
+            evaluation_tier?: components["schemas"]["AgentEvaluationTier"] | null;
+            /** Expectation Config */
+            expectation_config?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Pass Threshold
+             * @default 0.5
+             */
+            pass_threshold: number;
+            /**
+             * Step Output
+             * @description The step output text to evaluate.  Omit if agent_step_run_id is supplied.
+             */
+            step_output?: string | null;
+        };
+        /**
+         * TestDraftEvaluationResponse
+         * @description Response for an ephemeral evaluation test.
+         */
+        TestDraftEvaluationResponse: {
+            /** Explanation */
+            explanation: string | null;
+            /** Passed */
+            passed: boolean;
+            /** Score */
+            score: number;
+        };
+        /** UnlinkResourcesRequest */
+        UnlinkResourcesRequest: {
+            /**
+             * Ids
+             * @description Resource IDs to unlink
+             */
+            ids: string[];
+        };
+        /** UpdateAgentDefinitionRequest */
+        UpdateAgentDefinitionRequest: {
+            /**
+             * Definition
+             * @description The full agent definition (name, description, tags, steps). Steps form a tree workflow. Each step has a `step_type`, `id`, `name`, and type-specific config. Content enrichment steps (write_metadata, write_content_attachment, load_content_attachment, load_content) require content-triggered agents.
+             */
+            definition: {
+                [key: string]: unknown;
+            };
+            /**
+             * Expected Change Id
+             * @description The change_id from the last GET, for optimistic locking.
+             */
+            expected_change_id: string;
+        };
+        /** UpdateAlertConfigRequest */
+        UpdateAlertConfigRequest: {
+            /**
+             * Cooldown Minutes
+             * @description Cooldown period in minutes
+             */
+            cooldown_minutes?: number | null;
+            /**
+             * Distribution Type
+             * @description Distribution type
+             */
+            distribution_type?: string | null;
+            /**
+             * Enabled
+             * @description Whether the alert config is enabled
+             */
+            enabled?: boolean | null;
+            /**
+             * Recipient User Ids
+             * @description User IDs for selected_members distribution
+             */
+            recipient_user_ids?: string[] | null;
+            /**
+             * Threshold
+             * @description Threshold configuration
+             */
+            threshold?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /**
+         * UpdateEvaluationCriteriaRequest
+         * @description Request body for updating an evaluation criteria.
+         *
+         *     Retry settings and sample frequency are set at the agent level.
+         */
+        UpdateEvaluationCriteriaRequest: {
+            /** Description */
+            description?: string | null;
+            /** Enabled */
+            enabled?: boolean | null;
+            /** Evaluation Prompt */
+            evaluation_prompt?: string | null;
+            evaluation_tier?: components["schemas"]["AgentEvaluationTier"] | null;
+            /** Expectation Config */
+            expectation_config?: {
+                [key: string]: unknown;
+            } | null;
+            /** Pass Threshold */
+            pass_threshold?: number | null;
+            /** Step Id */
+            step_id?: string | null;
+        };
+        /**
+         * UpdateKnowledgeBaseBody
+         * @description Request body for updating a knowledge base.
+         */
+        UpdateKnowledgeBaseBody: {
+            /**
+             * Default Score Threshold
+             * @description Default score threshold (-1 to clear).
+             */
+            default_score_threshold?: number | null;
+            /**
+             * Default Top K
+             * @description Default reranked results (0 to clear).
+             */
+            default_top_k?: number | null;
+            /**
+             * Default Top N
+             * @description Default results (0 to clear).
+             */
+            default_top_n?: number | null;
+            /**
+             * Description
+             * @description New description.
+             */
+            description?: string | null;
+            /**
+             * Name
+             * @description New name.
+             */
+            name?: string | null;
+            /**
+             * Reranker Model
+             * @description Reranker model (empty string for no reranking).
+             */
+            reranker_model?: string | null;
+            /**
+             * Source Ids
+             * @description New list of source connection IDs.
+             */
+            source_ids?: string[] | null;
+        };
+        /**
+         * UpdateMemoryBankBody
+         * @description Request body for updating a memory bank.
+         *
+         *     Omitted fields are left unchanged.  To **clear** a field back to null,
+         *     send a zero-value sentinel: ``0`` for integers, ``""`` for strings.
+         */
+        UpdateMemoryBankBody: {
+            /**
+             * Compaction Prompt
+             * @description Custom prompt used when compacting older entries. When set, entries that exceed a threshold are summarized into a new entry before being soft-deleted. Send empty string "" to clear and disable summarisation.
+             */
+            compaction_prompt?: string | null;
+            /**
+             * Description
+             * @description Optional description. Send empty string "" to clear.
+             */
+            description?: string | null;
+            /**
+             * Max Age Days
+             * @description Max entry age in days before compaction. Checked inline after each write and by the hourly background sweep. Send 0 to disable.
+             */
+            max_age_days?: number | null;
+            /**
+             * Max Size Tokens
+             * @description Max total tokens (per partition) before compaction. Checked inline after each write and by the hourly background sweep. Send 0 to disable.
+             */
+            max_size_tokens?: number | null;
+            /**
+             * Max Turns
+             * @description Max conversation turns (per partition) before compaction. Checked inline after each write and by the hourly background sweep. Send 0 to disable.
+             */
+            max_turns?: number | null;
+            /**
+             * Name
+             * @description New name.
+             */
+            name?: string | null;
+            /**
+             * Retention Days
+             * @description Content source retention in days. Send 0 to clear (indefinite).
+             */
+            retention_days?: number | null;
+        };
+        /**
+         * UpdateSolutionRequest
+         * @description Request model for updating a solution
+         */
+        UpdateSolutionRequest: {
+            /**
+             * Description
+             * @description Description of the solution
+             */
+            description?: string | null;
+            /**
+             * Name
+             * @description Name of the solution
+             */
+            name?: string | null;
+        };
+        /**
+         * UpdateSourceBody
+         * @description Request body for updating a content source.
+         */
+        UpdateSourceBody: {
+            /**
+             * Name
+             * @description New name.
+             */
+            name?: string | null;
+            /**
+             * Polling
+             * @description New polling interval.
+             */
+            polling?: string | null;
+            /**
+             * Retention Days
+             * @description New retention period in days (null for unlimited).
+             * @default -1
+             */
+            retention_days: number | null;
+        };
+        /** UploadAgentInputApiResponse */
+        UploadAgentInputApiResponse: {
+            /**
+             * Content Type
+             * @description Resolved MIME type.
+             */
+            content_type: string;
+            /**
+             * Error
+             * @description Error message if status is failed.
+             */
+            error?: string | null;
+            /**
+             * File Size
+             * @description Size in bytes.
+             */
+            file_size: number;
+            /**
+             * Filename
+             * @description Original filename.
+             */
+            filename: string;
+            /**
+             * Id
+             * @description Unique identifier for the upload.
+             */
+            id: string;
+            /**
+             * Status
+             * @description processing, ready, or failed.
+             */
+            status: string;
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -745,6 +4933,15 @@ export interface components {
             /** Error Type */
             type: string;
         };
+        /** AgentListResponse */
+        routers__api__agents__AgentListResponse: {
+            /**
+             * Data
+             * @description List of agents.
+             */
+            data: components["schemas"]["AgentSummaryResponse"][];
+            pagination: components["schemas"]["PaginationResponse"];
+        };
         /** AgentRunListResponse */
         routers__api__agents__AgentRunListResponse: {
             /**
@@ -753,6 +4950,199 @@ export interface components {
              */
             data: components["schemas"]["AgentRunResponse"][];
             pagination: components["schemas"]["PaginationResponse"];
+        };
+        /** AgentTraceSearchRequest */
+        routers__api__agents__AgentTraceSearchRequest: {
+            /**
+             * Agent Id
+             * @description Filter by agent ID.
+             */
+            agent_id?: string | null;
+            /**
+             * Query
+             * @description Search query text.
+             */
+            query: string;
+            /**
+             * Run Status
+             * @description Filter by run status.
+             */
+            run_status?: string | null;
+            /**
+             * Step Type
+             * @description Filter by step type.
+             */
+            step_type?: string | null;
+            /**
+             * Top N
+             * @description Maximum number of results.
+             * @default 10
+             */
+            top_n: number;
+        };
+        /** CreateAgentRequest */
+        routers__api__agents__CreateAgentRequest: {
+            /**
+             * Agent Template
+             * @description Template to initialize the agent from. Values: blank, retrieval_example, simple_qa, summarizer, json_extractor, content_change_notifier, scheduled_report, webhook_pipeline.
+             */
+            agent_template?: string | null;
+            /**
+             * Description
+             * @description Optional description.
+             */
+            description?: string | null;
+            /**
+             * Name
+             * @description Name for the new agent.
+             */
+            name: string;
+            /**
+             * Trigger Type
+             * @description Trigger type: dynamic_input, template_input, schedule, new_content.
+             * @default dynamic_input
+             */
+            trigger_type: string;
+        };
+        /** UpdateAgentRequest */
+        routers__api__agents__UpdateAgentRequest: {
+            /**
+             * Default Evaluation Tier
+             * @description Default evaluation tier: 'fast', 'balanced', or 'thorough'.
+             */
+            default_evaluation_tier?: string | null;
+            /**
+             * Description
+             * @description New description for the agent.
+             */
+            description?: string | null;
+            /**
+             * Evaluation Mode
+             * @description Evaluation mode: 'output_expectation', 'eval_and_retry', or 'sample_and_flag'.
+             */
+            evaluation_mode?: string | null;
+            /**
+             * Max Retries
+             * @description Max retries for eval_and_retry mode (1-10).
+             */
+            max_retries?: number | null;
+            /**
+             * Name
+             * @description New name for the agent.
+             */
+            name?: string | null;
+            /**
+             * Prompt Model Auto Rollback Enabled
+             * @description Enable or disable automatic rollback for upgraded models.
+             */
+            prompt_model_auto_rollback_enabled?: boolean | null;
+            /**
+             * Prompt Model Auto Rollback Triggers
+             * @description Failure signals that trigger rollback: agent_eval_fail, governance_flag, governance_block, agent_run_failed.
+             */
+            prompt_model_auto_rollback_triggers?: string[] | null;
+            /** @description Auto-upgrade strategy: none, early_adopter, middle_of_road, cautious_adopter. */
+            prompt_model_auto_upgrade_strategy?: components["schemas"]["PromptModelAutoUpgradeStrategy"] | null;
+            /**
+             * Retry On Failure
+             * @description Whether to retry on evaluation failure.
+             */
+            retry_on_failure?: boolean | null;
+            /**
+             * Sampling Config
+             * @description Sampling configuration for sample_and_flag mode. Format: {combinator: 'and'|'or', rules: [...]}.
+             */
+            sampling_config?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Set Default Evaluation Tier
+             * @description When true and default_evaluation_tier is omitted, clears the tier to null (system default).
+             * @default false
+             */
+            set_default_evaluation_tier: boolean;
+            /**
+             * Set Prompt Model Auto Rollback Triggers
+             * @description When true and prompt_model_auto_rollback_triggers is omitted, clears the list to null (revert to system defaults).
+             * @default false
+             */
+            set_prompt_model_auto_rollback_triggers: boolean;
+            /**
+             * Set Sampling Config
+             * @description When true and sampling_config is omitted, clears the config to null.
+             * @default false
+             */
+            set_sampling_config: boolean;
+        };
+        /**
+         * AiAssistantFeedbackRequest
+         * @description Request body for submitting AI assistant feedback.
+         */
+        routers__api__ai_assistant__AiAssistantFeedbackRequest: {
+            /**
+             * Agent Conversation Id
+             * @description Agent conversation ID, if applicable.
+             */
+            agent_conversation_id?: string | null;
+            /**
+             * Comment
+             * @description Optional comment.
+             */
+            comment?: string | null;
+            /**
+             * Context
+             * @description Additional context.
+             */
+            context?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Conversation Id
+             * @description Conversation ID for the interaction.
+             */
+            conversation_id?: string | null;
+            /**
+             * Feature
+             * @description Feature name (e.g. 'source', 'solution').
+             */
+            feature: string;
+            /**
+             * Prompt Call Id
+             * @description Prompt call ID for credit tracking.
+             */
+            prompt_call_id?: string | null;
+            /**
+             * Rating
+             * @description Rating: 'thumbs_up' or 'thumbs_down'.
+             */
+            rating: string;
+        };
+        /** AddCommentRequest */
+        routers__api__alerts__AddCommentRequest: {
+            /**
+             * Body
+             * @description Comment text
+             */
+            body: string;
+        };
+        /** OrganizationAlertPreferenceResponse */
+        routers__api__alerts__OrganizationAlertPreferenceResponse: {
+            /** Alert Type */
+            alert_type: string;
+            /** Is Override */
+            is_override: boolean;
+            /** Organization Id */
+            organization_id: string;
+            /** Subscribed */
+            subscribed: boolean;
+        };
+        /** UpdateOrganizationAlertPreferenceRequest */
+        routers__api__alerts__UpdateOrganizationAlertPreferenceRequest: {
+            /**
+             * Subscribed
+             * @description Whether the user should receive this alert for the organization
+             */
+            subscribed: boolean;
         };
         /**
          * ContentDetailResponse
@@ -908,6 +5298,844 @@ export interface components {
             status: string;
         };
         /**
+         * AppliedActionResponse
+         * @description Result of a single executed governance action.
+         */
+        routers__api__governance__AppliedActionResponse: {
+            /**
+             * Action Type
+             * @description Type of action that was executed.
+             */
+            action_type: string;
+            /**
+             * Description
+             * @description Human-readable description of the executed action.
+             */
+            description: string;
+            /**
+             * Error
+             * @description Error message if this action failed, or null.
+             */
+            error?: string | null;
+            /**
+             * Policy Id
+             * @description ID of the policy that was created or modified, or null.
+             */
+            policy_id?: string | null;
+            /**
+             * Success
+             * @description Whether this individual action succeeded.
+             */
+            success: boolean;
+        };
+        /**
+         * GovernanceAiAcceptResponse
+         * @description Response from accepting a governance AI assistant plan.
+         */
+        routers__api__governance__GovernanceAiAcceptResponse: {
+            /**
+             * Actions Applied
+             * @description Results of each action that was executed.
+             */
+            actions_applied: components["schemas"]["routers__api__governance__AppliedActionResponse"][];
+            /**
+             * Conversation Id
+             * @description Conversation ID that was accepted.
+             */
+            conversation_id: string;
+            /**
+             * Error
+             * @description Overall error message if the plan failed, or null.
+             */
+            error?: string | null;
+            /**
+             * Success
+             * @description Whether all actions were applied successfully.
+             */
+            success: boolean;
+        };
+        /**
+         * GovernanceAiAssistantRequest
+         * @description Request body for the governance AI assistant.
+         */
+        routers__api__governance__GovernanceAiAssistantRequest: {
+            /**
+             * User Input
+             * @description Natural-language request for the governance AI assistant.
+             */
+            user_input: string;
+        };
+        /**
+         * GovernanceAiAssistantResponse
+         * @description Response from the governance AI assistant generate endpoint.
+         */
+        routers__api__governance__GovernanceAiAssistantResponse: {
+            /**
+             * Conversation Id
+             * @description Conversation ID to accept or decline this plan.
+             */
+            conversation_id: string;
+            /**
+             * Example Prompts
+             * @description Example natural-language prompts that demonstrate the capabilities of the governance AI assistant.
+             */
+            example_prompts?: components["schemas"]["ExamplePrompt"][];
+            /**
+             * Note
+             * @description AI-generated summary of the proposed changes.
+             */
+            note: string;
+            /**
+             * Prompt Call Id
+             * @description Prompt call ID for credit tracking, or null.
+             */
+            prompt_call_id?: string | null;
+            /**
+             * Proposed Actions
+             * @description Ordered list of policy actions the AI proposes to execute.
+             */
+            proposed_actions: components["schemas"]["routers__api__governance__ProposedPolicyActionResponse"][];
+            /**
+             * Success
+             * @description Whether the plan was generated successfully.
+             */
+            success: boolean;
+        };
+        /**
+         * GovernanceConversationResponse
+         * @description A governance AI assistant conversation entry.
+         */
+        routers__api__governance__GovernanceConversationResponse: {
+            /**
+             * Accepted
+             * @description True if accepted, false if declined, null if pending.
+             */
+            accepted: boolean | null;
+            /**
+             * Ai Response
+             * @description The AI assistant's response note, or null.
+             */
+            ai_response: string | null;
+            /**
+             * Created At
+             * @description ISO 8601 creation timestamp.
+             */
+            created_at: string;
+            /**
+             * Id
+             * @description Conversation ID.
+             */
+            id: string;
+            /**
+             * Proposed Actions
+             * @description JSON of proposed actions, or null.
+             */
+            proposed_actions: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * User Input
+             * @description The original user request.
+             */
+            user_input: string;
+        };
+        /**
+         * ProposedPolicyActionResponse
+         * @description A single proposed governance policy action.
+         */
+        routers__api__governance__ProposedPolicyActionResponse: {
+            /**
+             * Action Type
+             * @description Type of action: create, update, delete, enable, or disable.
+             */
+            action_type: string;
+            /**
+             * Description
+             * @description Human-readable description of what this action will do.
+             */
+            description: string;
+            /**
+             * Params
+             * @description Parameters for the action (e.g. policy_document_id, thresholds).
+             */
+            params: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * MemoryBankAcceptRequest
+         * @description Accept or decline a memory bank AI suggestion.
+         */
+        routers__api__memory_banks__MemoryBankAcceptRequest: {
+            /**
+             * Accepted
+             * @description Whether the user accepted the proposed configuration.
+             */
+            accepted: boolean;
+        };
+        /**
+         * MemoryBankAiAssistantRequest
+         * @description Request body for the memory bank AI assistant.
+         */
+        routers__api__memory_banks__MemoryBankAiAssistantRequest: {
+            /**
+             * Conversation Id
+             * @description Previous conversation ID to continue.
+             */
+            conversation_id?: string | null;
+            /**
+             * Current Config
+             * @description Current configuration to refine, if any.
+             */
+            current_config?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * User Input
+             * @description Natural-language description of the memory bank.
+             */
+            user_input: string;
+        };
+        /**
+         * MemoryBankAiAssistantResponse
+         * @description Response from the memory bank AI assistant.
+         */
+        routers__api__memory_banks__MemoryBankAiAssistantResponse: {
+            /** @description Proposed configuration, or null. */
+            config?: components["schemas"]["routers__api__memory_banks__MemoryBankConfigResponse"] | null;
+            /**
+             * Conversation Id
+             * @description Conversation ID for follow-up.
+             */
+            conversation_id: string;
+            /**
+             * Example Prompts
+             * @description Example natural-language prompts that demonstrate the capabilities of the memory bank AI assistant.
+             */
+            example_prompts?: components["schemas"]["ExamplePrompt"][];
+            /**
+             * Note
+             * @description AI-generated explanation.
+             */
+            note: string;
+            /**
+             * Prompt Call Id
+             * @description Prompt call ID for credit tracking.
+             */
+            prompt_call_id?: string | null;
+            /**
+             * Success
+             * @description Whether generation succeeded.
+             * @default false
+             */
+            success: boolean;
+        };
+        /**
+         * MemoryBankConfigResponse
+         * @description Suggested memory bank configuration from the AI assistant.
+         */
+        routers__api__memory_banks__MemoryBankConfigResponse: {
+            /**
+             * Compaction Prompt
+             * @description Suggested compaction prompt.
+             */
+            compaction_prompt?: string | null;
+            /**
+             * Description
+             * @description Suggested description.
+             */
+            description?: string | null;
+            /**
+             * Max Age Days
+             * @description Max age in days.
+             */
+            max_age_days?: number | null;
+            /**
+             * Max Size Tokens
+             * @description Max size in tokens.
+             */
+            max_size_tokens?: number | null;
+            /**
+             * Max Turns
+             * @description Max conversation turns.
+             */
+            max_turns?: number | null;
+            /**
+             * Mode
+             * @description Memory bank mode.
+             */
+            mode: string;
+            /**
+             * Name
+             * @description Suggested name.
+             */
+            name: string;
+            /**
+             * Retention Days
+             * @description Retention in days.
+             */
+            retention_days?: number | null;
+            /**
+             * Type
+             * @description Memory bank type: conversation or general.
+             */
+            type: string;
+        };
+        /**
+         * MemoryBankConversationTurnResponse
+         * @description A single turn of memory bank AI assistant conversation.
+         */
+        routers__api__memory_banks__MemoryBankConversationTurnResponse: {
+            /**
+             * Accepted
+             * @description Whether the user accepted this proposal.
+             */
+            accepted?: boolean | null;
+            /**
+             * Ai Note
+             * @description AI note from this turn.
+             */
+            ai_note?: string | null;
+            /**
+             * Conversation Id
+             * @description Unique ID for this conversation turn.
+             */
+            conversation_id: string;
+            /**
+             * Resulting Config
+             * @description The proposed configuration from this turn.
+             */
+            resulting_config?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * User Input
+             * @description User input for this turn.
+             */
+            user_input: string;
+        };
+        /**
+         * MemoryBankLastConversationResponse
+         * @description Response for fetching memory bank conversation history.
+         */
+        routers__api__memory_banks__MemoryBankLastConversationResponse: {
+            /**
+             * Accepted
+             * @description Whether the user accepted the last proposal.
+             */
+            accepted?: boolean | null;
+            /**
+             * Ai Note
+             * @description AI note from the most recent turn.
+             */
+            ai_note?: string | null;
+            /**
+             * Total
+             * @description Total conversation turns.
+             * @default 0
+             */
+            total: number;
+            /**
+             * Turns
+             * @description Recent conversation turns (oldest first).
+             */
+            turns?: components["schemas"]["routers__api__memory_banks__MemoryBankConversationTurnResponse"][];
+            /**
+             * User Input
+             * @description Most recent user input.
+             */
+            user_input?: string | null;
+        };
+        /**
+         * AiAssistantAcceptRequest
+         * @description Request body for accepting a proposed plan.
+         */
+        routers__api__solutions__AiAssistantAcceptRequest: {
+            /**
+             * Confirm Deletions
+             * @description Must be true when the plan contains destructive actions
+             * @default false
+             */
+            confirm_deletions: boolean;
+            /**
+             * Solution Description
+             * @description When running in standalone mode (no pre-existing solution), provide a description for the auto-created solution.
+             */
+            solution_description?: string | null;
+            /**
+             * Solution Name
+             * @description When running in standalone mode (no pre-existing solution), provide a name to auto-create a solution and link resources.
+             */
+            solution_name?: string | null;
+        };
+        /**
+         * AiAssistantAcceptResponse
+         * @description Response from accepting and executing a plan.
+         */
+        routers__api__solutions__AiAssistantAcceptResponse: {
+            /**
+             * Conversation Id
+             * Format: uuid
+             * @description Conversation ID.
+             */
+            conversation_id: string;
+            /**
+             * Error
+             * @description Error message if failed.
+             */
+            error?: string | null;
+            /**
+             * Executed Actions
+             * @description Results of each executed action.
+             */
+            executed_actions: components["schemas"]["routers__api__solutions__ExecutedActionResponse"][];
+            /**
+             * Solution Id
+             * @description Solution ID when a new solution was auto-created.
+             */
+            solution_id?: string | null;
+            /**
+             * Success
+             * @description Whether execution succeeded.
+             * @default true
+             */
+            success: boolean;
+        };
+        /**
+         * AiAssistantGenerateResponse
+         * @description Response from an AI assistant generate endpoint.
+         */
+        routers__api__solutions__AiAssistantGenerateResponse: {
+            /**
+             * Conversation Id
+             * Format: uuid
+             * @description Conversation ID for accept/decline.
+             */
+            conversation_id: string;
+            /**
+             * Example Prompts
+             * @description Example natural-language prompts that demonstrate the capabilities of this AI assistant.
+             */
+            example_prompts?: components["schemas"]["ExamplePrompt"][];
+            /**
+             * Note
+             * @description AI-generated note about the plan.
+             */
+            note: string;
+            /**
+             * Proposed Actions
+             * @description List of proposed actions.
+             */
+            proposed_actions: components["schemas"]["routers__api__solutions__ProposedActionResponse"][];
+            /**
+             * Requires Delete Confirmation
+             * @description Whether destructive actions require explicit confirmation.
+             * @default false
+             */
+            requires_delete_confirmation: boolean;
+            /**
+             * Success
+             * @description Whether plan generation succeeded.
+             * @default false
+             */
+            success: boolean;
+        };
+        /**
+         * ExecutedActionResponse
+         * @description A single executed action result.
+         */
+        routers__api__solutions__ExecutedActionResponse: {
+            /**
+             * Action Type
+             * @description Type of the executed action.
+             */
+            action_type: string;
+            /**
+             * Description
+             * @description Human-readable description.
+             */
+            description: string;
+            /**
+             * Error
+             * @description Error message if failed.
+             */
+            error?: string | null;
+            /**
+             * Resource Id
+             * @description ID of the affected resource.
+             */
+            resource_id?: string | null;
+            /**
+             * Resource Type
+             * @description Type of the affected resource.
+             */
+            resource_type?: string | null;
+            /**
+             * Success
+             * @description Whether the action succeeded.
+             * @default true
+             */
+            success: boolean;
+        };
+        /**
+         * ProposedActionResponse
+         * @description A single proposed action.
+         */
+        routers__api__solutions__ProposedActionResponse: {
+            /**
+             * Action Type
+             * @description Type of the proposed action.
+             */
+            action_type: string;
+            /**
+             * Description
+             * @description Human-readable description of the action.
+             */
+            description: string;
+            /**
+             * Is Destructive
+             * @description Whether the action is destructive.
+             * @default false
+             */
+            is_destructive: boolean;
+            /**
+             * Params
+             * @description Parameters for the action.
+             */
+            params: {
+                [key: string]: unknown;
+            };
+        };
+        /** SolutionAgentResponse */
+        routers__api__solutions__SolutionAgentResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Knowledge Base Ids
+             * @description Knowledge base IDs connected to this agent via triggers.
+             */
+            knowledge_base_ids?: string[];
+            /** Name */
+            name: string;
+        };
+        /**
+         * SolutionConversationResponse
+         * @description Response model for a conversation turn.
+         */
+        routers__api__solutions__SolutionConversationResponse: {
+            /**
+             * Accepted
+             * @description Whether the suggestion was accepted or declined.
+             */
+            accepted: boolean | null;
+            /**
+             * Actions Taken
+             * @description Actions taken by the AI.
+             */
+            actions_taken: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Ai Response
+             * @description AI response text.
+             */
+            ai_response: string | null;
+            /**
+             * Created At
+             * @description Timestamp when the conversation was created.
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             * @description Unique identifier for the conversation turn.
+             */
+            id: string;
+            /**
+             * User Input
+             * @description User input text.
+             */
+            user_input: string;
+        };
+        /** SolutionKnowledgeBaseResponse */
+        routers__api__solutions__SolutionKnowledgeBaseResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Source Connection Ids
+             * @description Source connection IDs linked to this knowledge base.
+             */
+            source_connection_ids?: string[];
+        };
+        /**
+         * SolutionListResponse
+         * @description Response model for paginated solution list.
+         */
+        routers__api__solutions__SolutionListResponse: {
+            /** Data */
+            data: components["schemas"]["SolutionSummaryResponse"][];
+            pagination: components["schemas"]["PaginationResponse"];
+        };
+        /**
+         * SolutionResponse
+         * @description Response model for solution data.
+         */
+        routers__api__solutions__SolutionResponse: {
+            /**
+             * Agents
+             * @description Agents linked to the solution.
+             */
+            agents: components["schemas"]["routers__api__solutions__SolutionAgentResponse"][];
+            /**
+             * Created At
+             * @description Timestamp when the solution was created.
+             */
+            created_at: string;
+            /**
+             * Description
+             * @description Description of the solution.
+             */
+            description: string;
+            /**
+             * Id
+             * Format: uuid
+             * @description Unique identifier for the solution.
+             */
+            id: string;
+            /**
+             * Knowledge Bases
+             * @description Knowledge bases linked to the solution.
+             */
+            knowledge_bases: components["schemas"]["routers__api__solutions__SolutionKnowledgeBaseResponse"][];
+            /**
+             * Name
+             * @description Name of the solution.
+             */
+            name: string;
+            /**
+             * Source Connections
+             * @description Source connections linked to the solution.
+             */
+            source_connections: components["schemas"]["SolutionSourceConnectionResponse"][];
+            /**
+             * Updated At
+             * @description Timestamp when the solution was last updated.
+             */
+            updated_at: string;
+        };
+        /**
+         * CreateExportRequest
+         * @description Parameters for creating a new export job.
+         */
+        routers__api__source_exports__CreateExportRequest: {
+            /**
+             * Date From
+             * @description Only include content created on or after this timestamp.
+             */
+            date_from?: string | null;
+            /**
+             * Date To
+             * @description Only include content created on or before this timestamp.
+             */
+            date_to?: string | null;
+            /** @description Output file format (jsonl, csv, parquet, zip). */
+            format: components["schemas"]["ExportFormat"];
+            /**
+             * Metadata Filter
+             * @description JSONB containment filter applied to content metadata.
+             */
+            metadata_filter?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Query Filter
+             * @description Title substring filter (case-insensitive ILIKE).
+             */
+            query_filter?: string | null;
+        };
+        /**
+         * EstimateExportRequest
+         * @description Parameters for estimating export size.
+         */
+        routers__api__source_exports__EstimateExportRequest: {
+            /**
+             * Date From
+             * @description Only include content created on or after this timestamp.
+             */
+            date_from?: string | null;
+            /**
+             * Date To
+             * @description Only include content created on or before this timestamp.
+             */
+            date_to?: string | null;
+            /** @description Output file format. */
+            format: components["schemas"]["ExportFormat"];
+            /**
+             * Metadata Filter
+             * @description JSONB containment filter applied to content metadata.
+             */
+            metadata_filter?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Query Filter
+             * @description Title substring filter (case-insensitive ILIKE).
+             */
+            query_filter?: string | null;
+        };
+        /**
+         * EstimateExportResponse
+         * @description Rough size estimate for a potential export.
+         */
+        routers__api__source_exports__EstimateExportResponse: {
+            /**
+             * Estimated Size Bytes
+             * @description Estimated export file size in bytes.
+             */
+            estimated_size_bytes: number;
+            /**
+             * Source Connection Id
+             * @description Source connection ID.
+             */
+            source_connection_id: string;
+        };
+        /**
+         * ExportResponse
+         * @description Status and metadata for a content source export job.
+         */
+        routers__api__source_exports__ExportResponse: {
+            /**
+             * Account Id
+             * @description Owning account ID.
+             */
+            account_id: string;
+            /**
+             * Completed At
+             * @description Completion time.
+             */
+            completed_at?: string | null;
+            /**
+             * Created At
+             * @description Creation time.
+             */
+            created_at: string;
+            /**
+             * Date From
+             * @description Date-from filter applied to this export.
+             */
+            date_from?: string | null;
+            /**
+             * Date To
+             * @description Date-to filter applied to this export.
+             */
+            date_to?: string | null;
+            /**
+             * Destination
+             * @description Storage destination.
+             */
+            destination: string;
+            /**
+             * Error
+             * @description Error message if failed.
+             */
+            error?: string | null;
+            /**
+             * Estimated Size Bytes
+             * @description Pre-run size estimate.
+             */
+            estimated_size_bytes?: number | null;
+            /**
+             * Expires At
+             * @description Download expiry time.
+             */
+            expires_at?: string | null;
+            /**
+             * File Size Bytes
+             * @description File size in bytes.
+             */
+            file_size_bytes?: number | null;
+            /**
+             * Format
+             * @description Output format.
+             */
+            format: string;
+            /**
+             * Id
+             * @description Export job ID.
+             */
+            id: string;
+            /**
+             * Item Count
+             * @description Items exported.
+             */
+            item_count?: number | null;
+            /**
+             * Metadata Filter
+             * @description Metadata filter applied to this export.
+             */
+            metadata_filter?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Progress Current
+             * @description Items processed so far.
+             */
+            progress_current?: number | null;
+            /**
+             * Progress Total
+             * @description Total items to process.
+             */
+            progress_total?: number | null;
+            /**
+             * Query Filter
+             * @description Query filter applied to this export.
+             */
+            query_filter?: string | null;
+            /**
+             * Requested By User Id
+             * @description ID of the user who requested this export.
+             */
+            requested_by_user_id?: string | null;
+            /**
+             * Requested By User Name
+             * @description Name of the user who requested this export.
+             */
+            requested_by_user_name?: string | null;
+            /**
+             * Source Connection Id
+             * @description Source connection ID.
+             */
+            source_connection_id: string;
+            /**
+             * Started At
+             * @description Processing start time.
+             */
+            started_at?: string | null;
+            /**
+             * Status
+             * @description Job status.
+             */
+            status: string;
+            /**
+             * Storage Key
+             * @description S3 key of exported file.
+             */
+            storage_key?: string | null;
+            /**
+             * Updated At
+             * @description Last update time.
+             */
+            updated_at: string;
+        };
+        /**
          * FileUploadResponse
          * @description Response model for file upload
          */
@@ -942,6 +6170,46 @@ export interface components {
             data: components["schemas"]["SourceResponse"][];
             pagination: components["schemas"]["PaginationResponse"];
         };
+        /**
+         * NonManualEvaluationModeStatResponse
+         * @description Per-mode rollup for evaluation activity.
+         */
+        schemas__v1__agent_evaluations__NonManualEvaluationModeStatResponse: {
+            /** Failed */
+            failed: number;
+            /** Failure Rate */
+            failure_rate: number;
+            /** Flagged */
+            flagged: number;
+            /** Mode */
+            mode: string;
+            /** Pass Rate */
+            pass_rate: number;
+            /** Passed */
+            passed: number;
+            /** Total */
+            total: number;
+        };
+        /**
+         * NonManualEvaluationSummaryResponse
+         * @description Account-level summary for evaluations.
+         */
+        schemas__v1__agent_evaluations__NonManualEvaluationSummaryResponse: {
+            /** By Mode */
+            by_mode: components["schemas"]["schemas__v1__agent_evaluations__NonManualEvaluationModeStatResponse"][];
+            /** Failed */
+            failed: number;
+            /** Failure Rate */
+            failure_rate: number;
+            /** Flagged */
+            flagged: number;
+            /** Pass Rate */
+            pass_rate: number;
+            /** Passed */
+            passed: number;
+            /** Total */
+            total: number;
+        };
     };
     responses: never;
     parameters: never;
@@ -951,6 +6219,380 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    list_agents_api_agents_get: {
+        parameters: {
+            query?: {
+                /** @description Page number */
+                page?: number;
+                /** @description Items per page */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["routers__api__agents__AgentListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_agent_api_agents_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["routers__api__agents__CreateAgentRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentSummaryResponse"];
+                };
+            };
+            /** @description Plan limit exceeded — the account has reached the maximum number of agents allowed by its subscription plan. */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_evaluation_criteria_api_agents_evaluation_criteria__criteria_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                criteria_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvaluationCriteriaResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_evaluation_criteria_api_agents_evaluation_criteria__criteria_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                criteria_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_evaluation_criteria_api_agents_evaluation_criteria__criteria_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                criteria_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateEvaluationCriteriaRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvaluationCriteriaResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_compatible_runs_api_agents_evaluation_criteria__criteria_id__compatible_runs_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                limit?: number;
+                started_after?: string | null;
+            };
+            header?: never;
+            path: {
+                criteria_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompatibleRunListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_evaluation_results_api_agents_evaluation_criteria__criteria_id__results_get: {
+        parameters: {
+            query?: {
+                status?: string | null;
+                flagged_only?: boolean;
+                time_from?: string | null;
+                time_to?: string | null;
+                page?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                criteria_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvaluationResultListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_evaluation_result_api_agents_evaluation_criteria__criteria_id__results_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                criteria_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateEvaluationResultRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvaluationResultResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_evaluation_summary_api_agents_evaluation_criteria__criteria_id__summary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                criteria_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvaluationResultSummaryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_non_manual_evaluation_summary_api_agents_evaluation_results_non_manual_summary_get: {
+        parameters: {
+            query?: {
+                days?: number;
+                start_date?: string | null;
+                end_date?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["schemas__v1__agent_evaluations__NonManualEvaluationSummaryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_agent_runs_api_agents_runs_search_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["routers__api__agents__AgentTraceSearchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentTraceSearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_agent_run_api_agents_runs__run_id__get: {
         parameters: {
             query?: {
@@ -1016,6 +6658,525 @@ export interface operations {
             };
         };
     };
+    get_agent_metadata_api_agents__agent_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentSummaryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_agent_api_agents__agent_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["routers__api__agents__UpdateAgentRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentSummaryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_agent_api_agents__agent_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ai_conversation_history_api_agents__agent_id__ai_assistant_conversations_get: {
+        parameters: {
+            query: {
+                /** @description Step type to look up. */
+                step_type: string;
+                /** @description Step ID to filter by. */
+                step_id?: string | null;
+                /** @description Max turns to return. */
+                limit?: number;
+                /** @description Number of recent turns to skip. */
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiConversationHistoryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    generate_agent_steps_api_agents__agent_id__ai_assistant_generate_steps_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GenerateAgentStepsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenerateAgentStepsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    generate_step_config_api_agents__agent_id__ai_assistant_step_config_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GenerateStepConfigRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenerateStepConfigResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mark_ai_suggestion_api_agents__agent_id__ai_assistant__conversation_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarkAiSuggestionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: boolean;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_agent_definition_api_agents__agent_id__definition_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentDefinitionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_agent_definition_api_agents__agent_id__definition_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateAgentDefinitionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentDefinitionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_evaluation_criteria_api_agents__agent_id__evaluation_criteria_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvaluationCriteriaResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_evaluation_criteria_api_agents__agent_id__evaluation_criteria_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateEvaluationCriteriaRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvaluationCriteriaResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    test_draft_evaluation_api_agents__agent_id__evaluation_criteria_test_draft_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TestDraftEvaluationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TestDraftEvaluationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_agent_evaluation_results_api_agents__agent_id__evaluation_results_get: {
+        parameters: {
+            query?: {
+                status?: string | null;
+                step?: string | null;
+                flagged_only?: boolean;
+                time_from?: string | null;
+                time_to?: string | null;
+                page?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvaluationResultWithCriteriaListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_evaluation_runs_api_agents__agent_id__evaluation_runs_get: {
+        parameters: {
+            query?: {
+                status?: string | null;
+                step?: string | null;
+                time_from?: string | null;
+                time_to?: string | null;
+                page?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvaluationRunSummaryListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    api_get_agent_input_upload_status_api_agents__agent_id__input_uploads__upload_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+                upload_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadAgentInputApiResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_agent_runs_api_agents__agent_id__runs_get: {
         parameters: {
             query?: {
@@ -1023,6 +7184,8 @@ export interface operations {
                 page?: number;
                 /** @description Items per page */
                 limit?: number;
+                /** @description Filter runs by status */
+                status?: components["schemas"]["PendingProcessingCompletedFailedStatus"] | null;
             };
             header?: never;
             path: {
@@ -1140,6 +7303,830 @@ export interface operations {
             };
         };
     };
+    list_run_evaluation_results_api_agents__agent_id__runs__run_id__evaluation_results_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvaluationResultWithCriteriaResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    api_upload_agent_input_api_agents__agent_id__upload_input_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadAgentInputApiResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    api_ai_feedback_api_ai_assistant_feedback_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["routers__api__ai_assistant__AiAssistantFeedbackRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiAssistantFeedbackResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    api_ai_knowledge_base_api_ai_assistant_knowledge_base_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiAssistantGenerateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["routers__api__solutions__AiAssistantGenerateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    api_ai_memory_bank_api_ai_assistant_memory_bank_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["routers__api__memory_banks__MemoryBankAiAssistantRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["routers__api__memory_banks__MemoryBankAiAssistantResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    api_ai_memory_bank_history_api_ai_assistant_memory_bank_last_conversation_get: {
+        parameters: {
+            query?: {
+                /** @description Max turns. */
+                limit?: number;
+                /** @description Skip count. */
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["routers__api__memory_banks__MemoryBankLastConversationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    api_ai_memory_bank_accept_api_ai_assistant_memory_bank__conversation_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["routers__api__memory_banks__MemoryBankAcceptRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: boolean;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    api_ai_solution_api_ai_assistant_solution_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiAssistantGenerateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["routers__api__solutions__AiAssistantGenerateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    api_ai_source_api_ai_assistant_source_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiAssistantGenerateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["routers__api__solutions__AiAssistantGenerateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    api_ai_accept_api_ai_assistant__conversation_id__accept_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["routers__api__solutions__AiAssistantAcceptRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["routers__api__solutions__AiAssistantAcceptResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    api_ai_decline_api_ai_assistant__conversation_id__decline_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_alerts_api_alerts_get: {
+        parameters: {
+            query?: {
+                /** @description Page number */
+                page?: number;
+                /** @description Items per page */
+                limit?: number;
+                /** @description Filter by alert status */
+                status?: string | null;
+                /** @description Filter by agent ID */
+                agent_id?: string | null;
+                /** @description Filter by source connection ID */
+                source_connection_id?: string | null;
+                /** @description From (ISO 8601) */
+                time_from?: string | null;
+                /** @description To (ISO 8601) */
+                time_to?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_alert_configs_api_alerts_configs_get: {
+        parameters: {
+            query?: {
+                /** @description Filter by agent ID */
+                agent_id?: string | null;
+                /** @description Filter by source connection ID */
+                source_connection_id?: string | null;
+                /** @description Set to 'source' to list account-level source alert configs */
+                scope?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_alert_config_api_alerts_configs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateAlertConfigRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_alert_config_api_alerts_configs__config_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                config_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_alert_config_api_alerts_configs__config_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                config_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_alert_config_api_alerts_configs__config_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                config_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateAlertConfigRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_organization_preferences_api_alerts_organization_preferences_list_get: {
+        parameters: {
+            query?: {
+                /** @description Optional organization filter */
+                organization_id?: string | null;
+                /** @description Include default subscribed entries for all alert types */
+                include_defaults?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationAlertPreferenceListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_organization_preference_api_alerts_organization_preferences__organization_id___alert_type__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organization_id: string;
+                alert_type: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["routers__api__alerts__UpdateOrganizationAlertPreferenceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["routers__api__alerts__OrganizationAlertPreferenceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_alert_detail_api_alerts__alert_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alert_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_alert_comment_api_alerts__alert_id__comments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alert_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["routers__api__alerts__AddCommentRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    change_alert_status_api_alerts__alert_id__status_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alert_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangeStatusRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    subscribe_to_alert_api_alerts__alert_id__subscribe_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alert_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unsubscribe_from_alert_api_alerts__alert_id__unsubscribe_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alert_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_content_detail_api_contents__source_connection_content_version__get: {
         parameters: {
             query?: {
@@ -1161,6 +8148,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["routers__api__contents__ContentDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    replace_content_with_inline_text_api_contents__source_connection_content_version__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_connection_content_version: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InlineTextReplaceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["routers__api__contents__FileUploadResponse"];
                 };
             };
             /** @description Validation Error */
@@ -1272,6 +8294,1734 @@ export interface operations {
             };
         };
     };
+    governance_ai_generate_api_governance_ai_assistant_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["routers__api__governance__GovernanceAiAssistantRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["routers__api__governance__GovernanceAiAssistantResponse"];
+                };
+            };
+            /** @description AI assistant error. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Plan does not include governance access. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_governance_ai_conversations_api_governance_ai_assistant_conversations_get: {
+        parameters: {
+            query?: {
+                /** @description Number of conversations. */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["routers__api__governance__GovernanceConversationResponse"][];
+                };
+            };
+            /** @description Plan does not include governance access. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    governance_ai_accept_api_governance_ai_assistant__conversation_id__accept_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["routers__api__governance__GovernanceAiAcceptResponse"];
+                };
+            };
+            /** @description Plan already accepted/declined or AI error. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Plan does not include governance access. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    governance_ai_decline_api_governance_ai_assistant__conversation_id__decline_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Plan already accepted/declined or AI error. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Plan does not include governance access. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_knowledge_bases_api_knowledge_bases_get: {
+        parameters: {
+            query?: {
+                /** @description Page number (1-based). */
+                page?: number;
+                /** @description Items per page. */
+                limit?: number;
+                /** @description Sort field. One of: created_at, updated_at, name. */
+                sort?: string;
+                /** @description Sort direction: asc or desc. */
+                order?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeBaseListResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_knowledge_base_api_knowledge_bases_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateKnowledgeBaseBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeBaseResponseModel"];
+                };
+            };
+            /** @description Insufficient credits or no active subscription — the account has exhausted its credits or does not have a valid subscription. */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_knowledge_base_api_knowledge_bases__knowledge_base_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                knowledge_base_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeBaseResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_knowledge_base_api_knowledge_bases__knowledge_base_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                knowledge_base_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateKnowledgeBaseBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeBaseResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_knowledge_base_api_knowledge_bases__knowledge_base_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                knowledge_base_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_memory_banks_api_memory_banks_get: {
+        parameters: {
+            query?: {
+                /** @description Page number (1-based). */
+                page?: number;
+                /** @description Items per page. */
+                limit?: number;
+                /** @description Sort field. One of: created_at, updated_at, name. */
+                sort?: string;
+                /** @description Sort direction: asc or desc. */
+                order?: string;
+                /** @description Filter by bank type: conversation or general. */
+                type?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryBankListResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_memory_bank_api_memory_banks_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateMemoryBankBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryBankResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    memory_bank_ai_generate_api_memory_banks_ai_assistant_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["routers__api__memory_banks__MemoryBankAiAssistantRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["routers__api__memory_banks__MemoryBankAiAssistantResponse"];
+                };
+            };
+            /** @description AI assistant error. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    memory_bank_ai_last_conversation_api_memory_banks_ai_assistant_last_conversation_get: {
+        parameters: {
+            query?: {
+                /** @description Max turns to return. */
+                limit?: number;
+                /** @description Number of most-recent turns to skip. */
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["routers__api__memory_banks__MemoryBankLastConversationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    memory_bank_ai_accept_api_memory_banks_ai_assistant__conversation_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["routers__api__memory_banks__MemoryBankAcceptRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: boolean;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_templates_api_memory_banks_templates_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
+                };
+            };
+        };
+    };
+    test_compaction_prompt_standalone_api_memory_banks_test_compaction_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StandaloneTestCompactionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompactionTestResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_memory_bank_api_memory_banks__memory_bank_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                memory_bank_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryBankResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_memory_bank_api_memory_banks__memory_bank_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                memory_bank_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateMemoryBankBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryBankResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_memory_bank_api_memory_banks__memory_bank_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                memory_bank_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_agents_using_bank_api_memory_banks__memory_bank_id__agents_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                memory_bank_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    }[];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    compact_memory_bank_api_memory_banks__memory_bank_id__compact_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                memory_bank_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_memory_bank_source_api_memory_banks__memory_bank_id__source_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                memory_bank_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_memory_bank_entry_stats_api_memory_banks__memory_bank_id__stats_get: {
+        parameters: {
+            query?: {
+                days?: number;
+                start_date?: string | null;
+                end_date?: string | null;
+            };
+            header?: never;
+            path: {
+                memory_bank_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    test_compaction_prompt_api_memory_banks__memory_bank_id__test_compaction_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                memory_bank_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TestCompactionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompactionTestResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_alerts_api_models_alerts_get: {
+        parameters: {
+            query?: {
+                /** @description Filter alerts to a specific agent UUID. */
+                agent_id?: string | null;
+                /** @description When true, only return unread alerts. */
+                unread_only?: boolean;
+                /** @description Maximum number of alerts to return (1-100). */
+                limit?: number;
+                /** @description Pagination offset. */
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mark_all_read_api_models_alerts_mark_all_read_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_alert_unread_count_api_models_alerts_unread_count_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    mark_read_api_models_alerts__alert_id__read_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alert_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_recommendations_api_models__model_id__recommendations_get: {
+        parameters: {
+            query?: {
+                /** @description Only recommend models that support tool use. */
+                require_tool_use?: boolean | null;
+                /** @description Only recommend models that support structured output. */
+                require_structured_output?: boolean | null;
+                /** @description Only recommend models that support thinking/reasoning. */
+                require_thinking?: boolean | null;
+                /** @description Minimum context window size in tokens. */
+                min_context_tokens?: number | null;
+                /** @description Minimum output token limit. */
+                min_output_tokens?: number | null;
+            };
+            header?: never;
+            path: {
+                model_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_api_search_get: {
+        parameters: {
+            query: {
+                /** @description Search query */
+                q: string;
+                /** @description Maximum results */
+                limit?: number;
+                /** @description Optional entity type filter (e.g. 'agent', 'knowledge_base') */
+                entity_type?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_solutions_api_solutions_get: {
+        parameters: {
+            query?: {
+                /** @description Page number */
+                page?: number;
+                /** @description Items per page */
+                limit?: number;
+                /** @description Sort field */
+                sort?: string;
+                /** @description Sort order */
+                order?: string;
+                /** @description Filter by solution name (case-insensitive partial match) */
+                search?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["routers__api__solutions__SolutionListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_solution_api_solutions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSolutionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["routers__api__solutions__SolutionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_solution_api_solutions__solution_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                solution_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["routers__api__solutions__SolutionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_solution_api_solutions__solution_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                solution_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_solution_api_solutions__solution_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                solution_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateSolutionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["routers__api__solutions__SolutionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    link_agents_api_solutions__solution_id__agents_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                solution_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkResourcesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["routers__api__solutions__SolutionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unlink_agents_api_solutions__solution_id__agents_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                solution_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UnlinkResourcesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["routers__api__solutions__SolutionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ai_assistant_generate_api_solutions__solution_id__ai_assistant_generate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                solution_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiAssistantGenerateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["routers__api__solutions__AiAssistantGenerateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ai_assistant_knowledge_base_api_solutions__solution_id__ai_assistant_knowledge_base_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                solution_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiAssistantGenerateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["routers__api__solutions__AiAssistantGenerateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ai_assistant_source_api_solutions__solution_id__ai_assistant_source_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                solution_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiAssistantGenerateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["routers__api__solutions__AiAssistantGenerateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ai_assistant_accept_api_solutions__solution_id__ai_assistant__conversation_id__accept_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                solution_id: string;
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["routers__api__solutions__AiAssistantAcceptRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["routers__api__solutions__AiAssistantAcceptResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ai_assistant_decline_api_solutions__solution_id__ai_assistant__conversation_id__decline_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                solution_id: string;
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_conversations_api_solutions__solution_id__conversations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                solution_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["routers__api__solutions__SolutionConversationResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_conversation_turn_api_solutions__solution_id__conversations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                solution_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddConversationTurnRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["routers__api__solutions__SolutionConversationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mark_conversation_turn_api_solutions__solution_id__conversations__conversation_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                solution_id: string;
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarkConversationTurnRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    link_knowledge_bases_api_solutions__solution_id__knowledge_bases_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                solution_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkResourcesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["routers__api__solutions__SolutionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unlink_knowledge_bases_api_solutions__solution_id__knowledge_bases_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                solution_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UnlinkResourcesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["routers__api__solutions__SolutionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    link_source_connections_api_solutions__solution_id__source_connections_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                solution_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkResourcesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["routers__api__solutions__SolutionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unlink_source_connections_api_solutions__solution_id__source_connections_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                solution_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UnlinkResourcesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["routers__api__solutions__SolutionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_source_api_sources_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSourceBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceResponse"];
+                };
+            };
+            /** @description Insufficient credits or no active subscription — the account has exhausted its credits or does not have a valid subscription. */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_sources_api_sources__get: {
         parameters: {
             query?: {
@@ -1299,6 +10049,470 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["routers__api__sources__SourceListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_source_api_sources__source_connection_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_connection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_source_api_sources__source_connection_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_connection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateSourceBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_inline_text_to_source_api_sources__source_connection_id__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_connection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InlineTextUploadRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["routers__api__sources__FileUploadResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_source_api_sources__source_connection_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_connection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_source_embedding_migration_api_sources__source_connection_id__embedding_migration_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_connection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceEmbeddingMigrationResponse"] | null;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_source_embedding_migration_api_sources__source_connection_id__embedding_migration_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_connection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartSourceEmbeddingMigrationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceEmbeddingMigrationResponse"];
+                };
+            };
+            /** @description A migration is already active for this source, or the target matches the current settings. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_source_embedding_migration_api_sources__source_connection_id__embedding_migration_cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_connection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceEmbeddingMigrationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_source_exports_api_sources__source_connection_id__exports_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                source_connection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_source_export_api_sources__source_connection_id__exports_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_connection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["routers__api__source_exports__CreateExportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["routers__api__source_exports__ExportResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    estimate_source_export_api_sources__source_connection_id__exports_estimate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_connection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["routers__api__source_exports__EstimateExportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["routers__api__source_exports__EstimateExportResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_source_export_api_sources__source_connection_id__exports__export_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_connection_id: string;
+                export_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["routers__api__source_exports__ExportResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_source_export_api_sources__source_connection_id__exports__export_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_connection_id: string;
+                export_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_source_export_api_sources__source_connection_id__exports__export_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_connection_id: string;
+                export_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["routers__api__source_exports__ExportResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_source_export_api_sources__source_connection_id__exports__export_id__download_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_connection_id: string;
+                export_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
