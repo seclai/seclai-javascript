@@ -2,7 +2,7 @@
 
 The official JavaScript/TypeScript SDK for the [Seclai](https://seclai.com) API. Provides full typed coverage of all API endpoints, file uploads, SSE streaming, polling helpers, and automatic pagination.
 
-Works in Node.js 18+, Deno, Bun, Cloudflare Workers, and any runtime with a`fetch` implementation.
+Works in Node.js 18+, Deno, Bun, Cloudflare Workers, and any runtime with a `fetch` implementation.
 
 ## Install
 
@@ -388,7 +388,7 @@ const sol = await client.aiAssistantSolution({ user_input: "Set up monitoring" }
 const mb = await client.aiAssistantMemoryBank({ user_input: "Create a chat memory" });
 
 // Accept or decline the generated plan
-await client.acceptAiAssistantPlan("conversation_id");
+await client.acceptAiAssistantPlan("conversation_id", { confirm_deletions: true });
 await client.declineAiAssistantPlan("conversation_id");
 
 // Memory bank conversation history

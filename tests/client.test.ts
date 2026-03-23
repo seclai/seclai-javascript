@@ -1575,13 +1575,16 @@ describe("Top-Level AI Assistant", () => {
     await client.getAiAssistantMemoryBankHistory();
   });
 
-  test("acceptAiAssistantPlan sends POST", async () => {
+  test("acceptAiAssistantPlan sends POST with JSON body", async () => {
+    const requestBody = { confirm_deletions: true };
     const client = makeClient((req) => {
       expect(req.method).toBe("POST");
       expect(new URL(req.url).pathname).toBe("/ai-assistant/conv_1/accept");
+      expect(req.headers["content-type"]).toContain("application/json");
+      expect(JSON.parse(req.bodyText!)).toEqual(requestBody);
       return jsonResponse({});
     });
-    await client.acceptAiAssistantPlan("conv_1");
+    await client.acceptAiAssistantPlan("conv_1", requestBody as any);
   });
 
   test("declineAiAssistantPlan sends POST", async () => {
@@ -1593,13 +1596,16 @@ describe("Top-Level AI Assistant", () => {
     await client.declineAiAssistantPlan("conv_1");
   });
 
-  test("acceptAiMemoryBankSuggestion sends PATCH", async () => {
+  test("acceptAiMemoryBankSuggestion sends PATCH with body", async () => {
+    const requestBody = { accepted: true };
     const client = makeClient((req) => {
       expect(req.method).toBe("PATCH");
       expect(new URL(req.url).pathname).toBe("/ai-assistant/memory-bank/conv_1");
+      expect(req.headers["content-type"]).toContain("application/json");
+      expect(JSON.parse(req.bodyText!)).toEqual(requestBody);
       return jsonResponse({});
     });
-    await client.acceptAiMemoryBankSuggestion("conv_1");
+    await client.acceptAiMemoryBankSuggestion("conv_1", requestBody as any);
   });
 });
 

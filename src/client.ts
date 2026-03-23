@@ -102,6 +102,7 @@ import type {
   UpdateAgentDefinitionRequest,
   UpdateAgentRequest,
   UpdateAlertConfigRequest,
+  UpdateEvaluationCriteriaRequest,
   UpdateKnowledgeBaseBody,
   UpdateMemoryBankBody,
   UpdateOrganizationAlertPreferenceRequest,
@@ -490,6 +491,9 @@ export class Seclai {
       ...this.defaultHeaders,
       [this.apiKeyHeader]: this.apiKey,
     };
+    // Let fetch set the correct multipart Content-Type with boundary
+    delete headers["content-type"];
+    delete headers["Content-Type"];
 
     const form = new FormData();
     const mimeType = opts.mimeType ?? inferMimeType(opts.fileName);
@@ -726,6 +730,8 @@ export class Seclai {
 
     const signal = anySignal([opts?.signal, timeoutController.signal]);
 
+    let lastSeen: AgentRunResponse | undefined;
+
     try {
       const init: RequestInit = { method: "POST", headers, body: JSON.stringify(body) };
       if (signal) init.signal = signal;
@@ -773,7 +779,6 @@ export class Seclai {
       const decoder = new TextDecoder();
 
       let final: AgentRunResponse | undefined;
-      let lastSeen: AgentRunResponse | undefined;
 
       const parser = createSseParser((msg) => {
         if (!msg.data) return;
@@ -799,11 +804,12 @@ export class Seclai {
         return lastSeen;
       }
 
-      throw new SeclaiStreamingError("Stream ended before receiving a 'done' event.");
+      throw new SeclaiStreamingError("Stream ended before receiving a 'done' event.", lastSeen?.run_id);
     } catch (err) {
       if (timedOut) {
         throw new SeclaiStreamingError(
-          `Timed out after ${timeoutMs}ms waiting for streaming agent run to complete.`
+          `Timed out after ${timeoutMs}ms waiting for streaming agent run to complete.`,
+          lastSeen?.run_id,
         );
       }
       throw err;
@@ -862,6 +868,9 @@ export class Seclai {
 
       const response = await this.fetcher(url, init);
 
+      const contentType = response.headers.get("content-type") ?? "";
+      const isJson = contentType.includes("application/json");
+
       if (!response.ok) {
         const responseText = await safeText(response);
         if (response.status === 422) {
@@ -882,6 +891,13 @@ export class Seclai {
           url: url.toString(),
           responseText,
         });
+      }
+
+      // If server returned JSON instead of SSE, yield it as a single "done" event
+      if (isJson) {
+        const data = (await response.json()) as AgentRunResponse;
+        yield { event: "done", data };
+        return;
       }
 
       if (!response.body) {
@@ -1137,7 +1153,7 @@ export class Seclai {
    * @param body - Fields to update.
    * @returns Updated evaluation criteria.
    */
-  async updateEvaluationCriteria(criteriaId: string, body: Partial<CreateEvaluationCriteriaRequest>): Promise<EvaluationCriteriaResponse> {
+  async updateEvaluationCriteria(criteriaId: string, body: UpdateEvaluationCriteriaRequest): Promise<EvaluationCriteriaResponse> {
     return (await this.request("PATCH", `/agents/evaluation-criteria/${criteriaId}`, { json: body })) as EvaluationCriteriaResponse;
   }
 
@@ -2261,9 +2277,10 @@ export class Seclai {
    * Accept an AI assistant suggestion.
    *
    * @param conversationId - Conversation identifier.
+   * @param body - Acceptance request payload.
    */
-  async acceptAiAssistantPlan(conversationId: string): Promise<unknown> {
-    return await this.request("POST", `/ai-assistant/${conversationId}/accept`);
+  async acceptAiAssistantPlan(conversationId: string, body: AiAssistantAcceptRequest): Promise<AiAssistantAcceptResponse> {
+    return (await this.request("POST", `/ai-assistant/${conversationId}/accept`, { json: body })) as AiAssistantAcceptResponse;
   }
 
   /**
@@ -2279,9 +2296,10 @@ export class Seclai {
    * Accept/mark an AI memory bank suggestion.
    *
    * @param conversationId - Conversation identifier.
+   * @param body - Acceptance payload for the memory bank suggestion.
    */
-  async acceptAiMemoryBankSuggestion(conversationId: string): Promise<unknown> {
-    return await this.request("PATCH", `/ai-assistant/memory-bank/${conversationId}`);
+  async acceptAiMemoryBankSuggestion(conversationId: string, body: MemoryBankAcceptRequest): Promise<unknown> {
+    return await this.request("PATCH", `/ai-assistant/memory-bank/${conversationId}`, { json: body });
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
