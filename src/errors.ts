@@ -1,3 +1,12 @@
+/**
+ * @module
+ *
+ * Error classes thrown by the Seclai SDK.
+ *
+ * All errors extend {@link SeclaiError}, so a single `catch (err instanceof SeclaiError)`
+ * handles every SDK error. Narrow to more specific subclasses for finer handling.
+ */
+
 /** Base error class for the Seclai SDK. */
 export class SeclaiError extends Error {
   constructor(message: string) {
@@ -67,5 +76,17 @@ export class SeclaiAPIValidationError extends SeclaiAPIStatusError {
     super(opts);
     this.name = "SeclaiAPIValidationError";
     this.validationError = opts.validationError;
+  }
+}
+
+/** Thrown when a streaming operation fails (e.g. stream ends unexpectedly). */
+export class SeclaiStreamingError extends SeclaiError {
+  /** The run ID associated with the failed stream, when available. */
+  public readonly runId: string | undefined;
+
+  constructor(message: string, runId?: string) {
+    super(message);
+    this.name = "SeclaiStreamingError";
+    this.runId = runId;
   }
 }
