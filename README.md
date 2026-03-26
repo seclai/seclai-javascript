@@ -33,18 +33,51 @@ console.log(result);
 
 | Option | Environment variable | Default |
 | --- | --- | --- |
-| `apiKey` | `SECLAI_API_KEY` | *required* |
+| `apiKey` | `SECLAI_API_KEY` | — |
+| `accessToken` | — | — |
+| `profile` | `SECLAI_PROFILE` | `"default"` |
+| `configDir` | `SECLAI_CONFIG_DIR` | `~/.seclai` |
+| `autoRefresh` | — | `true` |
+| `accountId` | — | — |
 | `baseUrl` | `SECLAI_API_URL` | `https://api.seclai.com` |
 | `apiKeyHeader` | — | `x-api-key` |
 | `defaultHeaders` | — | `{}` |
 | `fetch` | — | `globalThis.fetch` |
 
+### Authentication
+
+Credentials are resolved via a chain (first match wins):
+
+1. Explicit `apiKey` option
+2. Explicit `accessToken` option (string or `() => string | Promise<string>`)
+3. `SECLAI_API_KEY` environment variable
+4. SSO profile from `~/.seclai/config` with cached tokens in `~/.seclai/sso/cache/`
+
 ```ts
+// API key
+const client = new Seclai({ apiKey: "sk-..." });
+
+// Static bearer token
+const client = new Seclai({ accessToken: "eyJhbGciOi..." });
+
+// Dynamic bearer token provider (called per request)
 const client = new Seclai({
-  apiKey: "sk-...",
-  baseUrl: "https://staging-api.seclai.com",
-  defaultHeaders: { "X-Custom": "value" },
+  accessToken: async () => fetchTokenFromVault(),
 });
+
+// SSO profile (uses cached tokens, auto-refreshes)
+const client = new Seclai({ profile: "my-profile" });
+
+// Environment variable (no options needed)
+// export SECLAI_API_KEY="sk-..."
+const client = new Seclai();
+```
+
+To set up SSO authentication, install the [Seclai CLI](https://www.npmjs.com/package/seclai) and run:
+
+```bash
+seclai configure sso    # set up an SSO profile
+seclai auth login       # authenticate via browser
 ```
 
 ## API documentation
