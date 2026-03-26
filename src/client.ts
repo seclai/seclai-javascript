@@ -802,9 +802,10 @@ export class Seclai {
   ): Promise<AgentRunResponse> {
     const url = buildURL(this.baseUrl, `/agents/${agentId}/runs/stream`);
 
+    const authHdrs = await this.authHeaders();
     const headers: Record<string, string> = {
       ...this.defaultHeaders,
-      [this.apiKeyHeader]: this.apiKey,
+      ...authHdrs,
       accept: "text/event-stream",
       "content-type": "application/json",
     };
@@ -934,9 +935,10 @@ export class Seclai {
   ): AsyncGenerator<AgentRunEvent, void, undefined> {
     const url = buildURL(this.baseUrl, `/agents/${agentId}/runs/stream`);
 
+    const authHdrs = await this.authHeaders();
     const headers: Record<string, string> = {
       ...this.defaultHeaders,
-      [this.apiKeyHeader]: this.apiKey,
+      ...authHdrs,
       accept: "text/event-stream",
       "content-type": "application/json",
     };

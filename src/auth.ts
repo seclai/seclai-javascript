@@ -22,7 +22,7 @@ export interface SsoProfile {
 export interface SsoCacheEntry {
   accessToken: string;
   refreshToken?: string;
-  idToken?: string;
+  idToken?: string | undefined;
   expiresAt: string; // ISO-8601
   clientId: string;
   region: string;
@@ -54,6 +54,7 @@ function getHomeDir(): string | undefined {
 async function sha1Hex(input: string): Promise<string> {
   // Prefer Node.js crypto when available
   try {
+    // @ts-expect-error -- resolved at runtime; no @types/node in this package
     const { createHash } = await import("node:crypto");
     return createHash("sha1").update(input).digest("hex");
   } catch {
@@ -100,7 +101,7 @@ export function parseIni(content: string): Record<string, Record<string, string>
 
     const sectionMatch = line.match(/^\[(.+)\]$/);
     if (sectionMatch) {
-      const raw = sectionMatch[1].trim();
+      const raw = sectionMatch[1]!.trim();
       // `[default]` stays as "default", `[profile foo]` becomes "foo"
       currentSection = raw.startsWith("profile ")
         ? raw.slice("profile ".length).trim()
@@ -114,7 +115,7 @@ export function parseIni(content: string): Record<string, Record<string, string>
       if (eqIdx > 0) {
         const key = line.slice(0, eqIdx).trim();
         const value = line.slice(eqIdx + 1).trim();
-        sections[currentSection][key] = value;
+        sections[currentSection]![key] = value;
       }
     }
   }
@@ -142,6 +143,7 @@ let _path: PathModule | null = null;
 
 async function getFs(): Promise<FsModule> {
   if (!_fs) {
+    // @ts-expect-error -- resolved at runtime; no @types/node in this package
     _fs = (await import("node:fs")) as unknown as FsModule;
   }
   return _fs;
@@ -149,6 +151,7 @@ async function getFs(): Promise<FsModule> {
 
 async function getPath(): Promise<PathModule> {
   if (!_path) {
+    // @ts-expect-error -- resolved at runtime; no @types/node in this package
     _path = (await import("node:path")) as unknown as PathModule;
   }
   return _path;
@@ -361,7 +364,7 @@ export async function refreshToken(
   return {
     accessToken: data.access_token,
     refreshToken: data.refresh_token ?? refreshTokenValue,
-    idToken: data.id_token,
+    idToken: data.id_token ?? undefined,
     expiresAt,
     clientId: profile.ssoClientId,
     region: profile.ssoRegion,
@@ -374,23 +377,23 @@ export async function refreshToken(
 /** Options for resolving the credential chain. */
 export interface CredentialChainOptions {
   /** Explicit API key (highest priority). */
-  apiKey?: string;
+  apiKey?: string | undefined;
   /** Explicit static bearer token. */
-  accessToken?: string;
+  accessToken?: string | undefined;
   /** Dynamic bearer token provider. */
-  accessTokenProvider?: () => string | Promise<string>;
+  accessTokenProvider?: (() => string | Promise<string>) | undefined;
   /** Name of the profile from ~/.seclai/config. */
-  profile?: string;
+  profile?: string | undefined;
   /** Override config directory path. */
-  configDir?: string;
+  configDir?: string | undefined;
   /** Whether to auto-refresh expired SSO tokens. Defaults to true. */
-  autoRefresh?: boolean;
+  autoRefresh?: boolean | undefined;
   /** Account ID override (takes precedence over profile's sso_account_id). */
-  accountId?: string;
+  accountId?: string | undefined;
   /** Header name for API key auth. */
-  apiKeyHeader?: string;
+  apiKeyHeader?: string | undefined;
   /** fetch implementation for token refresh. */
-  fetch?: FetchLike;
+  fetch?: FetchLike | undefined;
 }
 
 /**
@@ -404,13 +407,13 @@ export interface AuthState {
   apiKeyHeader: string;
   accessToken?: string;
   accessTokenProvider?: () => string | Promise<string>;
-  accountId?: string;
+  accountId?: string | undefined;
   ssoProfile?: SsoProfile;
   configDir?: string;
   autoRefresh: boolean;
-  fetcher?: FetchLike;
+  fetcher?: FetchLike | undefined;
   /** @internal Coalesces concurrent SSO token refresh attempts. */
-  _refreshPromise?: Promise<string>;
+  _refreshPromise?: Promise<string> | undefined;
 }
 
 /**
