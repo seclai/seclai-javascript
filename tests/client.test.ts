@@ -7,9 +7,8 @@ import {
   SeclaiConfigurationError,
   SeclaiError,
   SeclaiStreamingError,
-  parseIni,
-  isTokenValid,
 } from "../src/index";
+import { parseIni, isTokenValid } from "../src/auth";
 
 type RecordedRequest = {
   url: string;
@@ -98,7 +97,7 @@ describe("Configuration & Auth", () => {
     })).toThrow(SeclaiConfigurationError);
   });
 
-  test("constructor throws when no credentials and no config", async () => {
+  test("first request rejects when no credentials can be resolved", async () => {
     const p = (globalThis as any).process;
     const prev = p?.env?.SECLAI_API_KEY;
     const prevDir = p?.env?.SECLAI_CONFIG_DIR;

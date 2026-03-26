@@ -282,6 +282,10 @@ export async function writeSsoCache(
   const tmpPath = `${cachePath}.tmp`;
 
   fs.writeFileSync(tmpPath, JSON.stringify(entry, null, 2), { mode: 0o600 });
+  // On Windows, renameSync fails if destination exists — delete first (best-effort)
+  if (fs.existsSync(cachePath)) {
+    try { fs.unlinkSync(cachePath); } catch { /* let renameSync throw if needed */ }
+  }
   fs.renameSync(tmpPath, cachePath);
 }
 

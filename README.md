@@ -56,18 +56,26 @@ Credentials are resolved via a chain (first match wins):
 ```ts
 // API key
 const client = new Seclai({ apiKey: "sk-..." });
+```
 
+```ts
 // Static bearer token
 const client = new Seclai({ accessToken: "eyJhbGciOi..." });
+```
 
+```ts
 // Dynamic bearer token provider (called per request)
 const client = new Seclai({
   accessToken: async () => fetchTokenFromVault(),
 });
+```
 
+```ts
 // SSO profile (uses cached tokens, auto-refreshes)
 const client = new Seclai({ profile: "my-profile" });
+```
 
+```ts
 // Environment variable (no options needed)
 // export SECLAI_API_KEY="sk-..."
 const client = new Seclai();

@@ -24,15 +24,8 @@ export {
 export {
   type SsoProfile,
   type SsoCacheEntry,
-  parseIni,
-  resolveConfigDir,
-  loadSsoProfile,
-  readSsoCache,
-  writeSsoCache,
-  deleteSsoCache,
-  cacheFileName,
-  isTokenValid,
-  refreshToken,
+  type AuthState,
+  type CredentialChainOptions,
 } from "./auth";
 
 export {
