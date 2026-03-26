@@ -16,7 +16,7 @@ export interface paths {
          * @description List agents for the account with pagination.
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key`. All resources are scoped to the API key's account.
+         *     - Requires authentication (API key or bearer token). All resources are scoped to the API key's account.
          */
         get: operations["list_agents_api_agents_get"];
         put?: never;
@@ -33,7 +33,7 @@ export interface paths {
          *     Templates: `blank`, `retrieval_example`, `simple_qa`, `summarizer`, `json_extractor`, `content_change_notifier`, `scheduled_report`, `webhook_pipeline`
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key`. Agent is created in the API key's account.
+         *     - Requires authentication (API key or bearer token). Agent is created in the API key's account.
          */
         post: operations["create_agent_api_agents_post"];
         delete?: never;
@@ -199,7 +199,7 @@ export interface paths {
          *     Agent traces are automatically indexed when runs complete. The first 7 days of storage are free; extended retention is billed.
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key`. Searches only within your account's traces.
+         *     - Requires authentication (API key or bearer token). Searches only within your account's traces.
          */
         post: operations["search_agent_runs_api_agents_runs_search_post"];
         delete?: never;
@@ -222,7 +222,7 @@ export interface paths {
          *     The response includes `status`, `error_count`, and `output` once the run completes. Use `include_step_outputs=true` to include per-step outputs, timing, durations, and credits.
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key`. You can only access runs belonging to your account.
+         *     - Requires authentication (API key or bearer token). You can only access runs belonging to your account.
          */
         get: operations["get_agent_run_api_agents_runs__run_id__get"];
         put?: never;
@@ -234,7 +234,7 @@ export interface paths {
          *     If the run is already in a terminal state (`completed` or `failed`), cancellation will be rejected.
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key`. You can only cancel runs belonging to your account.
+         *     - Requires authentication (API key or bearer token). You can only cancel runs belonging to your account.
          */
         delete: operations["delete_agent_run_api_agents_runs__run_id__delete"];
         options?: never;
@@ -254,7 +254,7 @@ export interface paths {
          * @description Fetch an agent's metadata (name, description, trigger type, timestamps).
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key`. You can only access agents belonging to your account.
+         *     - Requires authentication (API key or bearer token). You can only access agents belonging to your account.
          */
         get: operations["get_agent_metadata_api_agents__agent_id__get"];
         /**
@@ -268,7 +268,7 @@ export interface paths {
          *     At least one field must be provided.
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key`. You can only update agents belonging to your account.
+         *     - Requires authentication (API key or bearer token). You can only update agents belonging to your account.
          */
         put: operations["update_agent_api_agents__agent_id__put"];
         post?: never;
@@ -277,7 +277,7 @@ export interface paths {
          * @description Soft-delete an agent. The agent will no longer appear in listings or be accessible via the API.
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key`. You can only delete agents belonging to your account.
+         *     - Requires authentication (API key or bearer token). You can only delete agents belonging to your account.
          */
         delete: operations["delete_agent_api_agents__agent_id__delete"];
         options?: never;
@@ -299,7 +299,7 @@ export interface paths {
          *     Returns past conversation turns (user inputs, AI responses, accept/decline status) ordered oldest first. Use `step_type` to filter by step type, and optionally `step_id` to narrow to a specific step instance.
          *
          *     Auth & scoping:
-         *     - Requires a user-scoped `X-API-Key`. Only agents belonging to your account can be queried.
+         *     - Requires authentication (API key or bearer token). Only agents belonging to your account can be queried.
          */
         get: operations["get_ai_conversation_history_api_agents__agent_id__ai_assistant_conversations_get"];
         put?: never;
@@ -327,7 +327,7 @@ export interface paths {
          *     Use mode 'generate_full' for new workflows or 'modify_workflow' to refine existing ones.
          *
          *     Auth & scoping:
-         *     - Requires a user-scoped `X-API-Key`. Only agents belonging to your account can be used.
+         *     - Requires authentication (API key or bearer token). Only agents belonging to your account can be used.
          */
         post: operations["generate_agent_steps_api_agents__agent_id__ai_assistant_generate_steps_post"];
         delete?: never;
@@ -352,7 +352,7 @@ export interface paths {
          *     Provide the step type, a natural language instruction, and optionally the current configuration. The AI will produce a proposed configuration along with an explanation. The suggestion is stored as a conversation turn that can be accepted or declined separately via the mark endpoint.
          *
          *     Auth & scoping:
-         *     - Requires a user-scoped `X-API-Key`. Only agents belonging to your account can be used.
+         *     - Requires authentication (API key or bearer token). Only agents belonging to your account can be used.
          */
         post: operations["generate_step_config_api_agents__agent_id__ai_assistant_step_config_post"];
         delete?: never;
@@ -381,7 +381,7 @@ export interface paths {
          *     This only updates the tracking status on the conversation record. To actually apply the proposed configuration, use the agent definition update endpoint separately.
          *
          *     Auth & scoping:
-         *     - Requires a user-scoped `X-API-Key`. The conversation must belong to one of your agents.
+         *     - Requires authentication (API key or bearer token). The conversation must belong to one of your agents.
          */
         patch: operations["mark_ai_suggestion_api_agents__agent_id__ai_assistant__conversation_id__patch"];
         trace?: never;
@@ -422,7 +422,7 @@ export interface paths {
          *     - `text`: Static text literal
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key`. You can only access agents belonging to your account.
+         *     - Requires authentication (API key or bearer token). You can only access agents belonging to your account.
          */
         get: operations["get_agent_definition_api_agents__agent_id__definition_get"];
         /**
@@ -436,7 +436,7 @@ export interface paths {
          *     **Retry steps** re-execute from a target ancestor step for quality-control loops. Configure with `target_step_id` (ancestor step ID) and `max_retries` (1–10). Best practice: place a `gate` step before the retry to make retries conditional.
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key`. You can only update agents belonging to your account.
+         *     - Requires authentication (API key or bearer token). You can only update agents belonging to your account.
          */
         put: operations["update_agent_definition_api_agents__agent_id__definition_put"];
         post?: never;
@@ -560,7 +560,7 @@ export interface paths {
          *     Possible `status` values: `processing`, `ready`, `failed`.
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key`. All resources are scoped to the API key's account.
+         *     - Requires authentication (API key or bearer token). All resources are scoped to the API key's account.
          */
         get: operations["api_get_agent_input_upload_status_api_agents__agent_id__input_uploads__upload_id__get"];
         put?: never;
@@ -590,7 +590,7 @@ export interface paths {
          *     - This endpoint returns a summary list. Fetch full details with `GET /agents/runs/{run_id}`.
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key`. You can only list runs for agents in your account.
+         *     - Requires authentication (API key or bearer token). You can only list runs for agents in your account.
          */
         get: operations["list_agent_runs_api_agents__agent_id__runs_get"];
         put?: never;
@@ -615,7 +615,7 @@ export interface paths {
          *     - Use `include_step_outputs=true` to include per-step outputs, timing, and credits.
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key`. All resources are scoped to the API key's account.
+         *     - Requires authentication (API key or bearer token). All resources are scoped to the API key's account.
          */
         post: operations["run_agent_api_agents__agent_id__runs_post"];
         delete?: never;
@@ -653,7 +653,7 @@ export interface paths {
          *     - On `timeout` or `error`, the payload includes `run_id` so clients can resume by polling `GET /agents/runs/{run_id}`.
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key`. All resources are scoped to the API key's account.
+         *     - Requires authentication (API key or bearer token). All resources are scoped to the API key's account.
          */
         post: operations["run_streaming_agent_api_agents__agent_id__runs_stream_post"];
         delete?: never;
@@ -707,7 +707,7 @@ export interface paths {
          *     After uploading, poll `GET /agents/{agent_id}/input-uploads/{upload_id}` until `status` is `ready`, then pass `input_upload_id` to `POST /agents/{agent_id}/runs`.
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key`. All resources are scoped to the API key's account.
+         *     - Requires authentication (API key or bearer token). All resources are scoped to the API key's account.
          */
         post: operations["api_upload_agent_input_api_agents__agent_id__upload_input_post"];
         delete?: never;
@@ -932,7 +932,7 @@ export interface paths {
          *     - `time_from` / `time_to`: ISO 8601 date range
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key` with user association. Results are scoped to the API key's account.
+         *     - Requires authentication (API key or bearer token) with user association. Results are scoped to the API key's account.
          */
         get: operations["list_alerts_api_alerts_get"];
         put?: never;
@@ -963,7 +963,7 @@ export interface paths {
          *     Credits alerts (`credits_low_threshold`, `credits_runout_prediction`, `credits_usage_spike`) are account-level alert configs. They are evaluated by the credits alert sweep and default-enabled configs may be auto-created for active accounts at runtime.
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key` with user association.
+         *     - Requires authentication (API key or bearer token) with user association.
          */
         get: operations["list_alert_configs_api_alerts_configs_get"];
         put?: never;
@@ -977,7 +977,7 @@ export interface paths {
          *     Distribution types: owner, owner_admins, selected_members. Organization accounts are normalized to owner_admins.
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key` with user association.
+         *     - Requires authentication (API key or bearer token) with user association.
          */
         post: operations["create_alert_config_api_alerts_configs_post"];
         delete?: never;
@@ -1000,7 +1000,7 @@ export interface paths {
          *     Returns all fields including type, enabled state, threshold, cooldown, distribution type, and recipient list.
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key` with user association.
+         *     - Requires authentication (API key or bearer token) with user association.
          */
         get: operations["get_alert_config_api_alerts_configs__config_id__get"];
         put?: never;
@@ -1010,7 +1010,7 @@ export interface paths {
          * @description Delete an alert configuration. This permanently removes the config and stops any future alerts of this type from being triggered.
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key` with user association.
+         *     - Requires authentication (API key or bearer token) with user association.
          */
         delete: operations["delete_alert_config_api_alerts_configs__config_id__delete"];
         options?: never;
@@ -1020,7 +1020,7 @@ export interface paths {
          * @description Update an alert configuration. Only provided fields are updated.
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key` with user association.
+         *     - Requires authentication (API key or bearer token) with user association.
          */
         patch: operations["update_alert_config_api_alerts_configs__config_id__patch"];
         trace?: never;
@@ -1039,7 +1039,7 @@ export interface paths {
          *     By default, only explicit override rows are returned. Set `include_defaults=true` to return the effective subscribed state for every alert type in every organization the user can manage.
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key` with user association.
+         *     - Requires authentication (API key or bearer token) with user association.
          *     - Only organizations where the user is an owner or administrator are included.
          */
         get: operations["list_organization_preferences_api_alerts_organization_preferences_list_get"];
@@ -1071,7 +1071,7 @@ export interface paths {
          *     Setting `subscribed=false` stores an explicit opt-out override. Setting `subscribed=true` removes the override and restores the default subscribed behavior.
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key` with user association.
+         *     - Requires authentication (API key or bearer token) with user association.
          *     - Only owners and administrators can update preferences for an organization.
          */
         patch: operations["update_organization_preference_api_alerts_organization_preferences__organization_id___alert_type__patch"];
@@ -1089,7 +1089,7 @@ export interface paths {
          * @description Get full alert detail including history, comments, and subscribers.
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key` with user association.
+         *     - Requires authentication (API key or bearer token) with user association.
          */
         get: operations["get_alert_detail_api_alerts__alert_id__get"];
         put?: never;
@@ -1114,7 +1114,7 @@ export interface paths {
          * @description Add a comment to an alert. Comments are visible to all subscribers and are included in the alert detail response.
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key` with user association.
+         *     - Requires authentication (API key or bearer token) with user association.
          */
         post: operations["add_alert_comment_api_alerts__alert_id__comments_post"];
         delete?: never;
@@ -1137,7 +1137,7 @@ export interface paths {
          * @description Change the status of an alert. Valid statuses: triggered, acknowledged, resolved, dismissed.
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key` with user association.
+         *     - Requires authentication (API key or bearer token) with user association.
          */
         post: operations["change_alert_status_api_alerts__alert_id__status_post"];
         delete?: never;
@@ -1160,7 +1160,7 @@ export interface paths {
          * @description Subscribe the current user to an alert. Subscribed users receive email notifications when the alert status changes or new comments are added.
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key` with user association.
+         *     - Requires authentication (API key or bearer token) with user association.
          */
         post: operations["subscribe_to_alert_api_alerts__alert_id__subscribe_post"];
         delete?: never;
@@ -1183,7 +1183,7 @@ export interface paths {
          * @description Unsubscribe the current user from an alert. The user will no longer receive email notifications for status changes or new comments on this alert.
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key` with user association.
+         *     - Requires authentication (API key or bearer token) with user association.
          */
         post: operations["unsubscribe_from_alert_api_alerts__alert_id__unsubscribe_post"];
         delete?: never;
@@ -1211,7 +1211,7 @@ export interface paths {
          *     - `start` and `end` control the character range returned in `text_content` so clients can page through large documents.
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key`. You can only access content belonging to your account.
+         *     - Requires authentication (API key or bearer token). You can only access content belonging to your account.
          */
         get: operations["get_content_detail_api_contents__source_connection_content_version__get"];
         /**
@@ -1243,7 +1243,7 @@ export interface paths {
          *     Use this to remove an uploaded or indexed item from your account. Deleting content can affect agents and knowledge base workflows that reference this item.
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key`. You can only delete content belonging to your account.
+         *     - Requires authentication (API key or bearer token). You can only delete content belonging to your account.
          */
         delete: operations["delete_content_api_contents__source_connection_content_version__delete"];
         options?: never;
@@ -1265,7 +1265,7 @@ export interface paths {
          *     Embeddings are used for semantic search and retrieval in knowledge base workflows. This endpoint is primarily useful for debugging chunking, indexing, and vector contents.
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key`. You can only access embeddings for content belonging to your account.
+         *     - Requires authentication (API key or bearer token). You can only access embeddings for content belonging to your account.
          */
         get: operations["list_content_embeddings_api_contents__source_connection_content_version__embeddings_get"];
         put?: never;
@@ -1334,7 +1334,7 @@ export interface paths {
          *     - For backwards compatibility, you can also pass form fields named `metadata_<key>` (for example `metadata_author=...`). These override keys from `metadata`.
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key`. You can only replace content belonging to your account.
+         *     - Requires authentication (API key or bearer token). You can only replace content belonging to your account.
          */
         post: operations["upload_file_to_content_api_contents__source_connection_content_version__upload_post"];
         delete?: never;
@@ -1443,7 +1443,7 @@ export interface paths {
          * @description List knowledge bases for the account.
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key`. All resources are scoped to the API key's account.
+         *     - Requires authentication (API key or bearer token). All resources are scoped to the API key's account.
          */
         get: operations["list_knowledge_bases_api_knowledge_bases_get"];
         put?: never;
@@ -1472,7 +1472,7 @@ export interface paths {
          * @description Fetch a knowledge base by ID.
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key`. You can only access knowledge bases belonging to your account.
+         *     - Requires authentication (API key or bearer token). You can only access knowledge bases belonging to your account.
          */
         get: operations["get_knowledge_base_api_knowledge_bases__knowledge_base_id__get"];
         /**
@@ -1480,7 +1480,7 @@ export interface paths {
          * @description Update a knowledge base's configuration. Only provided fields are changed; omitted fields are left unchanged.
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key`. You can only update knowledge bases belonging to your account.
+         *     - Requires authentication (API key or bearer token). You can only update knowledge bases belonging to your account.
          */
         put: operations["update_knowledge_base_api_knowledge_bases__knowledge_base_id__put"];
         post?: never;
@@ -1508,7 +1508,7 @@ export interface paths {
          * @description List memory banks for the account.
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key`. All resources are scoped to the API key's account.
+         *     - Requires authentication (API key or bearer token). All resources are scoped to the API key's account.
          */
         get: operations["list_memory_banks_api_memory_banks_get"];
         put?: never;
@@ -1645,7 +1645,7 @@ export interface paths {
          * @description Fetch a memory bank by ID.
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key`. You can only access memory banks belonging to your account.
+         *     - Requires authentication (API key or bearer token). You can only access memory banks belonging to your account.
          */
         get: operations["get_memory_bank_api_memory_banks__memory_bank_id__get"];
         /**
@@ -1788,7 +1788,7 @@ export interface paths {
          *     Returns in-app notifications about model deprecations, sunsets, and newer model availability. Supports filtering by agent, unread-only, and pagination.
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key`. Alerts are scoped to the API key's account.
+         *     - Requires authentication (API key or bearer token). Alerts are scoped to the API key's account.
          */
         get: operations["list_alerts_api_models_alerts_get"];
         put?: never;
@@ -1813,7 +1813,7 @@ export interface paths {
          * @description Mark all model lifecycle alerts as read for the account.
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key`. Scoped to the API key's account.
+         *     - Requires authentication (API key or bearer token). Scoped to the API key's account.
          */
         post: operations["mark_all_read_api_models_alerts_mark_all_read_post"];
         delete?: never;
@@ -1836,7 +1836,7 @@ export interface paths {
          *     Useful for badge indicators in UIs and dashboards.
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key`. Count is scoped to the API key's account.
+         *     - Requires authentication (API key or bearer token). Count is scoped to the API key's account.
          */
         get: operations["get_alert_unread_count_api_models_alerts_unread_count_get"];
         put?: never;
@@ -1865,7 +1865,7 @@ export interface paths {
          * @description Mark a single model lifecycle alert as read (dismissed).
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key`. The alert must belong to the API key's account.
+         *     - Requires authentication (API key or bearer token). The alert must belong to the API key's account.
          */
         patch: operations["mark_read_api_models_alerts__alert_id__read_patch"];
         trace?: never;
@@ -1884,7 +1884,7 @@ export interface paths {
          *     Returns a designated successor (if any), same-family upgrades, and cross-provider/cross-family alternatives.
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key`.
+         *     - Requires authentication (API key or bearer token).
          */
         get: operations["get_recommendations_api_models__model_id__recommendations_get"];
         put?: never;
@@ -1934,7 +1934,7 @@ export interface paths {
          *     - Filtering: `search` to filter by solution name (case-insensitive partial match).
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key`. Results are scoped to the API key's account.
+         *     - Requires authentication (API key or bearer token). Results are scoped to the API key's account.
          */
         get: operations["list_solutions_api_solutions_get"];
         put?: never;
@@ -1942,7 +1942,7 @@ export interface paths {
          * Create a solution
          * @description Create a new solution for the API key's account.
          *
-         *     A *solution* groups agents, knowledge bases, and content sources into a cohesive unit. Provide a `name` and optional `description` in the request body. Requires `X-API-Key`.
+         *     A *solution* groups agents, knowledge bases, and content sources into a cohesive unit. Provide a `name` and optional `description` in the request body. Requires authentication (API key or bearer token).
          */
         post: operations["create_solution_api_solutions_post"];
         delete?: never;
@@ -1962,7 +1962,7 @@ export interface paths {
          * Get a solution
          * @description Retrieve a solution by its ID, including all linked agents, knowledge bases, and source connections.
          *
-         *     Returns the full solution detail with nested resource information. Requires `X-API-Key`.
+         *     Returns the full solution detail with nested resource information. Requires authentication (API key or bearer token).
          */
         get: operations["get_solution_api_solutions__solution_id__get"];
         put?: never;
@@ -1971,7 +1971,7 @@ export interface paths {
          * Delete a solution
          * @description Delete a solution by its ID.
          *
-         *     This permanently removes the solution and all its resource associations (agent links, knowledge base links, source connection links). The underlying resources themselves are not deleted. Requires `X-API-Key`.
+         *     This permanently removes the solution and all its resource associations (agent links, knowledge base links, source connection links). The underlying resources themselves are not deleted. Requires authentication (API key or bearer token).
          */
         delete: operations["delete_solution_api_solutions__solution_id__delete"];
         options?: never;
@@ -1980,7 +1980,7 @@ export interface paths {
          * Update a solution
          * @description Update an existing solution's name or description.
          *
-         *     Pass the fields you wish to change in the request body. Fields not included remain unchanged. Requires `X-API-Key`.
+         *     Pass the fields you wish to change in the request body. Fields not included remain unchanged. Requires authentication (API key or bearer token).
          */
         patch: operations["update_solution_api_solutions__solution_id__patch"];
         trace?: never;
@@ -1998,14 +1998,14 @@ export interface paths {
          * Link agents
          * @description Link one or more agents to a solution by their IDs.
          *
-         *     Pass a JSON body with an `ids` array of agent UUIDs. Already-linked agents are silently ignored. Returns the updated solution with all linked resources. Requires `X-API-Key`.
+         *     Pass a JSON body with an `ids` array of agent UUIDs. Already-linked agents are silently ignored. Returns the updated solution with all linked resources. Requires authentication (API key or bearer token).
          */
         post: operations["link_agents_api_solutions__solution_id__agents_post"];
         /**
          * Unlink agents
          * @description Unlink one or more agents from a solution by their IDs.
          *
-         *     Pass a JSON body with an `ids` array of agent UUIDs to remove. Agents not currently linked are silently ignored. Returns the updated solution with remaining linked resources. Requires `X-API-Key`.
+         *     Pass a JSON body with an `ids` array of agent UUIDs to remove. Agents not currently linked are silently ignored. Returns the updated solution with remaining linked resources. Requires authentication (API key or bearer token).
          */
         delete: operations["unlink_agents_api_solutions__solution_id__agents_delete"];
         options?: never;
@@ -2026,7 +2026,7 @@ export interface paths {
          * Generate solution plan
          * @description Generate a comprehensive solution management plan via the solution AI assistant.
          *
-         *     This is the most powerful assistant — it can propose changes across sources, knowledge bases, and agents. Describe your goal in natural language and the assistant will create a multi-step plan. Review the proposed actions and use the accept or decline endpoint. Requires `X-API-Key`.
+         *     This is the most powerful assistant — it can propose changes across sources, knowledge bases, and agents. Describe your goal in natural language and the assistant will create a multi-step plan. Review the proposed actions and use the accept or decline endpoint. Requires authentication (API key or bearer token).
          *
          *     Supports SSE streaming when `Accept: text/event-stream` is set.
          */
@@ -2050,7 +2050,7 @@ export interface paths {
          * Generate knowledge base plan
          * @description Generate a knowledge base plan via the KB AI assistant.
          *
-         *     Describe what knowledge bases you need in natural language and the assistant will propose a plan with create, update, or delete actions. The assistant may also propose creating new sources if needed. Review the proposed actions and use the accept or decline endpoint. Requires `X-API-Key`.
+         *     Describe what knowledge bases you need in natural language and the assistant will propose a plan with create, update, or delete actions. The assistant may also propose creating new sources if needed. Review the proposed actions and use the accept or decline endpoint. Requires authentication (API key or bearer token).
          */
         post: operations["ai_assistant_knowledge_base_api_solutions__solution_id__ai_assistant_knowledge_base_post"];
         delete?: never;
@@ -2072,7 +2072,7 @@ export interface paths {
          * Generate source plan
          * @description Generate a content source plan via the source AI assistant.
          *
-         *     Describe what sources you need in natural language and the assistant will propose a plan with create, update, or delete actions. Review the proposed actions and use the accept or decline endpoint to execute or discard the plan. Requires `X-API-Key`.
+         *     Describe what sources you need in natural language and the assistant will propose a plan with create, update, or delete actions. Review the proposed actions and use the accept or decline endpoint to execute or discard the plan. Requires authentication (API key or bearer token).
          */
         post: operations["ai_assistant_source_api_solutions__solution_id__ai_assistant_source_post"];
         delete?: never;
@@ -2094,7 +2094,7 @@ export interface paths {
          * Accept plan
          * @description Accept and execute a proposed plan generated by one of the AI assistant endpoints.
          *
-         *     Executes all proposed actions in the plan and returns the results of each action. If the plan contains destructive actions (e.g. deletions), you must set `confirm_deletions` to `true` in the request body. Returns a summary of executed actions with success/failure status. Requires `X-API-Key`.
+         *     Executes all proposed actions in the plan and returns the results of each action. If the plan contains destructive actions (e.g. deletions), you must set `confirm_deletions` to `true` in the request body. Returns a summary of executed actions with success/failure status. Requires authentication (API key or bearer token).
          */
         post: operations["ai_assistant_accept_api_solutions__solution_id__ai_assistant__conversation_id__accept_post"];
         delete?: never;
@@ -2116,7 +2116,7 @@ export interface paths {
          * Decline plan
          * @description Decline a proposed plan generated by one of the AI assistant endpoints.
          *
-         *     Marks the conversation as declined without executing any actions. The conversation history is preserved for reference. You can generate a new plan afterwards if needed. Requires `X-API-Key`.
+         *     Marks the conversation as declined without executing any actions. The conversation history is preserved for reference. You can generate a new plan afterwards if needed. Requires authentication (API key or bearer token).
          */
         post: operations["ai_assistant_decline_api_solutions__solution_id__ai_assistant__conversation_id__decline_post"];
         delete?: never;
@@ -2136,7 +2136,7 @@ export interface paths {
          * List conversations
          * @description List AI assistant conversation history for a solution.
          *
-         *     Returns all conversation turns for the given solution, including user inputs, AI responses, proposed actions, and acceptance status. Requires `X-API-Key`.
+         *     Returns all conversation turns for the given solution, including user inputs, AI responses, proposed actions, and acceptance status. Requires authentication (API key or bearer token).
          */
         get: operations["list_conversations_api_solutions__solution_id__conversations_get"];
         put?: never;
@@ -2144,7 +2144,7 @@ export interface paths {
          * Add conversation turn
          * @description Add a conversation turn to a solution's AI assistant history.
          *
-         *     Records a user input and optional AI response and actions taken. This is typically called internally by AI assistant endpoints, but can also be used to manually log interactions. Requires `X-API-Key`.
+         *     Records a user input and optional AI response and actions taken. This is typically called internally by AI assistant endpoints, but can also be used to manually log interactions. Requires authentication (API key or bearer token).
          */
         post: operations["add_conversation_turn_api_solutions__solution_id__conversations_post"];
         delete?: never;
@@ -2170,7 +2170,7 @@ export interface paths {
          * Mark conversation turn
          * @description Mark a conversation turn as accepted or declined.
          *
-         *     Updates the `accepted` field on an existing conversation turn. Use this after reviewing a proposed plan to record whether it was accepted or declined by the user. Requires `X-API-Key`.
+         *     Updates the `accepted` field on an existing conversation turn. Use this after reviewing a proposed plan to record whether it was accepted or declined by the user. Requires authentication (API key or bearer token).
          */
         patch: operations["mark_conversation_turn_api_solutions__solution_id__conversations__conversation_id__patch"];
         trace?: never;
@@ -2188,14 +2188,14 @@ export interface paths {
          * Link knowledge bases
          * @description Link one or more knowledge bases to a solution by their IDs.
          *
-         *     Pass a JSON body with an `ids` array of knowledge base UUIDs. Already-linked knowledge bases are silently ignored. Returns the updated solution with all linked resources. Requires `X-API-Key`.
+         *     Pass a JSON body with an `ids` array of knowledge base UUIDs. Already-linked knowledge bases are silently ignored. Returns the updated solution with all linked resources. Requires authentication (API key or bearer token).
          */
         post: operations["link_knowledge_bases_api_solutions__solution_id__knowledge_bases_post"];
         /**
          * Unlink knowledge bases
          * @description Unlink one or more knowledge bases from a solution by their IDs.
          *
-         *     Pass a JSON body with an `ids` array of knowledge base UUIDs to remove. Knowledge bases not currently linked are silently ignored. Returns the updated solution. Requires `X-API-Key`.
+         *     Pass a JSON body with an `ids` array of knowledge base UUIDs to remove. Knowledge bases not currently linked are silently ignored. Returns the updated solution. Requires authentication (API key or bearer token).
          */
         delete: operations["unlink_knowledge_bases_api_solutions__solution_id__knowledge_bases_delete"];
         options?: never;
@@ -2216,14 +2216,14 @@ export interface paths {
          * Link source connections
          * @description Link one or more source connections to a solution by their IDs.
          *
-         *     Pass a JSON body with an `ids` array of source connection UUIDs. Already-linked sources are silently ignored. Returns the updated solution with all linked resources. Requires `X-API-Key`.
+         *     Pass a JSON body with an `ids` array of source connection UUIDs. Already-linked sources are silently ignored. Returns the updated solution with all linked resources. Requires authentication (API key or bearer token).
          */
         post: operations["link_source_connections_api_solutions__solution_id__source_connections_post"];
         /**
          * Unlink source connections
          * @description Unlink one or more source connections from a solution by their IDs.
          *
-         *     Pass a JSON body with an `ids` array of source connection UUIDs to remove. Sources not currently linked are silently ignored. Returns the updated solution. Requires `X-API-Key`.
+         *     Pass a JSON body with an `ids` array of source connection UUIDs to remove. Sources not currently linked are silently ignored. Returns the updated solution. Requires authentication (API key or bearer token).
          */
         delete: operations["unlink_source_connections_api_solutions__solution_id__source_connections_delete"];
         options?: never;
@@ -2273,7 +2273,7 @@ export interface paths {
          *     - Sorting: `sort` (created_at/updated_at/name) and `order` (asc/desc).
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key`. Results are scoped to the API key's account.
+         *     - Requires authentication (API key or bearer token). Results are scoped to the API key's account.
          *     - The optional `account_id` query param is only allowed when it matches the API key's account.
          */
         get: operations["list_sources_api_sources__get"];
@@ -2297,7 +2297,7 @@ export interface paths {
          * @description Fetch a content source by ID.
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key`. You can only access sources belonging to your account.
+         *     - Requires authentication (API key or bearer token). You can only access sources belonging to your account.
          */
         get: operations["get_source_api_sources__source_connection_id__get"];
         /**
@@ -2935,6 +2935,39 @@ export interface components {
             total: number;
         };
         /**
+         * AiAssistantAcceptResponse
+         * @description Response from accepting and executing a plan.
+         */
+        AiAssistantAcceptResponse: {
+            /**
+             * Conversation Id
+             * Format: uuid
+             * @description Conversation ID.
+             */
+            conversation_id: string;
+            /**
+             * Error
+             * @description Error message if failed.
+             */
+            error?: string | null;
+            /**
+             * Executed Actions
+             * @description Results of each executed action.
+             */
+            executed_actions: components["schemas"]["ExecutedActionResponse"][];
+            /**
+             * Solution Id
+             * @description Solution ID when a new solution was auto-created.
+             */
+            solution_id?: string | null;
+            /**
+             * Success
+             * @description Whether execution succeeded.
+             * @default true
+             */
+            success: boolean;
+        };
+        /**
          * AiAssistantFeedbackResponse
          * @description Response after submitting feedback.
          */
@@ -2959,6 +2992,45 @@ export interface components {
              * @description User input describing what to do
              */
             user_input: string;
+        };
+        /**
+         * AiAssistantGenerateResponse
+         * @description Response from an AI assistant generate endpoint.
+         */
+        AiAssistantGenerateResponse: {
+            /**
+             * Conversation Id
+             * Format: uuid
+             * @description Conversation ID for accept/decline.
+             */
+            conversation_id: string;
+            /**
+             * Example Prompts
+             * @description Example natural-language prompts that demonstrate the capabilities of this AI assistant.
+             */
+            example_prompts?: components["schemas"]["ExamplePrompt"][];
+            /**
+             * Note
+             * @description AI-generated note about the plan.
+             */
+            note: string;
+            /**
+             * Proposed Actions
+             * @description List of proposed actions.
+             */
+            proposed_actions: components["schemas"]["ProposedActionResponse"][];
+            /**
+             * Requires Delete Confirmation
+             * @description Whether destructive actions require explicit confirmation.
+             * @default false
+             */
+            requires_delete_confirmation: boolean;
+            /**
+             * Success
+             * @description Whether plan generation succeeded.
+             * @default false
+             */
+            success: boolean;
         };
         /** AiConversationHistoryResponse */
         AiConversationHistoryResponse: {
@@ -3012,6 +3084,37 @@ export interface components {
              * @description User input for this turn.
              */
             user_input: string;
+        };
+        /**
+         * AppliedActionResponse
+         * @description Result of a single executed governance action.
+         */
+        AppliedActionResponse: {
+            /**
+             * Action Type
+             * @description Type of action that was executed.
+             */
+            action_type: string;
+            /**
+             * Description
+             * @description Human-readable description of the executed action.
+             */
+            description: string;
+            /**
+             * Error
+             * @description Error message if this action failed, or null.
+             */
+            error?: string | null;
+            /**
+             * Policy Id
+             * @description ID of the policy that was created or modified, or null.
+             */
+            policy_id?: string | null;
+            /**
+             * Success
+             * @description Whether this individual action succeeded.
+             */
+            success: boolean;
         };
         /** Body_upload_file_to_content_api_contents__source_connection_content_version__upload_post */
         Body_upload_file_to_content_api_contents__source_connection_content_version__upload_post: {
@@ -3754,6 +3857,43 @@ export interface components {
             [key: string]: string;
         };
         /**
+         * ExecutedActionResponse
+         * @description A single executed action result.
+         */
+        ExecutedActionResponse: {
+            /**
+             * Action Type
+             * @description Type of the executed action.
+             */
+            action_type: string;
+            /**
+             * Description
+             * @description Human-readable description.
+             */
+            description: string;
+            /**
+             * Error
+             * @description Error message if failed.
+             */
+            error?: string | null;
+            /**
+             * Resource Id
+             * @description ID of the affected resource.
+             */
+            resource_id?: string | null;
+            /**
+             * Resource Type
+             * @description Type of the affected resource.
+             */
+            resource_type?: string | null;
+            /**
+             * Success
+             * @description Whether the action succeeded.
+             * @default true
+             */
+            success: boolean;
+        };
+        /**
          * ExportFormat
          * @description Supported export file formats.
          * @enum {string}
@@ -3900,6 +4040,68 @@ export interface components {
             /**
              * Success
              * @description Whether a valid configuration was generated.
+             */
+            success: boolean;
+        };
+        /**
+         * GovernanceAiAcceptResponse
+         * @description Response from accepting a governance AI assistant plan.
+         */
+        GovernanceAiAcceptResponse: {
+            /**
+             * Actions Applied
+             * @description Results of each action that was executed.
+             */
+            actions_applied: components["schemas"]["AppliedActionResponse"][];
+            /**
+             * Conversation Id
+             * @description Conversation ID that was accepted.
+             */
+            conversation_id: string;
+            /**
+             * Error
+             * @description Overall error message if the plan failed, or null.
+             */
+            error?: string | null;
+            /**
+             * Success
+             * @description Whether all actions were applied successfully.
+             */
+            success: boolean;
+        };
+        /**
+         * GovernanceAiAssistantResponse
+         * @description Response from the governance AI assistant generate endpoint.
+         */
+        GovernanceAiAssistantResponse: {
+            /**
+             * Conversation Id
+             * @description Conversation ID to accept or decline this plan.
+             */
+            conversation_id: string;
+            /**
+             * Example Prompts
+             * @description Example natural-language prompts that demonstrate the capabilities of the governance AI assistant.
+             */
+            example_prompts?: components["schemas"]["ExamplePrompt"][];
+            /**
+             * Note
+             * @description AI-generated summary of the proposed changes.
+             */
+            note: string;
+            /**
+             * Prompt Call Id
+             * @description Prompt call ID for credit tracking, or null.
+             */
+            prompt_call_id?: string | null;
+            /**
+             * Proposed Actions
+             * @description Ordered list of policy actions the AI proposes to execute.
+             */
+            proposed_actions: components["schemas"]["ProposedPolicyActionResponse"][];
+            /**
+             * Success
+             * @description Whether the plan was generated successfully.
              */
             success: boolean;
         };
@@ -4080,6 +4282,91 @@ export interface components {
             accepted: boolean;
         };
         /**
+         * MemoryBankAiAssistantResponse
+         * @description Response from the memory bank AI assistant.
+         */
+        MemoryBankAiAssistantResponse: {
+            /** @description Proposed configuration, or null. */
+            config?: components["schemas"]["MemoryBankConfigResponse"] | null;
+            /**
+             * Conversation Id
+             * @description Conversation ID for follow-up.
+             */
+            conversation_id: string;
+            /**
+             * Example Prompts
+             * @description Example natural-language prompts that demonstrate the capabilities of the memory bank AI assistant.
+             */
+            example_prompts?: components["schemas"]["ExamplePrompt"][];
+            /**
+             * Note
+             * @description AI-generated explanation.
+             */
+            note: string;
+            /**
+             * Prompt Call Id
+             * @description Prompt call ID for credit tracking.
+             */
+            prompt_call_id?: string | null;
+            /**
+             * Success
+             * @description Whether generation succeeded.
+             * @default false
+             */
+            success: boolean;
+        };
+        /**
+         * MemoryBankConfigResponse
+         * @description Suggested memory bank configuration from the AI assistant.
+         */
+        MemoryBankConfigResponse: {
+            /**
+             * Compaction Prompt
+             * @description Suggested compaction prompt.
+             */
+            compaction_prompt?: string | null;
+            /**
+             * Description
+             * @description Suggested description.
+             */
+            description?: string | null;
+            /**
+             * Max Age Days
+             * @description Max age in days.
+             */
+            max_age_days?: number | null;
+            /**
+             * Max Size Tokens
+             * @description Max size in tokens.
+             */
+            max_size_tokens?: number | null;
+            /**
+             * Max Turns
+             * @description Max conversation turns.
+             */
+            max_turns?: number | null;
+            /**
+             * Mode
+             * @description Memory bank mode.
+             */
+            mode: string;
+            /**
+             * Name
+             * @description Suggested name.
+             */
+            name: string;
+            /**
+             * Retention Days
+             * @description Retention in days.
+             */
+            retention_days?: number | null;
+            /**
+             * Type
+             * @description Memory bank type: conversation or general.
+             */
+            type: string;
+        };
+        /**
          * MemoryBankListResponseModel
          * @description Paginated list of memory banks.
          */
@@ -4231,6 +4518,58 @@ export interface components {
          * @enum {string}
          */
         PromptModelAutoUpgradeStrategy: "none" | "early_adopter" | "middle_of_road" | "cautious_adopter";
+        /**
+         * ProposedActionResponse
+         * @description A single proposed action.
+         */
+        ProposedActionResponse: {
+            /**
+             * Action Type
+             * @description Type of the proposed action.
+             */
+            action_type: string;
+            /**
+             * Description
+             * @description Human-readable description of the action.
+             */
+            description: string;
+            /**
+             * Is Destructive
+             * @description Whether the action is destructive.
+             * @default false
+             */
+            is_destructive: boolean;
+            /**
+             * Params
+             * @description Parameters for the action.
+             */
+            params: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * ProposedPolicyActionResponse
+         * @description A single proposed governance policy action.
+         */
+        ProposedPolicyActionResponse: {
+            /**
+             * Action Type
+             * @description Type of action: create, update, delete, enable, or disable.
+             */
+            action_type: string;
+            /**
+             * Description
+             * @description Human-readable description of what this action will do.
+             */
+            description: string;
+            /**
+             * Params
+             * @description Parameters for the action (e.g. policy_document_id, thresholds).
+             */
+            params: {
+                [key: string]: unknown;
+            };
+        };
         /** SolutionSourceConnectionResponse */
         SolutionSourceConnectionResponse: {
             /**
@@ -5298,63 +5637,6 @@ export interface components {
             status: string;
         };
         /**
-         * AppliedActionResponse
-         * @description Result of a single executed governance action.
-         */
-        routers__api__governance__AppliedActionResponse: {
-            /**
-             * Action Type
-             * @description Type of action that was executed.
-             */
-            action_type: string;
-            /**
-             * Description
-             * @description Human-readable description of the executed action.
-             */
-            description: string;
-            /**
-             * Error
-             * @description Error message if this action failed, or null.
-             */
-            error?: string | null;
-            /**
-             * Policy Id
-             * @description ID of the policy that was created or modified, or null.
-             */
-            policy_id?: string | null;
-            /**
-             * Success
-             * @description Whether this individual action succeeded.
-             */
-            success: boolean;
-        };
-        /**
-         * GovernanceAiAcceptResponse
-         * @description Response from accepting a governance AI assistant plan.
-         */
-        routers__api__governance__GovernanceAiAcceptResponse: {
-            /**
-             * Actions Applied
-             * @description Results of each action that was executed.
-             */
-            actions_applied: components["schemas"]["routers__api__governance__AppliedActionResponse"][];
-            /**
-             * Conversation Id
-             * @description Conversation ID that was accepted.
-             */
-            conversation_id: string;
-            /**
-             * Error
-             * @description Overall error message if the plan failed, or null.
-             */
-            error?: string | null;
-            /**
-             * Success
-             * @description Whether all actions were applied successfully.
-             */
-            success: boolean;
-        };
-        /**
          * GovernanceAiAssistantRequest
          * @description Request body for the governance AI assistant.
          */
@@ -5364,42 +5646,6 @@ export interface components {
              * @description Natural-language request for the governance AI assistant.
              */
             user_input: string;
-        };
-        /**
-         * GovernanceAiAssistantResponse
-         * @description Response from the governance AI assistant generate endpoint.
-         */
-        routers__api__governance__GovernanceAiAssistantResponse: {
-            /**
-             * Conversation Id
-             * @description Conversation ID to accept or decline this plan.
-             */
-            conversation_id: string;
-            /**
-             * Example Prompts
-             * @description Example natural-language prompts that demonstrate the capabilities of the governance AI assistant.
-             */
-            example_prompts?: components["schemas"]["ExamplePrompt"][];
-            /**
-             * Note
-             * @description AI-generated summary of the proposed changes.
-             */
-            note: string;
-            /**
-             * Prompt Call Id
-             * @description Prompt call ID for credit tracking, or null.
-             */
-            prompt_call_id?: string | null;
-            /**
-             * Proposed Actions
-             * @description Ordered list of policy actions the AI proposes to execute.
-             */
-            proposed_actions: components["schemas"]["routers__api__governance__ProposedPolicyActionResponse"][];
-            /**
-             * Success
-             * @description Whether the plan was generated successfully.
-             */
-            success: boolean;
         };
         /**
          * GovernanceConversationResponse
@@ -5440,29 +5686,6 @@ export interface components {
             user_input: string;
         };
         /**
-         * ProposedPolicyActionResponse
-         * @description A single proposed governance policy action.
-         */
-        routers__api__governance__ProposedPolicyActionResponse: {
-            /**
-             * Action Type
-             * @description Type of action: create, update, delete, enable, or disable.
-             */
-            action_type: string;
-            /**
-             * Description
-             * @description Human-readable description of what this action will do.
-             */
-            description: string;
-            /**
-             * Params
-             * @description Parameters for the action (e.g. policy_document_id, thresholds).
-             */
-            params: {
-                [key: string]: unknown;
-            };
-        };
-        /**
          * MemoryBankAcceptRequest
          * @description Accept or decline a memory bank AI suggestion.
          */
@@ -5495,91 +5718,6 @@ export interface components {
              * @description Natural-language description of the memory bank.
              */
             user_input: string;
-        };
-        /**
-         * MemoryBankAiAssistantResponse
-         * @description Response from the memory bank AI assistant.
-         */
-        routers__api__memory_banks__MemoryBankAiAssistantResponse: {
-            /** @description Proposed configuration, or null. */
-            config?: components["schemas"]["routers__api__memory_banks__MemoryBankConfigResponse"] | null;
-            /**
-             * Conversation Id
-             * @description Conversation ID for follow-up.
-             */
-            conversation_id: string;
-            /**
-             * Example Prompts
-             * @description Example natural-language prompts that demonstrate the capabilities of the memory bank AI assistant.
-             */
-            example_prompts?: components["schemas"]["ExamplePrompt"][];
-            /**
-             * Note
-             * @description AI-generated explanation.
-             */
-            note: string;
-            /**
-             * Prompt Call Id
-             * @description Prompt call ID for credit tracking.
-             */
-            prompt_call_id?: string | null;
-            /**
-             * Success
-             * @description Whether generation succeeded.
-             * @default false
-             */
-            success: boolean;
-        };
-        /**
-         * MemoryBankConfigResponse
-         * @description Suggested memory bank configuration from the AI assistant.
-         */
-        routers__api__memory_banks__MemoryBankConfigResponse: {
-            /**
-             * Compaction Prompt
-             * @description Suggested compaction prompt.
-             */
-            compaction_prompt?: string | null;
-            /**
-             * Description
-             * @description Suggested description.
-             */
-            description?: string | null;
-            /**
-             * Max Age Days
-             * @description Max age in days.
-             */
-            max_age_days?: number | null;
-            /**
-             * Max Size Tokens
-             * @description Max size in tokens.
-             */
-            max_size_tokens?: number | null;
-            /**
-             * Max Turns
-             * @description Max conversation turns.
-             */
-            max_turns?: number | null;
-            /**
-             * Mode
-             * @description Memory bank mode.
-             */
-            mode: string;
-            /**
-             * Name
-             * @description Suggested name.
-             */
-            name: string;
-            /**
-             * Retention Days
-             * @description Retention in days.
-             */
-            retention_days?: number | null;
-            /**
-             * Type
-             * @description Memory bank type: conversation or general.
-             */
-            type: string;
         };
         /**
          * MemoryBankConversationTurnResponse
@@ -5667,144 +5805,6 @@ export interface components {
              * @description When running in standalone mode (no pre-existing solution), provide a name to auto-create a solution and link resources.
              */
             solution_name?: string | null;
-        };
-        /**
-         * AiAssistantAcceptResponse
-         * @description Response from accepting and executing a plan.
-         */
-        routers__api__solutions__AiAssistantAcceptResponse: {
-            /**
-             * Conversation Id
-             * Format: uuid
-             * @description Conversation ID.
-             */
-            conversation_id: string;
-            /**
-             * Error
-             * @description Error message if failed.
-             */
-            error?: string | null;
-            /**
-             * Executed Actions
-             * @description Results of each executed action.
-             */
-            executed_actions: components["schemas"]["routers__api__solutions__ExecutedActionResponse"][];
-            /**
-             * Solution Id
-             * @description Solution ID when a new solution was auto-created.
-             */
-            solution_id?: string | null;
-            /**
-             * Success
-             * @description Whether execution succeeded.
-             * @default true
-             */
-            success: boolean;
-        };
-        /**
-         * AiAssistantGenerateResponse
-         * @description Response from an AI assistant generate endpoint.
-         */
-        routers__api__solutions__AiAssistantGenerateResponse: {
-            /**
-             * Conversation Id
-             * Format: uuid
-             * @description Conversation ID for accept/decline.
-             */
-            conversation_id: string;
-            /**
-             * Example Prompts
-             * @description Example natural-language prompts that demonstrate the capabilities of this AI assistant.
-             */
-            example_prompts?: components["schemas"]["ExamplePrompt"][];
-            /**
-             * Note
-             * @description AI-generated note about the plan.
-             */
-            note: string;
-            /**
-             * Proposed Actions
-             * @description List of proposed actions.
-             */
-            proposed_actions: components["schemas"]["routers__api__solutions__ProposedActionResponse"][];
-            /**
-             * Requires Delete Confirmation
-             * @description Whether destructive actions require explicit confirmation.
-             * @default false
-             */
-            requires_delete_confirmation: boolean;
-            /**
-             * Success
-             * @description Whether plan generation succeeded.
-             * @default false
-             */
-            success: boolean;
-        };
-        /**
-         * ExecutedActionResponse
-         * @description A single executed action result.
-         */
-        routers__api__solutions__ExecutedActionResponse: {
-            /**
-             * Action Type
-             * @description Type of the executed action.
-             */
-            action_type: string;
-            /**
-             * Description
-             * @description Human-readable description.
-             */
-            description: string;
-            /**
-             * Error
-             * @description Error message if failed.
-             */
-            error?: string | null;
-            /**
-             * Resource Id
-             * @description ID of the affected resource.
-             */
-            resource_id?: string | null;
-            /**
-             * Resource Type
-             * @description Type of the affected resource.
-             */
-            resource_type?: string | null;
-            /**
-             * Success
-             * @description Whether the action succeeded.
-             * @default true
-             */
-            success: boolean;
-        };
-        /**
-         * ProposedActionResponse
-         * @description A single proposed action.
-         */
-        routers__api__solutions__ProposedActionResponse: {
-            /**
-             * Action Type
-             * @description Type of the proposed action.
-             */
-            action_type: string;
-            /**
-             * Description
-             * @description Human-readable description of the action.
-             */
-            description: string;
-            /**
-             * Is Destructive
-             * @description Whether the action is destructive.
-             * @default false
-             */
-            is_destructive: boolean;
-            /**
-             * Params
-             * @description Parameters for the action.
-             */
-            params: {
-                [key: string]: unknown;
-            };
         };
         /** SolutionAgentResponse */
         routers__api__solutions__SolutionAgentResponse: {
@@ -6212,7 +6212,10 @@ export interface components {
         };
     };
     responses: never;
-    parameters: never;
+    parameters: {
+        /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+        "X-Account-Id": string;
+    };
     requestBodies: never;
     headers: never;
     pathItems: never;
@@ -6227,7 +6230,10 @@ export interface operations {
                 /** @description Items per page */
                 limit?: number;
             };
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -6256,7 +6262,10 @@ export interface operations {
     create_agent_api_agents_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -6296,7 +6305,10 @@ export interface operations {
     get_evaluation_criteria_api_agents_evaluation_criteria__criteria_id__get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 criteria_id: string;
             };
@@ -6327,7 +6339,10 @@ export interface operations {
     delete_evaluation_criteria_api_agents_evaluation_criteria__criteria_id__delete: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 criteria_id: string;
             };
@@ -6356,7 +6371,10 @@ export interface operations {
     update_evaluation_criteria_api_agents_evaluation_criteria__criteria_id__patch: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 criteria_id: string;
             };
@@ -6395,7 +6413,10 @@ export interface operations {
                 limit?: number;
                 started_after?: string | null;
             };
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 criteria_id: string;
             };
@@ -6433,7 +6454,10 @@ export interface operations {
                 page?: number;
                 limit?: number;
             };
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 criteria_id: string;
             };
@@ -6464,7 +6488,10 @@ export interface operations {
     create_evaluation_result_api_agents_evaluation_criteria__criteria_id__results_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 criteria_id: string;
             };
@@ -6499,7 +6526,10 @@ export interface operations {
     get_evaluation_summary_api_agents_evaluation_criteria__criteria_id__summary_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 criteria_id: string;
             };
@@ -6534,7 +6564,10 @@ export interface operations {
                 start_date?: string | null;
                 end_date?: string | null;
             };
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -6563,7 +6596,10 @@ export interface operations {
     search_agent_runs_api_agents_runs_search_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -6599,7 +6635,10 @@ export interface operations {
                 /** @description If true, include per-step outputs with timing, durations, and credits. */
                 include_step_outputs?: boolean;
             };
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 run_id: string;
             };
@@ -6630,7 +6669,10 @@ export interface operations {
     delete_agent_run_api_agents_runs__run_id__delete: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 run_id: string;
             };
@@ -6661,7 +6703,10 @@ export interface operations {
     get_agent_metadata_api_agents__agent_id__get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 agent_id: string;
             };
@@ -6692,7 +6737,10 @@ export interface operations {
     update_agent_api_agents__agent_id__put: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 agent_id: string;
             };
@@ -6727,7 +6775,10 @@ export interface operations {
     delete_agent_api_agents__agent_id__delete: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 agent_id: string;
             };
@@ -6765,7 +6816,10 @@ export interface operations {
                 /** @description Number of recent turns to skip. */
                 offset?: number;
             };
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 agent_id: string;
             };
@@ -6796,7 +6850,10 @@ export interface operations {
     generate_agent_steps_api_agents__agent_id__ai_assistant_generate_steps_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 agent_id: string;
             };
@@ -6831,7 +6888,10 @@ export interface operations {
     generate_step_config_api_agents__agent_id__ai_assistant_step_config_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 agent_id: string;
             };
@@ -6866,7 +6926,10 @@ export interface operations {
     mark_ai_suggestion_api_agents__agent_id__ai_assistant__conversation_id__patch: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 agent_id: string;
                 conversation_id: string;
@@ -6904,7 +6967,10 @@ export interface operations {
     get_agent_definition_api_agents__agent_id__definition_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 agent_id: string;
             };
@@ -6935,7 +7001,10 @@ export interface operations {
     update_agent_definition_api_agents__agent_id__definition_put: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 agent_id: string;
             };
@@ -6970,7 +7039,10 @@ export interface operations {
     list_evaluation_criteria_api_agents__agent_id__evaluation_criteria_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 agent_id: string;
             };
@@ -7001,7 +7073,10 @@ export interface operations {
     create_evaluation_criteria_api_agents__agent_id__evaluation_criteria_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 agent_id: string;
             };
@@ -7036,7 +7111,10 @@ export interface operations {
     test_draft_evaluation_api_agents__agent_id__evaluation_criteria_test_draft_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 agent_id: string;
             };
@@ -7079,7 +7157,10 @@ export interface operations {
                 page?: number;
                 limit?: number;
             };
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 agent_id: string;
             };
@@ -7117,7 +7198,10 @@ export interface operations {
                 page?: number;
                 limit?: number;
             };
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 agent_id: string;
             };
@@ -7148,7 +7232,10 @@ export interface operations {
     api_get_agent_input_upload_status_api_agents__agent_id__input_uploads__upload_id__get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 agent_id: string;
                 upload_id: string;
@@ -7187,7 +7274,10 @@ export interface operations {
                 /** @description Filter runs by status */
                 status?: components["schemas"]["PendingProcessingCompletedFailedStatus"] | null;
             };
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 agent_id: string;
             };
@@ -7218,7 +7308,10 @@ export interface operations {
     run_agent_api_agents__agent_id__runs_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 agent_id: string;
             };
@@ -7253,7 +7346,10 @@ export interface operations {
     run_streaming_agent_api_agents__agent_id__runs_stream_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 agent_id: string;
             };
@@ -7306,7 +7402,10 @@ export interface operations {
     list_run_evaluation_results_api_agents__agent_id__runs__run_id__evaluation_results_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 agent_id: string;
                 run_id: string;
@@ -7338,7 +7437,10 @@ export interface operations {
     api_upload_agent_input_api_agents__agent_id__upload_input_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 agent_id: string;
             };
@@ -7369,7 +7471,10 @@ export interface operations {
     api_ai_feedback_api_ai_assistant_feedback_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -7402,7 +7507,10 @@ export interface operations {
     api_ai_knowledge_base_api_ai_assistant_knowledge_base_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -7418,7 +7526,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["routers__api__solutions__AiAssistantGenerateResponse"];
+                    "application/json": components["schemas"]["AiAssistantGenerateResponse"];
                 };
             };
             /** @description Validation Error */
@@ -7435,7 +7543,10 @@ export interface operations {
     api_ai_memory_bank_api_ai_assistant_memory_bank_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -7451,7 +7562,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["routers__api__memory_banks__MemoryBankAiAssistantResponse"];
+                    "application/json": components["schemas"]["MemoryBankAiAssistantResponse"];
                 };
             };
             /** @description Validation Error */
@@ -7473,7 +7584,10 @@ export interface operations {
                 /** @description Skip count. */
                 offset?: number;
             };
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -7502,7 +7616,10 @@ export interface operations {
     api_ai_memory_bank_accept_api_ai_assistant_memory_bank__conversation_id__patch: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 conversation_id: string;
             };
@@ -7539,7 +7656,10 @@ export interface operations {
     api_ai_solution_api_ai_assistant_solution_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -7555,7 +7675,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["routers__api__solutions__AiAssistantGenerateResponse"];
+                    "application/json": components["schemas"]["AiAssistantGenerateResponse"];
                 };
             };
             /** @description Validation Error */
@@ -7572,7 +7692,10 @@ export interface operations {
     api_ai_source_api_ai_assistant_source_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -7588,7 +7711,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["routers__api__solutions__AiAssistantGenerateResponse"];
+                    "application/json": components["schemas"]["AiAssistantGenerateResponse"];
                 };
             };
             /** @description Validation Error */
@@ -7605,7 +7728,10 @@ export interface operations {
     api_ai_accept_api_ai_assistant__conversation_id__accept_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 conversation_id: string;
             };
@@ -7623,7 +7749,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["routers__api__solutions__AiAssistantAcceptResponse"];
+                    "application/json": components["schemas"]["AiAssistantAcceptResponse"];
                 };
             };
             /** @description Validation Error */
@@ -7640,7 +7766,10 @@ export interface operations {
     api_ai_decline_api_ai_assistant__conversation_id__decline_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 conversation_id: string;
             };
@@ -7684,7 +7813,10 @@ export interface operations {
                 /** @description To (ISO 8601) */
                 time_to?: string | null;
             };
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -7722,7 +7854,10 @@ export interface operations {
                 /** @description Set to 'source' to list account-level source alert configs */
                 scope?: string | null;
             };
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -7753,7 +7888,10 @@ export interface operations {
     create_alert_config_api_alerts_configs_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -7788,7 +7926,10 @@ export interface operations {
     get_alert_config_api_alerts_configs__config_id__get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 config_id: string;
             };
@@ -7821,7 +7962,10 @@ export interface operations {
     delete_alert_config_api_alerts_configs__config_id__delete: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 config_id: string;
             };
@@ -7850,7 +7994,10 @@ export interface operations {
     update_alert_config_api_alerts_configs__config_id__patch: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 config_id: string;
             };
@@ -7892,7 +8039,10 @@ export interface operations {
                 /** @description Include default subscribed entries for all alert types */
                 include_defaults?: boolean;
             };
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -7921,7 +8071,10 @@ export interface operations {
     update_organization_preference_api_alerts_organization_preferences__organization_id___alert_type__patch: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 organization_id: string;
                 alert_type: string;
@@ -7957,7 +8110,10 @@ export interface operations {
     get_alert_detail_api_alerts__alert_id__get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 alert_id: string;
             };
@@ -7990,7 +8146,10 @@ export interface operations {
     add_alert_comment_api_alerts__alert_id__comments_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 alert_id: string;
             };
@@ -8027,7 +8186,10 @@ export interface operations {
     change_alert_status_api_alerts__alert_id__status_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 alert_id: string;
             };
@@ -8064,7 +8226,10 @@ export interface operations {
     subscribe_to_alert_api_alerts__alert_id__subscribe_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 alert_id: string;
             };
@@ -8097,7 +8262,10 @@ export interface operations {
     unsubscribe_from_alert_api_alerts__alert_id__unsubscribe_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 alert_id: string;
             };
@@ -8133,7 +8301,10 @@ export interface operations {
                 start?: number;
                 end?: number;
             };
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 source_connection_content_version: string;
             };
@@ -8164,7 +8335,10 @@ export interface operations {
     replace_content_with_inline_text_api_contents__source_connection_content_version__put: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 source_connection_content_version: string;
             };
@@ -8199,7 +8373,10 @@ export interface operations {
     delete_content_api_contents__source_connection_content_version__delete: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 source_connection_content_version: string;
             };
@@ -8231,7 +8408,10 @@ export interface operations {
                 page?: number;
                 limit?: number;
             };
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 source_connection_content_version: string;
             };
@@ -8262,7 +8442,10 @@ export interface operations {
     upload_file_to_content_api_contents__source_connection_content_version__upload_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 source_connection_content_version: string;
             };
@@ -8297,7 +8480,10 @@ export interface operations {
     governance_ai_generate_api_governance_ai_assistant_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -8313,7 +8499,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["routers__api__governance__GovernanceAiAssistantResponse"];
+                    "application/json": components["schemas"]["GovernanceAiAssistantResponse"];
                 };
             };
             /** @description AI assistant error. */
@@ -8347,7 +8533,10 @@ export interface operations {
                 /** @description Number of conversations. */
                 limit?: number;
             };
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -8383,7 +8572,10 @@ export interface operations {
     governance_ai_accept_api_governance_ai_assistant__conversation_id__accept_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 conversation_id: string;
             };
@@ -8397,7 +8589,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["routers__api__governance__GovernanceAiAcceptResponse"];
+                    "application/json": components["schemas"]["GovernanceAiAcceptResponse"];
                 };
             };
             /** @description Plan already accepted/declined or AI error. */
@@ -8428,7 +8620,10 @@ export interface operations {
     governance_ai_decline_api_governance_ai_assistant__conversation_id__decline_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 conversation_id: string;
             };
@@ -8480,7 +8675,10 @@ export interface operations {
                 /** @description Sort direction: asc or desc. */
                 order?: string;
             };
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -8509,7 +8707,10 @@ export interface operations {
     create_knowledge_base_api_knowledge_bases_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -8549,7 +8750,10 @@ export interface operations {
     get_knowledge_base_api_knowledge_bases__knowledge_base_id__get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 knowledge_base_id: string;
             };
@@ -8580,7 +8784,10 @@ export interface operations {
     update_knowledge_base_api_knowledge_bases__knowledge_base_id__put: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 knowledge_base_id: string;
             };
@@ -8615,7 +8822,10 @@ export interface operations {
     delete_knowledge_base_api_knowledge_bases__knowledge_base_id__delete: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 knowledge_base_id: string;
             };
@@ -8655,7 +8865,10 @@ export interface operations {
                 /** @description Filter by bank type: conversation or general. */
                 type?: string | null;
             };
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -8684,7 +8897,10 @@ export interface operations {
     create_memory_bank_api_memory_banks_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -8717,7 +8933,10 @@ export interface operations {
     memory_bank_ai_generate_api_memory_banks_ai_assistant_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -8733,7 +8952,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["routers__api__memory_banks__MemoryBankAiAssistantResponse"];
+                    "application/json": components["schemas"]["MemoryBankAiAssistantResponse"];
                 };
             };
             /** @description AI assistant error. */
@@ -8762,7 +8981,10 @@ export interface operations {
                 /** @description Number of most-recent turns to skip. */
                 offset?: number;
             };
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -8791,7 +9013,10 @@ export interface operations {
     memory_bank_ai_accept_api_memory_banks_ai_assistant__conversation_id__patch: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 conversation_id: string;
             };
@@ -8828,7 +9053,10 @@ export interface operations {
     list_templates_api_memory_banks_templates_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -8850,7 +9078,10 @@ export interface operations {
     test_compaction_prompt_standalone_api_memory_banks_test_compaction_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -8883,7 +9114,10 @@ export interface operations {
     get_memory_bank_api_memory_banks__memory_bank_id__get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 memory_bank_id: string;
             };
@@ -8914,7 +9148,10 @@ export interface operations {
     update_memory_bank_api_memory_banks__memory_bank_id__put: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 memory_bank_id: string;
             };
@@ -8949,7 +9186,10 @@ export interface operations {
     delete_memory_bank_api_memory_banks__memory_bank_id__delete: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 memory_bank_id: string;
             };
@@ -8978,7 +9218,10 @@ export interface operations {
     get_agents_using_bank_api_memory_banks__memory_bank_id__agents_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 memory_bank_id: string;
             };
@@ -9011,7 +9254,10 @@ export interface operations {
     compact_memory_bank_api_memory_banks__memory_bank_id__compact_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 memory_bank_id: string;
             };
@@ -9044,7 +9290,10 @@ export interface operations {
     delete_memory_bank_source_api_memory_banks__memory_bank_id__source_delete: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 memory_bank_id: string;
             };
@@ -9077,7 +9326,10 @@ export interface operations {
                 start_date?: string | null;
                 end_date?: string | null;
             };
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 memory_bank_id: string;
             };
@@ -9110,7 +9362,10 @@ export interface operations {
     test_compaction_prompt_api_memory_banks__memory_bank_id__test_compaction_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 memory_bank_id: string;
             };
@@ -9154,7 +9409,10 @@ export interface operations {
                 /** @description Pagination offset. */
                 offset?: number;
             };
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -9185,7 +9443,10 @@ export interface operations {
     mark_all_read_api_models_alerts_mark_all_read_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -9203,7 +9464,10 @@ export interface operations {
     get_alert_unread_count_api_models_alerts_unread_count_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -9225,7 +9489,10 @@ export interface operations {
     mark_read_api_models_alerts__alert_id__read_patch: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 alert_id: string;
             };
@@ -9265,7 +9532,10 @@ export interface operations {
                 /** @description Minimum output token limit. */
                 min_output_tokens?: number | null;
             };
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 model_id: string;
             };
@@ -9305,7 +9575,10 @@ export interface operations {
                 /** @description Optional entity type filter (e.g. 'agent', 'knowledge_base') */
                 entity_type?: string | null;
             };
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -9347,7 +9620,10 @@ export interface operations {
                 /** @description Filter by solution name (case-insensitive partial match) */
                 search?: string | null;
             };
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -9376,7 +9652,10 @@ export interface operations {
     create_solution_api_solutions_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -9409,7 +9688,10 @@ export interface operations {
     get_solution_api_solutions__solution_id__get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 solution_id: string;
             };
@@ -9440,7 +9722,10 @@ export interface operations {
     delete_solution_api_solutions__solution_id__delete: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 solution_id: string;
             };
@@ -9469,7 +9754,10 @@ export interface operations {
     update_solution_api_solutions__solution_id__patch: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 solution_id: string;
             };
@@ -9504,7 +9792,10 @@ export interface operations {
     link_agents_api_solutions__solution_id__agents_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 solution_id: string;
             };
@@ -9539,7 +9830,10 @@ export interface operations {
     unlink_agents_api_solutions__solution_id__agents_delete: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 solution_id: string;
             };
@@ -9574,7 +9868,10 @@ export interface operations {
     ai_assistant_generate_api_solutions__solution_id__ai_assistant_generate_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 solution_id: string;
             };
@@ -9592,7 +9889,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["routers__api__solutions__AiAssistantGenerateResponse"];
+                    "application/json": components["schemas"]["AiAssistantGenerateResponse"];
                 };
             };
             /** @description Validation Error */
@@ -9609,7 +9906,10 @@ export interface operations {
     ai_assistant_knowledge_base_api_solutions__solution_id__ai_assistant_knowledge_base_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 solution_id: string;
             };
@@ -9627,7 +9927,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["routers__api__solutions__AiAssistantGenerateResponse"];
+                    "application/json": components["schemas"]["AiAssistantGenerateResponse"];
                 };
             };
             /** @description Validation Error */
@@ -9644,7 +9944,10 @@ export interface operations {
     ai_assistant_source_api_solutions__solution_id__ai_assistant_source_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 solution_id: string;
             };
@@ -9662,7 +9965,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["routers__api__solutions__AiAssistantGenerateResponse"];
+                    "application/json": components["schemas"]["AiAssistantGenerateResponse"];
                 };
             };
             /** @description Validation Error */
@@ -9679,7 +9982,10 @@ export interface operations {
     ai_assistant_accept_api_solutions__solution_id__ai_assistant__conversation_id__accept_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 solution_id: string;
                 conversation_id: string;
@@ -9698,7 +10004,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["routers__api__solutions__AiAssistantAcceptResponse"];
+                    "application/json": components["schemas"]["AiAssistantAcceptResponse"];
                 };
             };
             /** @description Validation Error */
@@ -9715,7 +10021,10 @@ export interface operations {
     ai_assistant_decline_api_solutions__solution_id__ai_assistant__conversation_id__decline_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 solution_id: string;
                 conversation_id: string;
@@ -9745,7 +10054,10 @@ export interface operations {
     list_conversations_api_solutions__solution_id__conversations_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 solution_id: string;
             };
@@ -9776,7 +10088,10 @@ export interface operations {
     add_conversation_turn_api_solutions__solution_id__conversations_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 solution_id: string;
             };
@@ -9811,7 +10126,10 @@ export interface operations {
     mark_conversation_turn_api_solutions__solution_id__conversations__conversation_id__patch: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 solution_id: string;
                 conversation_id: string;
@@ -9845,7 +10163,10 @@ export interface operations {
     link_knowledge_bases_api_solutions__solution_id__knowledge_bases_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 solution_id: string;
             };
@@ -9880,7 +10201,10 @@ export interface operations {
     unlink_knowledge_bases_api_solutions__solution_id__knowledge_bases_delete: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 solution_id: string;
             };
@@ -9915,7 +10239,10 @@ export interface operations {
     link_source_connections_api_solutions__solution_id__source_connections_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 solution_id: string;
             };
@@ -9950,7 +10277,10 @@ export interface operations {
     unlink_source_connections_api_solutions__solution_id__source_connections_delete: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 solution_id: string;
             };
@@ -9985,7 +10315,10 @@ export interface operations {
     create_source_api_sources_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -10036,7 +10369,10 @@ export interface operations {
                 /** @description List sources for the given account. Defaults to the api key's account. */
                 account_id?: string | null;
             };
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -10065,7 +10401,10 @@ export interface operations {
     get_source_api_sources__source_connection_id__get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 source_connection_id: string;
             };
@@ -10096,7 +10435,10 @@ export interface operations {
     update_source_api_sources__source_connection_id__put: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 source_connection_id: string;
             };
@@ -10131,7 +10473,10 @@ export interface operations {
     upload_inline_text_to_source_api_sources__source_connection_id__post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 source_connection_id: string;
             };
@@ -10166,7 +10511,10 @@ export interface operations {
     delete_source_api_sources__source_connection_id__delete: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 source_connection_id: string;
             };
@@ -10195,7 +10543,10 @@ export interface operations {
     get_source_embedding_migration_api_sources__source_connection_id__embedding_migration_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 source_connection_id: string;
             };
@@ -10226,7 +10577,10 @@ export interface operations {
     start_source_embedding_migration_api_sources__source_connection_id__embedding_migration_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 source_connection_id: string;
             };
@@ -10268,7 +10622,10 @@ export interface operations {
     cancel_source_embedding_migration_api_sources__source_connection_id__embedding_migration_cancel_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 source_connection_id: string;
             };
@@ -10302,7 +10659,10 @@ export interface operations {
                 page?: number;
                 limit?: number;
             };
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 source_connection_id: string;
             };
@@ -10333,7 +10693,10 @@ export interface operations {
     create_source_export_api_sources__source_connection_id__exports_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 source_connection_id: string;
             };
@@ -10368,7 +10731,10 @@ export interface operations {
     estimate_source_export_api_sources__source_connection_id__exports_estimate_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 source_connection_id: string;
             };
@@ -10403,7 +10769,10 @@ export interface operations {
     get_source_export_api_sources__source_connection_id__exports__export_id__get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 source_connection_id: string;
                 export_id: string;
@@ -10435,7 +10804,10 @@ export interface operations {
     delete_source_export_api_sources__source_connection_id__exports__export_id__delete: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 source_connection_id: string;
                 export_id: string;
@@ -10465,7 +10837,10 @@ export interface operations {
     cancel_source_export_api_sources__source_connection_id__exports__export_id__cancel_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 source_connection_id: string;
                 export_id: string;
@@ -10497,7 +10872,10 @@ export interface operations {
     download_source_export_api_sources__source_connection_id__exports__export_id__download_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 source_connection_id: string;
                 export_id: string;
@@ -10529,7 +10907,10 @@ export interface operations {
     upload_file_to_source_api_sources__source_connection_id__upload_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path: {
                 source_connection_id: string;
             };

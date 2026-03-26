@@ -18,7 +18,15 @@ export {
   SECLAI_API_URL,
   type SeclaiOptions,
   type FetchLike,
+  type AccessTokenProvider,
 } from "./client";
+
+export {
+  type SsoProfile,
+  type SsoCacheEntry,
+  type AuthState,
+  type CredentialChainOptions,
+} from "./auth";
 
 export {
   SeclaiError,

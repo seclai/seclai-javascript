@@ -8,6 +8,7 @@ import {
   SeclaiError,
   SeclaiStreamingError,
 } from "../src/index";
+import { parseIni, isTokenValid } from "../src/auth";
 
 type RecordedRequest = {
   url: string;
@@ -88,14 +89,29 @@ function makeClient(handler: (req: RecordedRequest) => Response | Promise<Respon
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe("Configuration & Auth", () => {
-  test("constructor throws when apiKey missing", () => {
+  test("constructor throws when both apiKey and accessToken provided", () => {
+    expect(() => new Seclai({
+      apiKey: "k",
+      accessToken: "t",
+      fetch: makeFetch(() => new Response("ok")),
+    })).toThrow(SeclaiConfigurationError);
+  });
+
+  test("first request rejects when no credentials can be resolved", async () => {
     const p = (globalThis as any).process;
     const prev = p?.env?.SECLAI_API_KEY;
-    if (p?.env) delete p.env.SECLAI_API_KEY;
-    expect(() => new Seclai({ fetch: makeFetch(() => new Response("ok")) })).toThrow(SeclaiConfigurationError);
+    const prevDir = p?.env?.SECLAI_CONFIG_DIR;
+    if (p?.env) {
+      delete p.env.SECLAI_API_KEY;
+      p.env.SECLAI_CONFIG_DIR = "/nonexistent-seclai-dir";
+    }
+    const client = new Seclai({ fetch: makeFetch(() => new Response("ok")) });
+    await expect(client.request("GET", "/test")).rejects.toThrow(/[Mm]issing credentials/);
     if (p?.env) {
       if (prev === undefined) delete p.env.SECLAI_API_KEY;
       else p.env.SECLAI_API_KEY = prev;
+      if (prevDir === undefined) delete p.env.SECLAI_CONFIG_DIR;
+      else p.env.SECLAI_CONFIG_DIR = prevDir;
     }
   });
 
@@ -1629,5 +1645,157 @@ describe("Agent AI Assistant — extended", () => {
       return new Response(null, { status: 204 });
     });
     await client.markAgentAiSuggestion("ag_1", "conv_1", {} as any);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Bearer Token Auth
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("Bearer Token Auth", () => {
+  test("static accessToken sends Authorization Bearer header", async () => {
+    const client = new Seclai({
+      accessToken: "my-jwt-token",
+      baseUrl: "https://test.invalid",
+      fetch: makeFetch((req) => {
+        expect(req.headers["authorization"]).toBe("Bearer my-jwt-token");
+        expect(req.headers["x-api-key"]).toBeUndefined();
+        return jsonResponse({ ok: true });
+      }),
+    });
+    await client.request("GET", "/test");
+  });
+
+  test("accessToken function provider is called per request", async () => {
+    let callCount = 0;
+    const provider = () => {
+      callCount++;
+      return `token-${callCount}`;
+    };
+    const client = new Seclai({
+      accessToken: provider,
+      baseUrl: "https://test.invalid",
+      fetch: makeFetch((req) => {
+        expect(req.headers["authorization"]).toMatch(/^Bearer token-\d+$/);
+        return jsonResponse({ ok: true });
+      }),
+    });
+
+    await client.request("GET", "/test1");
+    await client.request("GET", "/test2");
+    expect(callCount).toBe(2);
+  });
+
+  test("async accessToken provider is supported", async () => {
+    const provider = async () => {
+      await new Promise((r) => setTimeout(r, 1));
+      return "async-token";
+    };
+    const client = new Seclai({
+      accessToken: provider,
+      baseUrl: "https://test.invalid",
+      fetch: makeFetch((req) => {
+        expect(req.headers["authorization"]).toBe("Bearer async-token");
+        return jsonResponse({ ok: true });
+      }),
+    });
+    await client.request("GET", "/test");
+  });
+
+  test("accountId sends X-Account-Id header", async () => {
+    const client = new Seclai({
+      accessToken: "tok",
+      accountId: "550e8400-e29b-41d4-a716-446655440000",
+      baseUrl: "https://test.invalid",
+      fetch: makeFetch((req) => {
+        expect(req.headers["x-account-id"]).toBe("550e8400-e29b-41d4-a716-446655440000");
+        expect(req.headers["authorization"]).toBe("Bearer tok");
+        return jsonResponse({ ok: true });
+      }),
+    });
+    await client.request("GET", "/test");
+  });
+
+  test("accountId also works with apiKey auth", async () => {
+    const client = new Seclai({
+      apiKey: "k",
+      accountId: "acct-123",
+      baseUrl: "https://test.invalid",
+      fetch: makeFetch((req) => {
+        expect(req.headers["x-account-id"]).toBe("acct-123");
+        expect(req.headers["x-api-key"]).toBe("k");
+        return jsonResponse({ ok: true });
+      }),
+    });
+    await client.request("GET", "/test");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INI Parser
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("INI Parser", () => {
+  test("parses default and profile sections", () => {
+    const ini = `
+[default]
+sso_account_id = acct-default
+sso_region = us-east-1
+sso_client_id = client123
+sso_domain = auth.seclai.com
+
+# Comment line
+[profile staging]
+sso_account_id = acct-staging
+`;
+    const result = parseIni(ini);
+    expect(result["default"]).toEqual({
+      sso_account_id: "acct-default",
+      sso_region: "us-east-1",
+      sso_client_id: "client123",
+      sso_domain: "auth.seclai.com",
+    });
+    expect(result["staging"]).toEqual({
+      sso_account_id: "acct-staging",
+    });
+  });
+
+  test("ignores comment and empty lines", () => {
+    const ini = `
+; semicolon comment
+# hash comment
+
+[default]
+key = value
+`;
+    const result = parseIni(ini);
+    expect(result["default"]).toEqual({ key: "value" });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Token Validation
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("Token Validation", () => {
+  test("isTokenValid returns true for future expiry", () => {
+    const future = new Date(Date.now() + 3600_000).toISOString();
+    expect(isTokenValid({
+      accessToken: "t", expiresAt: future, clientId: "c", region: "r", cognitoDomain: "d",
+    })).toBe(true);
+  });
+
+  test("isTokenValid returns false for past expiry", () => {
+    const past = new Date(Date.now() - 1000).toISOString();
+    expect(isTokenValid({
+      accessToken: "t", expiresAt: past, clientId: "c", region: "r", cognitoDomain: "d",
+    })).toBe(false);
+  });
+
+  test("isTokenValid returns false within 30s buffer", () => {
+    const almostExpired = new Date(Date.now() + 10_000).toISOString(); // 10s out
+    expect(isTokenValid({
+      accessToken: "t", expiresAt: almostExpired, clientId: "c", region: "r", cognitoDomain: "d",
+    })).toBe(false);
   });
 });

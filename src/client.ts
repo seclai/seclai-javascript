@@ -15,6 +15,8 @@ import {
   SeclaiError,
   SeclaiStreamingError,
 } from "./errors";
+import type { AuthState } from "./auth";
+import { resolveCredentialChain, resolveAuthHeaders } from "./auth";
 import type {
   AgentRunEvent,
   AgentDefinitionResponse,
@@ -117,10 +119,21 @@ export const SECLAI_API_URL = "https://api.seclai.com";
 /** A `fetch`-compatible function (e.g. `globalThis.fetch` or `undici.fetch`). */
 export type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
+/**
+ * Token provider: a synchronous or asynchronous function that returns an
+ * access token string.  Called on every request to allow automatic refresh.
+ */
+export type AccessTokenProvider = () => string | Promise<string>;
+
 /** Configuration for the {@link Seclai} client. */
 export interface SeclaiOptions {
   /** API key used for authentication. Defaults to `process.env.SECLAI_API_KEY` when available. */
   apiKey?: string;
+  /**
+   * Static bearer access token **or** a provider function that returns one.
+   * Mutually exclusive with `apiKey`.
+   */
+  accessToken?: string | AccessTokenProvider;
   /** API base URL. Defaults to `process.env.SECLAI_API_URL` when available, else {@link SECLAI_API_URL}. */
   baseUrl?: string;
   /** Header name to use for the API key. Defaults to `x-api-key`. */
@@ -129,6 +142,25 @@ export interface SeclaiOptions {
   defaultHeaders?: Record<string, string>;
   /** Optional `fetch` implementation for environments without a global `fetch`. */
   fetch?: FetchLike;
+  /**
+   * SSO profile name to load from `~/.seclai/config`.
+   * Defaults to `process.env.SECLAI_PROFILE`, then `"default"`.
+   */
+  profile?: string;
+  /**
+   * Override the config directory path (default: `SECLAI_CONFIG_DIR` env var or `~/.seclai/`).
+   */
+  configDir?: string;
+  /**
+   * Whether to auto-refresh expired SSO tokens. Defaults to `true`.
+   * Set to `false` in environments that should not write to disk.
+   */
+  autoRefresh?: boolean;
+  /**
+   * Target organization account ID. Sent as `X-Account-Id` header.
+   * Overrides the profile's `sso_account_id` when using SSO auth.
+   */
+  accountId?: string;
 }
 
 // ─── Internal Helpers ────────────────────────────────────────────────────────
@@ -291,24 +323,31 @@ function inferMimeType(fileName: string | undefined): string | undefined {
  * ```
  */
 export class Seclai {
-  private readonly apiKey: string;
   private readonly baseUrl: string;
-  private readonly apiKeyHeader: string;
   private readonly defaultHeaders: Record<string, string>;
   private readonly fetcher: FetchLike;
+  private _authState: AuthState | null = null;
+  private _authInitPromise: Promise<void> | null = null;
+  private _authInitError: SeclaiConfigurationError | null = null;
 
   /**
    * Create a new Seclai client.
    *
+   * Credentials are resolved via a chain (first match wins):
+   * 1. Explicit `apiKey` option
+   * 2. Explicit `accessToken` option (static string or provider function)
+   * 3. `SECLAI_API_KEY` environment variable
+   * 4. SSO profile from `~/.seclai/config` + cached tokens in `~/.seclai/sso/cache/`
+   *
    * @param opts - Client configuration.
-   * @throws {@link SeclaiConfigurationError} If no API key is provided (and `SECLAI_API_KEY` is not set).
    * @throws {@link SeclaiConfigurationError} If no `fetch` implementation is available.
+   * @throws {@link SeclaiConfigurationError} If both `apiKey` and `accessToken` are provided.
    */
   constructor(opts: SeclaiOptions = {}) {
-    const apiKey = opts.apiKey ?? getEnv("SECLAI_API_KEY");
-    if (!apiKey) {
+    // Validate mutual exclusion
+    if (opts.apiKey && opts.accessToken) {
       throw new SeclaiConfigurationError(
-        "Missing API key. Provide apiKey or set SECLAI_API_KEY."
+        "Provide either apiKey or accessToken, not both."
       );
     }
 
@@ -319,11 +358,56 @@ export class Seclai {
       );
     }
 
-    this.apiKey = apiKey;
     this.baseUrl = opts.baseUrl ?? getEnv("SECLAI_API_URL") ?? SECLAI_API_URL;
-    this.apiKeyHeader = opts.apiKeyHeader ?? "x-api-key";
     this.defaultHeaders = { ...(opts.defaultHeaders ?? {}) };
     this.fetcher = fetcher;
+
+    // Resolve credential chain (may be async for SSO profile loading)
+    const accessTokenProvider =
+      typeof opts.accessToken === "function" ? opts.accessToken : undefined;
+    const accessTokenStatic =
+      typeof opts.accessToken === "string" ? opts.accessToken : undefined;
+
+    this._authInitPromise = resolveCredentialChain({
+      apiKey: opts.apiKey,
+      accessToken: accessTokenStatic,
+      accessTokenProvider,
+      profile: opts.profile,
+      configDir: opts.configDir,
+      autoRefresh: opts.autoRefresh,
+      accountId: opts.accountId,
+      apiKeyHeader: opts.apiKeyHeader,
+      fetch: fetcher,
+    }).then((state) => {
+      this._authState = state;
+    }).catch((err) => {
+      this._authInitError = new SeclaiConfigurationError(
+        err instanceof Error ? err.message : String(err)
+      );
+    });
+  }
+
+  /** Ensure the credential chain has been resolved. */
+  private async ensureAuth(): Promise<AuthState> {
+    if (this._authInitPromise) {
+      await this._authInitPromise;
+      this._authInitPromise = null;
+    }
+    if (this._authInitError) {
+      throw this._authInitError;
+    }
+    if (!this._authState) {
+      throw new SeclaiConfigurationError(
+        "Missing credentials. Provide apiKey, accessToken, set SECLAI_API_KEY, or run `seclai auth login`."
+      );
+    }
+    return this._authState;
+  }
+
+  /** Resolve auth headers for the current request. */
+  private async authHeaders(): Promise<Record<string, string>> {
+    const state = await this.ensureAuth();
+    return resolveAuthHeaders(state);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -354,10 +438,11 @@ export class Seclai {
   ): Promise<unknown | string | null> {
     const url = buildURL(this.baseUrl, path, opts?.query);
 
+    const authHeaders = await this.authHeaders();
     const headers: Record<string, string> = {
       ...this.defaultHeaders,
       ...(opts?.headers ?? {}),
-      [this.apiKeyHeader]: this.apiKey,
+      ...authHeaders,
     };
 
     let body: BodyInit | undefined;
@@ -417,6 +502,8 @@ export class Seclai {
    * @param path - Request path relative to `baseUrl`.
    * @param opts - Query params, JSON body, per-request headers, and optional AbortSignal.
    * @returns The raw `Response` object.
+   * @throws {SeclaiAPIValidationError} On HTTP 422 responses.
+   * @throws {SeclaiAPIStatusError} On other non-2xx responses.
    */
   async requestRaw(
     method: string,
@@ -430,10 +517,11 @@ export class Seclai {
   ): Promise<Response> {
     const url = buildURL(this.baseUrl, path, opts?.query);
 
+    const authHeaders = await this.authHeaders();
     const headers: Record<string, string> = {
       ...this.defaultHeaders,
       ...(opts?.headers ?? {}),
-      [this.apiKeyHeader]: this.apiKey,
+      ...authHeaders,
     };
 
     let body: BodyInit | undefined;
@@ -487,9 +575,10 @@ export class Seclai {
   ): Promise<unknown> {
     const url = buildURL(this.baseUrl, path);
 
+    const authHeaders = await this.authHeaders();
     const headers: Record<string, string> = {
       ...this.defaultHeaders,
-      [this.apiKeyHeader]: this.apiKey,
+      ...authHeaders,
     };
     // Let fetch set the correct multipart Content-Type with boundary
     delete headers["content-type"];
@@ -713,9 +802,10 @@ export class Seclai {
   ): Promise<AgentRunResponse> {
     const url = buildURL(this.baseUrl, `/agents/${agentId}/runs/stream`);
 
+    const authHdrs = await this.authHeaders();
     const headers: Record<string, string> = {
       ...this.defaultHeaders,
-      [this.apiKeyHeader]: this.apiKey,
+      ...authHdrs,
       accept: "text/event-stream",
       "content-type": "application/json",
     };
@@ -845,9 +935,10 @@ export class Seclai {
   ): AsyncGenerator<AgentRunEvent, void, undefined> {
     const url = buildURL(this.baseUrl, `/agents/${agentId}/runs/stream`);
 
+    const authHdrs = await this.authHeaders();
     const headers: Record<string, string> = {
       ...this.defaultHeaders,
-      [this.apiKeyHeader]: this.apiKey,
+      ...authHdrs,
       accept: "text/event-stream",
       "content-type": "application/json",
     };
