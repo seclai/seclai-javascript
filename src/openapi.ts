@@ -16,7 +16,7 @@ export interface paths {
          * @description List agents for the account with pagination.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). All resources are scoped to the API key's account.
+         *     - Requires authentication (API key or bearer token). All resources are scoped to the authenticated account.
          */
         get: operations["list_agents_api_agents_get"];
         put?: never;
@@ -33,7 +33,7 @@ export interface paths {
          *     Templates: `blank`, `retrieval_example`, `simple_qa`, `summarizer`, `json_extractor`, `content_change_notifier`, `scheduled_report`, `webhook_pipeline`
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). Agent is created in the API key's account.
+         *     - Requires authentication (API key or bearer token). Agent is created in the authenticated account.
          */
         post: operations["create_agent_api_agents_post"];
         delete?: never;
@@ -299,7 +299,7 @@ export interface paths {
          *     Returns past conversation turns (user inputs, AI responses, accept/decline status) ordered oldest first. Use `step_type` to filter by step type, and optionally `step_id` to narrow to a specific step instance.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). Only agents belonging to your account can be queried.
+         *     - Requires a user-scoped `X-API-Key`. Only agents belonging to your account can be queried.
          */
         get: operations["get_ai_conversation_history_api_agents__agent_id__ai_assistant_conversations_get"];
         put?: never;
@@ -327,7 +327,7 @@ export interface paths {
          *     Use mode 'generate_full' for new workflows or 'modify_workflow' to refine existing ones.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). Only agents belonging to your account can be used.
+         *     - Requires a user-scoped `X-API-Key`. Only agents belonging to your account can be used.
          */
         post: operations["generate_agent_steps_api_agents__agent_id__ai_assistant_generate_steps_post"];
         delete?: never;
@@ -352,7 +352,7 @@ export interface paths {
          *     Provide the step type, a natural language instruction, and optionally the current configuration. The AI will produce a proposed configuration along with an explanation. The suggestion is stored as a conversation turn that can be accepted or declined separately via the mark endpoint.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). Only agents belonging to your account can be used.
+         *     - Requires a user-scoped `X-API-Key`. Only agents belonging to your account can be used.
          */
         post: operations["generate_step_config_api_agents__agent_id__ai_assistant_step_config_post"];
         delete?: never;
@@ -381,7 +381,7 @@ export interface paths {
          *     This only updates the tracking status on the conversation record. To actually apply the proposed configuration, use the agent definition update endpoint separately.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). The conversation must belong to one of your agents.
+         *     - Requires a user-scoped `X-API-Key`. The conversation must belong to one of your agents.
          */
         patch: operations["mark_ai_suggestion_api_agents__agent_id__ai_assistant__conversation_id__patch"];
         trace?: never;
@@ -560,7 +560,7 @@ export interface paths {
          *     Possible `status` values: `processing`, `ready`, `failed`.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). All resources are scoped to the API key's account.
+         *     - Requires authentication (API key or bearer token). All resources are scoped to the authenticated account.
          */
         get: operations["api_get_agent_input_upload_status_api_agents__agent_id__input_uploads__upload_id__get"];
         put?: never;
@@ -615,7 +615,7 @@ export interface paths {
          *     - Use `include_step_outputs=true` to include per-step outputs, timing, and credits.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). All resources are scoped to the API key's account.
+         *     - Requires authentication (API key or bearer token). All resources are scoped to the authenticated account.
          */
         post: operations["run_agent_api_agents__agent_id__runs_post"];
         delete?: never;
@@ -653,7 +653,7 @@ export interface paths {
          *     - On `timeout` or `error`, the payload includes `run_id` so clients can resume by polling `GET /agents/runs/{run_id}`.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). All resources are scoped to the API key's account.
+         *     - Requires authentication (API key or bearer token). All resources are scoped to the authenticated account.
          */
         post: operations["run_streaming_agent_api_agents__agent_id__runs_stream_post"];
         delete?: never;
@@ -707,7 +707,7 @@ export interface paths {
          *     After uploading, poll `GET /agents/{agent_id}/input-uploads/{upload_id}` until `status` is `ready`, then pass `input_upload_id` to `POST /agents/{agent_id}/runs`.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). All resources are scoped to the API key's account.
+         *     - Requires authentication (API key or bearer token). All resources are scoped to the authenticated account.
          */
         post: operations["api_upload_agent_input_api_agents__agent_id__upload_input_post"];
         delete?: never;
@@ -932,7 +932,7 @@ export interface paths {
          *     - `time_from` / `time_to`: ISO 8601 date range
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token) with user association. Results are scoped to the API key's account.
+         *     - Requires authentication (API key or bearer token). Results are scoped to the authenticated account.
          */
         get: operations["list_alerts_api_alerts_get"];
         put?: never;
@@ -963,7 +963,7 @@ export interface paths {
          *     Credits alerts (`credits_low_threshold`, `credits_runout_prediction`, `credits_usage_spike`) are account-level alert configs. They are evaluated by the credits alert sweep and default-enabled configs may be auto-created for active accounts at runtime.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token) with user association.
+         *     - Requires authentication (API key or bearer token).
          */
         get: operations["list_alert_configs_api_alerts_configs_get"];
         put?: never;
@@ -977,7 +977,7 @@ export interface paths {
          *     Distribution types: owner, owner_admins, selected_members. Organization accounts are normalized to owner_admins.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token) with user association.
+         *     - Requires authentication (API key or bearer token).
          */
         post: operations["create_alert_config_api_alerts_configs_post"];
         delete?: never;
@@ -1000,7 +1000,7 @@ export interface paths {
          *     Returns all fields including type, enabled state, threshold, cooldown, distribution type, and recipient list.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token) with user association.
+         *     - Requires authentication (API key or bearer token).
          */
         get: operations["get_alert_config_api_alerts_configs__config_id__get"];
         put?: never;
@@ -1010,7 +1010,7 @@ export interface paths {
          * @description Delete an alert configuration. This permanently removes the config and stops any future alerts of this type from being triggered.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token) with user association.
+         *     - Requires authentication (API key or bearer token).
          */
         delete: operations["delete_alert_config_api_alerts_configs__config_id__delete"];
         options?: never;
@@ -1020,7 +1020,7 @@ export interface paths {
          * @description Update an alert configuration. Only provided fields are updated.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token) with user association.
+         *     - Requires authentication (API key or bearer token).
          */
         patch: operations["update_alert_config_api_alerts_configs__config_id__patch"];
         trace?: never;
@@ -1039,7 +1039,7 @@ export interface paths {
          *     By default, only explicit override rows are returned. Set `include_defaults=true` to return the effective subscribed state for every alert type in every organization the user can manage.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token) with user association.
+         *     - Requires authentication (API key or bearer token).
          *     - Only organizations where the user is an owner or administrator are included.
          */
         get: operations["list_organization_preferences_api_alerts_organization_preferences_list_get"];
@@ -1071,7 +1071,7 @@ export interface paths {
          *     Setting `subscribed=false` stores an explicit opt-out override. Setting `subscribed=true` removes the override and restores the default subscribed behavior.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token) with user association.
+         *     - Requires authentication (API key or bearer token).
          *     - Only owners and administrators can update preferences for an organization.
          */
         patch: operations["update_organization_preference_api_alerts_organization_preferences__organization_id___alert_type__patch"];
@@ -1089,7 +1089,7 @@ export interface paths {
          * @description Get full alert detail including history, comments, and subscribers.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token) with user association.
+         *     - Requires authentication (API key or bearer token).
          */
         get: operations["get_alert_detail_api_alerts__alert_id__get"];
         put?: never;
@@ -1114,7 +1114,7 @@ export interface paths {
          * @description Add a comment to an alert. Comments are visible to all subscribers and are included in the alert detail response.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token) with user association.
+         *     - Requires authentication (API key or bearer token).
          */
         post: operations["add_alert_comment_api_alerts__alert_id__comments_post"];
         delete?: never;
@@ -1137,7 +1137,7 @@ export interface paths {
          * @description Change the status of an alert. Valid statuses: triggered, acknowledged, resolved, dismissed.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token) with user association.
+         *     - Requires authentication (API key or bearer token).
          */
         post: operations["change_alert_status_api_alerts__alert_id__status_post"];
         delete?: never;
@@ -1160,7 +1160,7 @@ export interface paths {
          * @description Subscribe the current user to an alert. Subscribed users receive email notifications when the alert status changes or new comments are added.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token) with user association.
+         *     - Requires authentication (API key or bearer token).
          */
         post: operations["subscribe_to_alert_api_alerts__alert_id__subscribe_post"];
         delete?: never;
@@ -1183,7 +1183,7 @@ export interface paths {
          * @description Unsubscribe the current user from an alert. The user will no longer receive email notifications for status changes or new comments on this alert.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token) with user association.
+         *     - Requires authentication (API key or bearer token).
          */
         post: operations["unsubscribe_from_alert_api_alerts__alert_id__unsubscribe_post"];
         delete?: never;
@@ -1443,7 +1443,7 @@ export interface paths {
          * @description List knowledge bases for the account.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). All resources are scoped to the API key's account.
+         *     - Requires authentication (API key or bearer token). All resources are scoped to the authenticated account.
          */
         get: operations["list_knowledge_bases_api_knowledge_bases_get"];
         put?: never;
@@ -1496,6 +1496,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get current user identity
+         * @description Returns the authenticated user's personal account ID and a list of organizations they belong to. Each organization entry includes the organization's own id, name, and account_id. Useful for CLI tooling that needs to let the user pick an organization context.
+         */
+        get: operations["get_me_api_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/memory_banks": {
         parameters: {
             query?: never;
@@ -1508,7 +1528,7 @@ export interface paths {
          * @description List memory banks for the account.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). All resources are scoped to the API key's account.
+         *     - Requires authentication (API key or bearer token). All resources are scoped to the authenticated account.
          */
         get: operations["list_memory_banks_api_memory_banks_get"];
         put?: never;
@@ -1788,7 +1808,7 @@ export interface paths {
          *     Returns in-app notifications about model deprecations, sunsets, and newer model availability. Supports filtering by agent, unread-only, and pagination.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). Alerts are scoped to the API key's account.
+         *     - Requires authentication (API key or bearer token). Alerts are scoped to the authenticated account.
          */
         get: operations["list_alerts_api_models_alerts_get"];
         put?: never;
@@ -1813,7 +1833,7 @@ export interface paths {
          * @description Mark all model lifecycle alerts as read for the account.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). Scoped to the API key's account.
+         *     - Requires authentication (API key or bearer token). Scoped to the authenticated account.
          */
         post: operations["mark_all_read_api_models_alerts_mark_all_read_post"];
         delete?: never;
@@ -1836,7 +1856,7 @@ export interface paths {
          *     Useful for badge indicators in UIs and dashboards.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). Count is scoped to the API key's account.
+         *     - Requires authentication (API key or bearer token). Count is scoped to the authenticated account.
          */
         get: operations["get_alert_unread_count_api_models_alerts_unread_count_get"];
         put?: never;
@@ -1865,7 +1885,7 @@ export interface paths {
          * @description Mark a single model lifecycle alert as read (dismissed).
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). The alert must belong to the API key's account.
+         *     - Requires authentication (API key or bearer token). The alert must belong to the authenticated account.
          */
         patch: operations["mark_read_api_models_alerts__alert_id__read_patch"];
         trace?: never;
@@ -1934,13 +1954,13 @@ export interface paths {
          *     - Filtering: `search` to filter by solution name (case-insensitive partial match).
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). Results are scoped to the API key's account.
+         *     - Requires authentication (API key or bearer token). Results are scoped to the authenticated account.
          */
         get: operations["list_solutions_api_solutions_get"];
         put?: never;
         /**
          * Create a solution
-         * @description Create a new solution for the API key's account.
+         * @description Create a new solution for the authenticated account.
          *
          *     A *solution* groups agents, knowledge bases, and content sources into a cohesive unit. Provide a `name` and optional `description` in the request body. Requires authentication (API key or bearer token).
          */
@@ -2273,8 +2293,8 @@ export interface paths {
          *     - Sorting: `sort` (created_at/updated_at/name) and `order` (asc/desc).
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). Results are scoped to the API key's account.
-         *     - The optional `account_id` query param is only allowed when it matches the API key's account.
+         *     - Requires authentication (API key or bearer token). Results are scoped to the authenticated account.
+         *     - The optional `account_id` query param is only allowed when it matches the authenticated account.
          */
         get: operations["list_sources_api_sources__get"];
         put?: never;
@@ -4281,6 +4301,16 @@ export interface components {
              */
             accepted: boolean;
         };
+        /** MeResponse */
+        MeResponse: {
+            /**
+             * Account Id
+             * Format: uuid
+             */
+            account_id: string;
+            /** Organizations */
+            organizations: components["schemas"]["OrganizationInfoResponse"][];
+        };
         /**
          * MemoryBankAiAssistantResponse
          * @description Response from the memory bank AI assistant.
@@ -4489,6 +4519,21 @@ export interface components {
             preferences: components["schemas"]["routers__api__alerts__OrganizationAlertPreferenceResponse"][];
             /** Total */
             total: number;
+        };
+        /** OrganizationInfoResponse */
+        OrganizationInfoResponse: {
+            /**
+             * Account Id
+             * Format: uuid
+             */
+            account_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
         };
         /**
          * PaginationResponse
@@ -6213,7 +6258,7 @@ export interface components {
     };
     responses: never;
     parameters: {
-        /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+        /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
         "X-Account-Id": string;
     };
     requestBodies: never;
@@ -6231,7 +6276,7 @@ export interface operations {
                 limit?: number;
             };
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path?: never;
@@ -6263,7 +6308,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path?: never;
@@ -6306,7 +6351,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -6340,7 +6385,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -6372,7 +6417,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -6414,7 +6459,7 @@ export interface operations {
                 started_after?: string | null;
             };
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -6455,7 +6500,7 @@ export interface operations {
                 limit?: number;
             };
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -6489,7 +6534,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -6527,7 +6572,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -6565,7 +6610,7 @@ export interface operations {
                 end_date?: string | null;
             };
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path?: never;
@@ -6597,7 +6642,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path?: never;
@@ -6636,7 +6681,7 @@ export interface operations {
                 include_step_outputs?: boolean;
             };
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -6670,7 +6715,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -6704,7 +6749,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -6738,7 +6783,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -6776,7 +6821,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -6817,7 +6862,7 @@ export interface operations {
                 offset?: number;
             };
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -6851,7 +6896,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -6889,7 +6934,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -6927,7 +6972,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -6968,7 +7013,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -7002,7 +7047,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -7040,7 +7085,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -7074,7 +7119,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -7112,7 +7157,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -7158,7 +7203,7 @@ export interface operations {
                 limit?: number;
             };
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -7199,7 +7244,7 @@ export interface operations {
                 limit?: number;
             };
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -7233,7 +7278,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -7275,7 +7320,7 @@ export interface operations {
                 status?: components["schemas"]["PendingProcessingCompletedFailedStatus"] | null;
             };
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -7309,7 +7354,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -7347,7 +7392,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -7403,7 +7448,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -7438,7 +7483,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -7472,7 +7517,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path?: never;
@@ -7508,7 +7553,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path?: never;
@@ -7544,7 +7589,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path?: never;
@@ -7585,7 +7630,7 @@ export interface operations {
                 offset?: number;
             };
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path?: never;
@@ -7617,7 +7662,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -7657,7 +7702,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path?: never;
@@ -7693,7 +7738,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path?: never;
@@ -7729,7 +7774,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -7767,7 +7812,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -7814,7 +7859,7 @@ export interface operations {
                 time_to?: string | null;
             };
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path?: never;
@@ -7855,7 +7900,7 @@ export interface operations {
                 scope?: string | null;
             };
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path?: never;
@@ -7889,7 +7934,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path?: never;
@@ -7927,7 +7972,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -7963,7 +8008,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -7995,7 +8040,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -8040,7 +8085,7 @@ export interface operations {
                 include_defaults?: boolean;
             };
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path?: never;
@@ -8072,7 +8117,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -8111,7 +8156,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -8147,7 +8192,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -8187,7 +8232,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -8227,7 +8272,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -8263,7 +8308,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -8302,7 +8347,7 @@ export interface operations {
                 end?: number;
             };
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -8336,7 +8381,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -8374,7 +8419,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -8409,7 +8454,7 @@ export interface operations {
                 limit?: number;
             };
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -8443,7 +8488,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -8481,7 +8526,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path?: never;
@@ -8534,7 +8579,7 @@ export interface operations {
                 limit?: number;
             };
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path?: never;
@@ -8573,7 +8618,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -8621,7 +8666,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -8676,7 +8721,7 @@ export interface operations {
                 order?: string;
             };
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path?: never;
@@ -8708,7 +8753,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path?: never;
@@ -8751,7 +8796,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -8785,7 +8830,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -8823,7 +8868,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -8851,6 +8896,26 @@ export interface operations {
             };
         };
     };
+    get_me_api_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeResponse"];
+                };
+            };
+        };
+    };
     list_memory_banks_api_memory_banks_get: {
         parameters: {
             query?: {
@@ -8866,7 +8931,7 @@ export interface operations {
                 type?: string | null;
             };
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path?: never;
@@ -8898,7 +8963,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path?: never;
@@ -8934,7 +8999,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path?: never;
@@ -8982,7 +9047,7 @@ export interface operations {
                 offset?: number;
             };
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path?: never;
@@ -9014,7 +9079,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -9054,7 +9119,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path?: never;
@@ -9079,7 +9144,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path?: never;
@@ -9115,7 +9180,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -9149,7 +9214,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -9187,7 +9252,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -9219,7 +9284,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -9255,7 +9320,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -9291,7 +9356,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -9327,7 +9392,7 @@ export interface operations {
                 end_date?: string | null;
             };
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -9363,7 +9428,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -9410,7 +9475,7 @@ export interface operations {
                 offset?: number;
             };
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path?: never;
@@ -9444,7 +9509,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path?: never;
@@ -9465,7 +9530,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path?: never;
@@ -9490,7 +9555,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -9533,7 +9598,7 @@ export interface operations {
                 min_output_tokens?: number | null;
             };
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -9576,7 +9641,7 @@ export interface operations {
                 entity_type?: string | null;
             };
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path?: never;
@@ -9621,7 +9686,7 @@ export interface operations {
                 search?: string | null;
             };
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path?: never;
@@ -9653,7 +9718,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path?: never;
@@ -9689,7 +9754,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -9723,7 +9788,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -9755,7 +9820,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -9793,7 +9858,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -9831,7 +9896,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -9869,7 +9934,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -9907,7 +9972,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -9945,7 +10010,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -9983,7 +10048,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -10022,7 +10087,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -10055,7 +10120,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -10089,7 +10154,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -10127,7 +10192,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -10164,7 +10229,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -10202,7 +10267,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -10240,7 +10305,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -10278,7 +10343,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -10316,7 +10381,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path?: never;
@@ -10370,7 +10435,7 @@ export interface operations {
                 account_id?: string | null;
             };
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path?: never;
@@ -10402,7 +10467,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -10436,7 +10501,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -10474,7 +10539,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -10512,7 +10577,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -10544,7 +10609,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -10578,7 +10643,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -10623,7 +10688,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -10660,7 +10725,7 @@ export interface operations {
                 limit?: number;
             };
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -10694,7 +10759,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -10732,7 +10797,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -10770,7 +10835,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -10805,7 +10870,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -10838,7 +10903,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -10873,7 +10938,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {
@@ -10908,7 +10973,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Target a different organization account. When omitted, the user's default account is used. For API key authentication the key's account is always used; the header is accepted but has no effect. */
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
             };
             path: {

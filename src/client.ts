@@ -171,7 +171,11 @@ function getEnv(name: string): string | undefined {
 }
 
 function buildURL(baseUrl: string, path: string, query?: Record<string, unknown>): URL {
-  const url = new URL(path, baseUrl);
+  // Ensure baseUrl ends with "/" so new URL() preserves its path component.
+  const base = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
+  // Strip leading "/" from path so it's treated as relative to base.
+  const relative = path.startsWith("/") ? path.slice(1) : path;
+  const url = new URL(relative, base);
   if (query) {
     for (const [key, value] of Object.entries(query)) {
       if (value === undefined || value === null) continue;

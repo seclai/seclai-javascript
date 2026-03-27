@@ -106,7 +106,7 @@ describe("Configuration & Auth", () => {
       p.env.SECLAI_CONFIG_DIR = "/nonexistent-seclai-dir";
     }
     const client = new Seclai({ fetch: makeFetch(() => new Response("ok")) });
-    await expect(client.request("GET", "/test")).rejects.toThrow(/[Mm]issing credentials/);
+    await expect(client.request("GET", "/test")).rejects.toThrow(/SSO token expired/);
     if (p?.env) {
       if (prev === undefined) delete p.env.SECLAI_API_KEY;
       else p.env.SECLAI_API_KEY = prev;
@@ -141,6 +141,19 @@ describe("Configuration & Auth", () => {
       if (prev === undefined) delete p.env.SECLAI_API_URL;
       else p.env.SECLAI_API_URL = prev;
     }
+  });
+
+  test("preserves path prefix in baseUrl", async () => {
+    const client = new Seclai({
+      apiKey: "k",
+      baseUrl: "https://proxy.example.invalid/v1/api",
+      fetch: makeFetch((req) => {
+        const u = new URL(req.url);
+        expect(u.pathname).toBe("/v1/api/agents");
+        return jsonResponse([]);
+      }),
+    });
+    await client.request("GET", "/agents");
   });
 });
 
