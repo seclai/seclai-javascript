@@ -51,7 +51,7 @@ Credentials are resolved via a chain (first match wins):
 1. Explicit `apiKey` option
 2. Explicit `accessToken` option (string or `() => string | Promise<string>`)
 3. `SECLAI_API_KEY` environment variable
-4. SSO profile from `~/.seclai/config` with cached tokens in `~/.seclai/sso/cache/`
+4. SSO — cached tokens from `~/.seclai/sso/cache/` (always available as fallback)
 
 ```ts
 // API key
@@ -81,12 +81,23 @@ const client = new Seclai({ profile: "my-profile" });
 const client = new Seclai();
 ```
 
-To set up SSO authentication, install the [Seclai CLI](https://www.npmjs.com/package/seclai) and run:
+#### SSO authentication
+
+SSO is the default fallback when no explicit credentials are provided. The SDK
+includes built-in production SSO defaults, so no configuration is needed:
 
 ```bash
-seclai configure sso    # set up an SSO profile
-seclai auth login       # authenticate via browser
+npx @seclai/cli auth login    # authenticate via browser — works immediately
 ```
+
+To customize SSO settings (e.g. for a staging environment), use `seclai configure sso`
+or set environment variables:
+
+| Variable | Description | Default |
+|---|---|---|
+| `SECLAI_SSO_DOMAIN` | Cognito domain | `auth.seclai.com` |
+| `SECLAI_SSO_CLIENT_ID` | Cognito app client ID | `4bgf8v9qmc5puivbaqon9n5lmr` |
+| `SECLAI_SSO_REGION` | AWS region | `us-west-2` |
 
 ## API documentation
 

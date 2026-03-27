@@ -12,7 +12,7 @@ import type { FetchLike } from "./client";
 
 /** Resolved SSO profile settings. */
 export interface SsoProfile {
-  ssoAccountId: string;
+  ssoAccountId?: string | undefined;
   ssoRegion: string;
   ssoClientId: string;
   ssoDomain: string;
@@ -36,6 +36,13 @@ const SSO_CACHE_DIR = "sso/cache";
 const CONFIG_FILE = "config";
 const EXPIRY_BUFFER_MS = 30_000; // 30 seconds
 const DEFAULT_API_KEY_HEADER = "x-api-key";
+
+/** Default SSO domain (production Cognito). Override with `SECLAI_SSO_DOMAIN` or config file. */
+export const DEFAULT_SSO_DOMAIN = "auth.seclai.com";
+/** Default SSO client ID (production public client). Override with `SECLAI_SSO_CLIENT_ID` or config file. */
+export const DEFAULT_SSO_CLIENT_ID = "4bgf8v9qmc5puivbaqon9n5lmr";
+/** Default SSO region. Override with `SECLAI_SSO_REGION` or config file. */
+export const DEFAULT_SSO_REGION = "us-west-2";
 
 // ─── Environment helpers ─────────────────────────────────────────────────────
 
@@ -186,38 +193,39 @@ export async function resolveConfigDir(override?: string): Promise<string> {
 /**
  * Load and resolve an SSO profile from the config file.
  * Non-default profiles inherit unset keys from `[default]`.
+ * All profiles fall back to built-in defaults and environment variable overrides.
  *
  * @param configDir - Resolved config directory path.
  * @param profileName - Profile name to look up (`"default"` or a named profile).
- * @returns The resolved profile, or `null` if not found or incomplete.
+ * @returns The resolved profile. Always returns a valid profile using built-in defaults.
  */
 export async function loadSsoProfile(
   configDir: string,
   profileName: string,
-): Promise<SsoProfile | null> {
+): Promise<SsoProfile> {
   const fs = await getFs();
   const pathMod = await getPath();
 
+  let merged: Record<string, string> = {};
+
   const configPath = pathMod.join(configDir, CONFIG_FILE);
-  if (!fs.existsSync(configPath)) return null;
+  if (fs.existsSync(configPath)) {
+    const content = fs.readFileSync(configPath, "utf-8");
+    const sections = parseIni(content);
 
-  const content = fs.readFileSync(configPath, "utf-8");
-  const sections = parseIni(content);
+    const defaultSection = sections["default"] ?? {};
+    const profileSection = profileName === "default" ? defaultSection : sections[profileName];
 
-  const defaultSection = sections["default"] ?? {};
-  const profileSection = profileName === "default" ? defaultSection : sections[profileName];
+    if (profileSection) {
+      merged = profileName === "default" ? profileSection : { ...defaultSection, ...profileSection };
+    }
+  }
 
-  if (!profileSection) return null;
-
-  // Non-default profiles inherit from [default]
-  const merged = profileName === "default" ? profileSection : { ...defaultSection, ...profileSection };
-
-  const ssoAccountId = merged["sso_account_id"];
-  const ssoRegion = merged["sso_region"];
-  const ssoClientId = merged["sso_client_id"];
-  const ssoDomain = merged["sso_domain"];
-
-  if (!ssoAccountId || !ssoRegion || !ssoClientId || !ssoDomain) return null;
+  // Environment variables override config file values
+  const ssoDomain = getEnv("SECLAI_SSO_DOMAIN") ?? merged["sso_domain"] ?? DEFAULT_SSO_DOMAIN;
+  const ssoClientId = getEnv("SECLAI_SSO_CLIENT_ID") ?? merged["sso_client_id"] ?? DEFAULT_SSO_CLIENT_ID;
+  const ssoRegion = getEnv("SECLAI_SSO_REGION") ?? merged["sso_region"] ?? DEFAULT_SSO_REGION;
+  const ssoAccountId = merged["sso_account_id"] || undefined;
 
   return { ssoAccountId, ssoRegion, ssoClientId, ssoDomain };
 }
@@ -491,19 +499,17 @@ export async function resolveCredentialChain(
     const profileName = opts.profile ?? getEnv("SECLAI_PROFILE") ?? "default";
     const ssoProfile = await loadSsoProfile(configDir, profileName);
 
-    if (ssoProfile) {
-      return {
-        mode: "sso",
-        apiKeyHeader,
-        accountId: opts.accountId ?? ssoProfile.ssoAccountId,
-        ssoProfile,
-        configDir,
-        autoRefresh: opts.autoRefresh !== false,
-        fetcher: opts.fetch,
-      };
-    }
+    return {
+      mode: "sso",
+      apiKeyHeader,
+      accountId: opts.accountId ?? ssoProfile.ssoAccountId,
+      ssoProfile,
+      configDir,
+      autoRefresh: opts.autoRefresh !== false,
+      fetcher: opts.fetch,
+    };
   } catch {
-    // Config dir not found or profile not configured — fall through
+    // Config dir not found — fall through
   }
 
   // 6. Nothing found

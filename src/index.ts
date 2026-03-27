@@ -26,6 +26,14 @@ export {
   type SsoCacheEntry,
   type AuthState,
   type CredentialChainOptions,
+  DEFAULT_SSO_DOMAIN,
+  DEFAULT_SSO_CLIENT_ID,
+  DEFAULT_SSO_REGION,
+  loadSsoProfile,
+  readSsoCache,
+  writeSsoCache,
+  deleteSsoCache,
+  isTokenValid,
 } from "./auth";
 
 export {

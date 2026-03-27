@@ -106,7 +106,7 @@ describe("Configuration & Auth", () => {
       p.env.SECLAI_CONFIG_DIR = "/nonexistent-seclai-dir";
     }
     const client = new Seclai({ fetch: makeFetch(() => new Response("ok")) });
-    await expect(client.request("GET", "/test")).rejects.toThrow(/[Mm]issing credentials/);
+    await expect(client.request("GET", "/test")).rejects.toThrow(/SSO token expired|[Mm]issing credentials/);
     if (p?.env) {
       if (prev === undefined) delete p.env.SECLAI_API_KEY;
       else p.env.SECLAI_API_KEY = prev;
