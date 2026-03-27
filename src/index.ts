@@ -29,9 +29,25 @@ export {
   DEFAULT_SSO_DOMAIN,
   DEFAULT_SSO_CLIENT_ID,
   DEFAULT_SSO_REGION,
+  /**
+   * Load an SSO profile from the config file.
+   * **Node.js only** — uses `node:fs` and `node:path`.
+   */
   loadSsoProfile,
+  /**
+   * Read a cached SSO token from disk.
+   * **Node.js only** — uses `node:fs` and `node:path`.
+   */
   readSsoCache,
+  /**
+   * Write a cached SSO token to disk atomically.
+   * **Node.js only** — uses `node:fs` and `node:path`.
+   */
   writeSsoCache,
+  /**
+   * Delete a cached SSO token file.
+   * **Node.js only** — uses `node:fs` and `node:path`.
+   */
   deleteSsoCache,
   isTokenValid,
 } from "./auth";

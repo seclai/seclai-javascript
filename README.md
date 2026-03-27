@@ -51,7 +51,7 @@ Credentials are resolved via a chain (first match wins):
 1. Explicit `apiKey` option
 2. Explicit `accessToken` option (string or `() => string | Promise<string>`)
 3. `SECLAI_API_KEY` environment variable
-4. SSO — cached tokens from `~/.seclai/sso/cache/` (always available as fallback)
+4. SSO — cached tokens from `~/.seclai/sso/cache/` (requires a prior `seclai auth login`)
 
 ```ts
 // API key
@@ -84,10 +84,11 @@ const client = new Seclai();
 #### SSO authentication
 
 SSO is the default fallback when no explicit credentials are provided. The SDK
-includes built-in production SSO defaults, so no configuration is needed:
+includes built-in production SSO defaults, so `seclai configure sso` is not
+required. You only need to log in once to populate the token cache:
 
 ```bash
-npx @seclai/cli auth login    # authenticate via browser — works immediately
+npx @seclai/cli auth login    # authenticate via browser — no prior setup needed
 ```
 
 To customize SSO settings (e.g. for a staging environment), use `seclai configure sso`

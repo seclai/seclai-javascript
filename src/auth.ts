@@ -195,6 +195,9 @@ export async function resolveConfigDir(override?: string): Promise<string> {
  * Non-default profiles inherit unset keys from `[default]`.
  * All profiles fall back to built-in defaults and environment variable overrides.
  *
+ * **Node.js only** — this function uses `node:fs` and `node:path` internally
+ * and will throw in browser/edge-worker runtimes.
+ *
  * @param configDir - Resolved config directory path.
  * @param profileName - Profile name to look up (`"default"` or a named profile).
  * @returns The resolved profile. Always returns a valid profile using built-in defaults.
