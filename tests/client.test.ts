@@ -240,6 +240,32 @@ describe("Agents — CRUD", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Agent Export
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("Agent Export", () => {
+  test("exportAgent sends GET /agents/:id/export with download=true by default", async () => {
+    const client = makeClient((req) => {
+      expect(req.method).toBe("GET");
+      const url = new URL(req.url);
+      expect(url.pathname).toBe("/agents/ag_1/export");
+      expect(url.searchParams.get("download")).toBe("true");
+      return jsonResponse({ export_version: "2", agent: {} });
+    });
+    await client.exportAgent("ag_1");
+  });
+
+  test("exportAgent passes download=false when specified", async () => {
+    const client = makeClient((req) => {
+      const url = new URL(req.url);
+      expect(url.searchParams.get("download")).toBe("false");
+      return jsonResponse({ export_version: "2", agent: {} });
+    });
+    await client.exportAgent("ag_1", false);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Agent Definitions
 // ─────────────────────────────────────────────────────────────────────────────
 

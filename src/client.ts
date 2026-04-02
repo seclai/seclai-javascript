@@ -20,6 +20,7 @@ import { resolveCredentialChain, resolveAuthHeaders } from "./auth";
 import type {
   AgentRunEvent,
   AgentDefinitionResponse,
+  AgentExportResponse,
   AgentListResponse,
   AgentRunListResponse,
   AgentRunRequest,
@@ -680,6 +681,23 @@ export class Seclai {
    */
   async deleteAgent(agentId: string): Promise<void> {
     await this.request("DELETE", `/agents/${agentId}`);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Agent Export
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Export an agent definition as a portable JSON snapshot.
+   *
+   * @param agentId - Agent identifier.
+   * @param download - When true (default), the server sets Content-Disposition: attachment.
+   * @returns The exported agent snapshot.
+   */
+  async exportAgent(agentId: string, download = true): Promise<AgentExportResponse> {
+    return (await this.request("GET", `/agents/${agentId}/export`, {
+      query: { download },
+    })) as AgentExportResponse;
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

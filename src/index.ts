@@ -72,6 +72,7 @@ export type {
   // Agents
   AgentListResponse,
   AgentDefinitionResponse,
+  AgentExportResponse,
   AgentSummaryResponse,
   CreateAgentRequest,
   UpdateAgentRequest,

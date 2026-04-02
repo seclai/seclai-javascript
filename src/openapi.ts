@@ -16,7 +16,7 @@ export interface paths {
          * @description List agents for the account with pagination.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). All resources are scoped to the authenticated account.
+         *     - Requires `X-API-Key` header or OAuth Bearer token. All resources are scoped to the caller's account.
          */
         get: operations["list_agents_api_agents_get"];
         put?: never;
@@ -33,7 +33,7 @@ export interface paths {
          *     Templates: `blank`, `retrieval_example`, `simple_qa`, `summarizer`, `json_extractor`, `content_change_notifier`, `scheduled_report`, `webhook_pipeline`
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). Agent is created in the authenticated account.
+         *     - Requires `X-API-Key` header or OAuth Bearer token. Agent is created in the caller's account.
          */
         post: operations["create_agent_api_agents_post"];
         delete?: never;
@@ -199,7 +199,7 @@ export interface paths {
          *     Agent traces are automatically indexed when runs complete. The first 7 days of storage are free; extended retention is billed.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). Searches only within your account's traces.
+         *     - Requires `X-API-Key` header or OAuth Bearer token. Searches only within your account's traces.
          */
         post: operations["search_agent_runs_api_agents_runs_search_post"];
         delete?: never;
@@ -222,7 +222,7 @@ export interface paths {
          *     The response includes `status`, `error_count`, and `output` once the run completes. Use `include_step_outputs=true` to include per-step outputs, timing, durations, and credits.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). You can only access runs belonging to your account.
+         *     - Requires `X-API-Key` header or OAuth Bearer token. You can only access runs belonging to your account.
          */
         get: operations["get_agent_run_api_agents_runs__run_id__get"];
         put?: never;
@@ -234,7 +234,7 @@ export interface paths {
          *     If the run is already in a terminal state (`completed` or `failed`), cancellation will be rejected.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). You can only cancel runs belonging to your account.
+         *     - Requires `X-API-Key` header or OAuth Bearer token. You can only cancel runs belonging to your account.
          */
         delete: operations["delete_agent_run_api_agents_runs__run_id__delete"];
         options?: never;
@@ -254,7 +254,7 @@ export interface paths {
          * @description Fetch an agent's metadata (name, description, trigger type, timestamps).
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). You can only access agents belonging to your account.
+         *     - Requires `X-API-Key` header or OAuth Bearer token. You can only access agents belonging to your account.
          */
         get: operations["get_agent_metadata_api_agents__agent_id__get"];
         /**
@@ -268,7 +268,7 @@ export interface paths {
          *     At least one field must be provided.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). You can only update agents belonging to your account.
+         *     - Requires `X-API-Key` header or OAuth Bearer token. You can only update agents belonging to your account.
          */
         put: operations["update_agent_api_agents__agent_id__put"];
         post?: never;
@@ -277,7 +277,7 @@ export interface paths {
          * @description Soft-delete an agent. The agent will no longer appear in listings or be accessible via the API.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). You can only delete agents belonging to your account.
+         *     - Requires `X-API-Key` header or OAuth Bearer token. You can only delete agents belonging to your account.
          */
         delete: operations["delete_agent_api_agents__agent_id__delete"];
         options?: never;
@@ -299,7 +299,7 @@ export interface paths {
          *     Returns past conversation turns (user inputs, AI responses, accept/decline status) ordered oldest first. Use `step_type` to filter by step type, and optionally `step_id` to narrow to a specific step instance.
          *
          *     Auth & scoping:
-         *     - Requires a user-scoped `X-API-Key`. Only agents belonging to your account can be queried.
+         *     - Requires `X-API-Key` header or OAuth Bearer token. Only agents belonging to your account can be queried.
          */
         get: operations["get_ai_conversation_history_api_agents__agent_id__ai_assistant_conversations_get"];
         put?: never;
@@ -327,7 +327,7 @@ export interface paths {
          *     Use mode 'generate_full' for new workflows or 'modify_workflow' to refine existing ones.
          *
          *     Auth & scoping:
-         *     - Requires a user-scoped `X-API-Key`. Only agents belonging to your account can be used.
+         *     - Requires `X-API-Key` header or OAuth Bearer token. Only agents belonging to your account can be used.
          */
         post: operations["generate_agent_steps_api_agents__agent_id__ai_assistant_generate_steps_post"];
         delete?: never;
@@ -352,7 +352,7 @@ export interface paths {
          *     Provide the step type, a natural language instruction, and optionally the current configuration. The AI will produce a proposed configuration along with an explanation. The suggestion is stored as a conversation turn that can be accepted or declined separately via the mark endpoint.
          *
          *     Auth & scoping:
-         *     - Requires a user-scoped `X-API-Key`. Only agents belonging to your account can be used.
+         *     - Requires `X-API-Key` header or OAuth Bearer token. Only agents belonging to your account can be used.
          */
         post: operations["generate_step_config_api_agents__agent_id__ai_assistant_step_config_post"];
         delete?: never;
@@ -381,7 +381,7 @@ export interface paths {
          *     This only updates the tracking status on the conversation record. To actually apply the proposed configuration, use the agent definition update endpoint separately.
          *
          *     Auth & scoping:
-         *     - Requires a user-scoped `X-API-Key`. The conversation must belong to one of your agents.
+         *     - Requires `X-API-Key` header or OAuth Bearer token. The conversation must belong to one of your agents.
          */
         patch: operations["mark_ai_suggestion_api_agents__agent_id__ai_assistant__conversation_id__patch"];
         trace?: never;
@@ -422,7 +422,7 @@ export interface paths {
          *     - `text`: Static text literal
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). You can only access agents belonging to your account.
+         *     - Requires `X-API-Key` header or OAuth Bearer token. You can only access agents belonging to your account.
          */
         get: operations["get_agent_definition_api_agents__agent_id__definition_get"];
         /**
@@ -436,7 +436,7 @@ export interface paths {
          *     **Retry steps** re-execute from a target ancestor step for quality-control loops. Configure with `target_step_id` (ancestor step ID) and `max_retries` (1–10). Best practice: place a `gate` step before the retry to make retries conditional.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). You can only update agents belonging to your account.
+         *     - Requires `X-API-Key` header or OAuth Bearer token. You can only update agents belonging to your account.
          */
         put: operations["update_agent_definition_api_agents__agent_id__definition_put"];
         post?: never;
@@ -546,6 +546,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/agents/{agent_id}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export agent definition
+         * @description Export an agent definition as a portable JSON snapshot.
+         *
+         *     The response contains the full definition, trigger configuration with schedules, alert configs, evaluation criteria, agent-scoped governance policies, and a resolved dependency manifest that maps every referenced external entity UUID to its human-readable name.
+         *
+         *     Response shape:
+         *     - `export_version`: schema version (currently `"2"`)
+         *     - `exported_at`: ISO-8601 timestamp
+         *     - `agent`: name, description, schema_version, definition, timestamps
+         *     - `trigger`: trigger type, input template, schedules
+         *     - `alert_configs`: alert type, thresholds, recipients
+         *     - `evaluation_criteria`: evaluation settings per step
+         *     - `governance_policies`: agent-scoped governance policies
+         *     - `dependencies`: knowledge_bases, memory_banks, source_connections, agents, users
+         *
+         *     Query params:
+         *     - `download` (default true): when true, sets `Content-Disposition: attachment` so clients treat the response as a file download.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key` header or OAuth Bearer token.
+         *     - When using OAuth, you may target a different organization account with `X-Account-Id`; for API keys, the key's account is always used.
+         *     - You can only export agents belonging to the resolved account.
+         */
+        get: operations["export_agent_api_agents__agent_id__export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/agents/{agent_id}/input-uploads/{upload_id}": {
         parameters: {
             query?: never;
@@ -560,7 +600,7 @@ export interface paths {
          *     Possible `status` values: `processing`, `ready`, `failed`.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). All resources are scoped to the authenticated account.
+         *     - Requires `X-API-Key` header or OAuth Bearer token. All resources are scoped to the caller's account.
          */
         get: operations["api_get_agent_input_upload_status_api_agents__agent_id__input_uploads__upload_id__get"];
         put?: never;
@@ -590,7 +630,7 @@ export interface paths {
          *     - This endpoint returns a summary list. Fetch full details with `GET /agents/runs/{run_id}`.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). You can only list runs for agents in your account.
+         *     - Requires `X-API-Key` header or OAuth Bearer token. You can only list runs for agents in your account.
          */
         get: operations["list_agent_runs_api_agents__agent_id__runs_get"];
         put?: never;
@@ -615,7 +655,7 @@ export interface paths {
          *     - Use `include_step_outputs=true` to include per-step outputs, timing, and credits.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). All resources are scoped to the authenticated account.
+         *     - Requires `X-API-Key` header or OAuth Bearer token. All resources are scoped to the caller's account.
          */
         post: operations["run_agent_api_agents__agent_id__runs_post"];
         delete?: never;
@@ -653,7 +693,7 @@ export interface paths {
          *     - On `timeout` or `error`, the payload includes `run_id` so clients can resume by polling `GET /agents/runs/{run_id}`.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). All resources are scoped to the authenticated account.
+         *     - Requires `X-API-Key` header or OAuth Bearer token. All resources are scoped to the caller's account.
          */
         post: operations["run_streaming_agent_api_agents__agent_id__runs_stream_post"];
         delete?: never;
@@ -707,7 +747,7 @@ export interface paths {
          *     After uploading, poll `GET /agents/{agent_id}/input-uploads/{upload_id}` until `status` is `ready`, then pass `input_upload_id` to `POST /agents/{agent_id}/runs`.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). All resources are scoped to the authenticated account.
+         *     - Requires `X-API-Key` header or OAuth Bearer token. All resources are scoped to the caller's account.
          */
         post: operations["api_upload_agent_input_api_agents__agent_id__upload_input_post"];
         delete?: never;
@@ -729,7 +769,7 @@ export interface paths {
          * Submit AI assistant feedback
          * @description Submit thumbs-up/down feedback on any AI assistant interaction. Negative feedback with a comment is analyzed for concerning issues.
          *
-         *     Auth: requires ``X-API-Key``.
+         *     Auth: requires ``X-API-Key`` header or OAuth Bearer token.
          */
         post: operations["api_ai_feedback_api_ai_assistant_feedback_post"];
         delete?: never;
@@ -751,7 +791,7 @@ export interface paths {
          * Generate a knowledge base plan (standalone)
          * @description Generate a knowledge base creation/modification plan without requiring an existing solution. May also propose prerequisite source creation actions.
          *
-         *     Auth: requires ``X-API-Key``.
+         *     Auth: requires ``X-API-Key`` header or OAuth Bearer token.
          */
         post: operations["api_ai_knowledge_base_api_ai_assistant_knowledge_base_post"];
         delete?: never;
@@ -773,7 +813,7 @@ export interface paths {
          * Generate a memory bank configuration (standalone)
          * @description Generate a memory bank configuration suggestion via the AI assistant. The AI proposes name, type, mode, compaction prompt, and retention settings.
          *
-         *     Auth: requires ``X-API-Key``.
+         *     Auth: requires ``X-API-Key`` header or OAuth Bearer token.
          */
         post: operations["api_ai_memory_bank_api_ai_assistant_memory_bank_post"];
         delete?: never;
@@ -793,7 +833,7 @@ export interface paths {
          * Fetch memory bank AI conversation history
          * @description Fetch the most recent memory bank AI assistant conversation turns for the authenticated user. Returns turns in oldest-first order with a total count for pagination via limit/offset query parameters.
          *
-         *     Auth: requires ``X-API-Key``.
+         *     Auth: requires ``X-API-Key`` header or OAuth Bearer token.
          */
         get: operations["api_ai_memory_bank_history_api_ai_assistant_memory_bank_last_conversation_get"];
         put?: never;
@@ -821,7 +861,7 @@ export interface paths {
          * Accept or decline a memory bank AI suggestion
          * @description Update the acceptance status of a memory bank AI assistant conversation turn. Set ``accepted`` to true to accept the proposed configuration, or false to decline it. The accepted status is recorded for audit purposes.
          *
-         *     Auth: requires ``X-API-Key``.
+         *     Auth: requires ``X-API-Key`` header or OAuth Bearer token.
          */
         patch: operations["api_ai_memory_bank_accept_api_ai_assistant_memory_bank__conversation_id__patch"];
         trace?: never;
@@ -839,7 +879,7 @@ export interface paths {
          * Generate a solution plan (standalone)
          * @description Generate a complete solution plan covering sources, knowledge bases, and agents without requiring an existing solution. Supports SSE streaming when ``Accept: text/event-stream`` is set.
          *
-         *     Auth: requires ``X-API-Key``.
+         *     Auth: requires ``X-API-Key`` header or OAuth Bearer token.
          */
         post: operations["api_ai_solution_api_ai_assistant_solution_post"];
         delete?: never;
@@ -861,7 +901,7 @@ export interface paths {
          * Generate a source plan (standalone)
          * @description Generate a content source creation/modification plan without requiring an existing solution. The AI proposes actions for the user to review before any changes are made.
          *
-         *     Auth: requires ``X-API-Key``.
+         *     Auth: requires ``X-API-Key`` header or OAuth Bearer token.
          */
         post: operations["api_ai_source_api_ai_assistant_source_post"];
         delete?: never;
@@ -883,7 +923,7 @@ export interface paths {
          * Accept and execute a standalone plan
          * @description Accept and execute a previously proposed standalone plan. If the plan contains destructive actions (deletions), ``confirm_deletions`` must be set to true.
          *
-         *     Auth: requires ``X-API-Key``.
+         *     Auth: requires ``X-API-Key`` header or OAuth Bearer token.
          */
         post: operations["api_ai_accept_api_ai_assistant__conversation_id__accept_post"];
         delete?: never;
@@ -905,7 +945,7 @@ export interface paths {
          * Decline a standalone plan
          * @description Decline a previously proposed standalone plan. No resources are modified. The conversation is marked as declined.
          *
-         *     Auth: requires ``X-API-Key``.
+         *     Auth: requires ``X-API-Key`` header or OAuth Bearer token.
          */
         post: operations["api_ai_decline_api_ai_assistant__conversation_id__decline_post"];
         delete?: never;
@@ -932,7 +972,7 @@ export interface paths {
          *     - `time_from` / `time_to`: ISO 8601 date range
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). Results are scoped to the authenticated account.
+         *     - Requires `X-API-Key` header or OAuth Bearer token. Results are scoped to the caller's account.
          */
         get: operations["list_alerts_api_alerts_get"];
         put?: never;
@@ -963,7 +1003,7 @@ export interface paths {
          *     Credits alerts (`credits_low_threshold`, `credits_runout_prediction`, `credits_usage_spike`) are account-level alert configs. They are evaluated by the credits alert sweep and default-enabled configs may be auto-created for active accounts at runtime.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token).
+         *     - Requires `X-API-Key` header or OAuth Bearer token.
          */
         get: operations["list_alert_configs_api_alerts_configs_get"];
         put?: never;
@@ -977,7 +1017,7 @@ export interface paths {
          *     Distribution types: owner, owner_admins, selected_members. Organization accounts are normalized to owner_admins.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token).
+         *     - Requires `X-API-Key` header or OAuth Bearer token.
          */
         post: operations["create_alert_config_api_alerts_configs_post"];
         delete?: never;
@@ -1000,7 +1040,7 @@ export interface paths {
          *     Returns all fields including type, enabled state, threshold, cooldown, distribution type, and recipient list.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token).
+         *     - Requires `X-API-Key` header or OAuth Bearer token.
          */
         get: operations["get_alert_config_api_alerts_configs__config_id__get"];
         put?: never;
@@ -1010,7 +1050,7 @@ export interface paths {
          * @description Delete an alert configuration. This permanently removes the config and stops any future alerts of this type from being triggered.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token).
+         *     - Requires `X-API-Key` header or OAuth Bearer token.
          */
         delete: operations["delete_alert_config_api_alerts_configs__config_id__delete"];
         options?: never;
@@ -1020,7 +1060,7 @@ export interface paths {
          * @description Update an alert configuration. Only provided fields are updated.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token).
+         *     - Requires `X-API-Key` header or OAuth Bearer token.
          */
         patch: operations["update_alert_config_api_alerts_configs__config_id__patch"];
         trace?: never;
@@ -1034,12 +1074,12 @@ export interface paths {
         };
         /**
          * List organization alert delivery preferences
-         * @description List per-organization alert delivery preferences for the API key's associated user.
+         * @description List per-organization alert delivery preferences for the authenticated user.
          *
          *     By default, only explicit override rows are returned. Set `include_defaults=true` to return the effective subscribed state for every alert type in every organization the user can manage.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token).
+         *     - Requires `X-API-Key` header or OAuth Bearer token.
          *     - Only organizations where the user is an owner or administrator are included.
          */
         get: operations["list_organization_preferences_api_alerts_organization_preferences_list_get"];
@@ -1066,12 +1106,12 @@ export interface paths {
         head?: never;
         /**
          * Update organization alert delivery preference
-         * @description Update the API key user's personal delivery preference for one alert type in one organization.
+         * @description Update the authenticated user's personal delivery preference for one alert type in one organization.
          *
          *     Setting `subscribed=false` stores an explicit opt-out override. Setting `subscribed=true` removes the override and restores the default subscribed behavior.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token).
+         *     - Requires `X-API-Key` header or OAuth Bearer token.
          *     - Only owners and administrators can update preferences for an organization.
          */
         patch: operations["update_organization_preference_api_alerts_organization_preferences__organization_id___alert_type__patch"];
@@ -1089,7 +1129,7 @@ export interface paths {
          * @description Get full alert detail including history, comments, and subscribers.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token).
+         *     - Requires `X-API-Key` header or OAuth Bearer token.
          */
         get: operations["get_alert_detail_api_alerts__alert_id__get"];
         put?: never;
@@ -1114,7 +1154,7 @@ export interface paths {
          * @description Add a comment to an alert. Comments are visible to all subscribers and are included in the alert detail response.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token).
+         *     - Requires `X-API-Key` header or OAuth Bearer token.
          */
         post: operations["add_alert_comment_api_alerts__alert_id__comments_post"];
         delete?: never;
@@ -1137,7 +1177,7 @@ export interface paths {
          * @description Change the status of an alert. Valid statuses: triggered, acknowledged, resolved, dismissed.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token).
+         *     - Requires `X-API-Key` header or OAuth Bearer token.
          */
         post: operations["change_alert_status_api_alerts__alert_id__status_post"];
         delete?: never;
@@ -1160,7 +1200,7 @@ export interface paths {
          * @description Subscribe the current user to an alert. Subscribed users receive email notifications when the alert status changes or new comments are added.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token).
+         *     - Requires `X-API-Key` header or OAuth Bearer token.
          */
         post: operations["subscribe_to_alert_api_alerts__alert_id__subscribe_post"];
         delete?: never;
@@ -1183,7 +1223,7 @@ export interface paths {
          * @description Unsubscribe the current user from an alert. The user will no longer receive email notifications for status changes or new comments on this alert.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token).
+         *     - Requires `X-API-Key` header or OAuth Bearer token.
          */
         post: operations["unsubscribe_from_alert_api_alerts__alert_id__unsubscribe_post"];
         delete?: never;
@@ -1211,7 +1251,7 @@ export interface paths {
          *     - `start` and `end` control the character range returned in `text_content` so clients can page through large documents.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). You can only access content belonging to your account.
+         *     - Requires `X-API-Key` header or OAuth Bearer token. You can only access content belonging to your account.
          */
         get: operations["get_content_detail_api_contents__source_connection_content_version__get"];
         /**
@@ -1243,7 +1283,7 @@ export interface paths {
          *     Use this to remove an uploaded or indexed item from your account. Deleting content can affect agents and knowledge base workflows that reference this item.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). You can only delete content belonging to your account.
+         *     - Requires `X-API-Key` header or OAuth Bearer token. You can only delete content belonging to your account.
          */
         delete: operations["delete_content_api_contents__source_connection_content_version__delete"];
         options?: never;
@@ -1265,7 +1305,7 @@ export interface paths {
          *     Embeddings are used for semantic search and retrieval in knowledge base workflows. This endpoint is primarily useful for debugging chunking, indexing, and vector contents.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). You can only access embeddings for content belonging to your account.
+         *     - Requires `X-API-Key` header or OAuth Bearer token. You can only access embeddings for content belonging to your account.
          */
         get: operations["list_content_embeddings_api_contents__source_connection_content_version__embeddings_get"];
         put?: never;
@@ -1334,7 +1374,7 @@ export interface paths {
          *     - For backwards compatibility, you can also pass form fields named `metadata_<key>` (for example `metadata_author=...`). These override keys from `metadata`.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). You can only replace content belonging to your account.
+         *     - Requires `X-API-Key` header or OAuth Bearer token. You can only replace content belonging to your account.
          */
         post: operations["upload_file_to_content_api_contents__source_connection_content_version__upload_post"];
         delete?: never;
@@ -1356,7 +1396,7 @@ export interface paths {
          * Generate a governance plan
          * @description Send a natural-language request to the governance AI assistant to generate a plan of policy changes. Returns a conversation with proposed actions that can be accepted or declined.
          *
-         *     Auth: requires `X-API-Key` with governance access.
+         *     Auth: requires `X-API-Key` header or OAuth Bearer token with governance access.
          */
         post: operations["governance_ai_generate_api_governance_ai_assistant_post"];
         delete?: never;
@@ -1376,7 +1416,7 @@ export interface paths {
          * List AI assistant conversations
          * @description Return recent governance AI assistant conversations for the account, ordered by most recent first.
          *
-         *     Auth: requires `X-API-Key` with governance access.
+         *     Auth: requires `X-API-Key` header or OAuth Bearer token with governance access.
          */
         get: operations["list_governance_ai_conversations_api_governance_ai_assistant_conversations_get"];
         put?: never;
@@ -1400,7 +1440,7 @@ export interface paths {
          * Accept a governance plan
          * @description Execute the proposed policy changes from a governance AI assistant conversation. Each action is applied in order and results are returned.
          *
-         *     Auth: requires `X-API-Key` with governance access.
+         *     Auth: requires `X-API-Key` header or OAuth Bearer token with governance access.
          */
         post: operations["governance_ai_accept_api_governance_ai_assistant__conversation_id__accept_post"];
         delete?: never;
@@ -1422,7 +1462,7 @@ export interface paths {
          * Decline a governance plan
          * @description Reject a previously proposed governance AI assistant plan without applying any changes. The conversation is marked as declined and no policy modifications are made.
          *
-         *     Auth: requires `X-API-Key` with governance access.
+         *     Auth: requires `X-API-Key` header or OAuth Bearer token with governance access.
          */
         post: operations["governance_ai_decline_api_governance_ai_assistant__conversation_id__decline_post"];
         delete?: never;
@@ -1443,7 +1483,7 @@ export interface paths {
          * @description List knowledge bases for the account.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). All resources are scoped to the authenticated account.
+         *     - Requires `X-API-Key` header or OAuth Bearer token. All resources are scoped to the caller's account.
          */
         get: operations["list_knowledge_bases_api_knowledge_bases_get"];
         put?: never;
@@ -1472,7 +1512,7 @@ export interface paths {
          * @description Fetch a knowledge base by ID.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). You can only access knowledge bases belonging to your account.
+         *     - Requires `X-API-Key` header or OAuth Bearer token. You can only access knowledge bases belonging to your account.
          */
         get: operations["get_knowledge_base_api_knowledge_bases__knowledge_base_id__get"];
         /**
@@ -1480,7 +1520,7 @@ export interface paths {
          * @description Update a knowledge base's configuration. Only provided fields are changed; omitted fields are left unchanged.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). You can only update knowledge bases belonging to your account.
+         *     - Requires `X-API-Key` header or OAuth Bearer token. You can only update knowledge bases belonging to your account.
          */
         put: operations["update_knowledge_base_api_knowledge_bases__knowledge_base_id__put"];
         post?: never;
@@ -1505,7 +1545,7 @@ export interface paths {
         };
         /**
          * Get current user identity
-         * @description Returns the authenticated user's personal account ID and a list of organizations they belong to. Each organization entry includes the organization's own id, name, and account_id. Useful for CLI tooling that needs to let the user pick an organization context.
+         * @description Returns the authenticated user's personal account ID and a list of organizations they belong to. Each organization entry includes the organization's id, name, and account_id. Useful for CLI tooling that needs to let the user pick an organization context.
          */
         get: operations["get_me_api_me_get"];
         put?: never;
@@ -1528,7 +1568,7 @@ export interface paths {
          * @description List memory banks for the account.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). All resources are scoped to the authenticated account.
+         *     - Requires `X-API-Key` header or OAuth Bearer token. All resources are scoped to the caller's account.
          */
         get: operations["list_memory_banks_api_memory_banks_get"];
         put?: never;
@@ -1558,7 +1598,7 @@ export interface paths {
          * Generate a memory bank configuration
          * @description Generate a memory bank configuration suggestion via the AI assistant. The AI proposes name, type, mode, compaction prompt, and retention settings based on the user's description.
          *
-         *     Auth: requires `X-API-Key`.
+         *     Auth: requires `X-API-Key` header or OAuth Bearer token.
          */
         post: operations["memory_bank_ai_generate_api_memory_banks_ai_assistant_post"];
         delete?: never;
@@ -1578,7 +1618,7 @@ export interface paths {
          * Fetch memory bank AI conversation history
          * @description Fetch the most recent memory bank AI assistant conversation turns for the current user. Supports pagination via limit/offset.
          *
-         *     Auth: requires `X-API-Key`.
+         *     Auth: requires `X-API-Key` header or OAuth Bearer token.
          */
         get: operations["memory_bank_ai_last_conversation_api_memory_banks_ai_assistant_last_conversation_get"];
         put?: never;
@@ -1606,7 +1646,7 @@ export interface paths {
          * Accept or decline a memory bank AI suggestion
          * @description Update the acceptance status of a memory bank AI assistant conversation turn. Set ``accepted`` to true to accept the proposed configuration, or false to decline it. The accepted status is recorded for audit purposes.
          *
-         *     Auth: requires `X-API-Key`.
+         *     Auth: requires `X-API-Key` header or OAuth Bearer token.
          */
         patch: operations["memory_bank_ai_accept_api_memory_banks_ai_assistant__conversation_id__patch"];
         trace?: never;
@@ -1665,7 +1705,7 @@ export interface paths {
          * @description Fetch a memory bank by ID.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). You can only access memory banks belonging to your account.
+         *     - Requires `X-API-Key` header or OAuth Bearer token. You can only access memory banks belonging to your account.
          */
         get: operations["get_memory_bank_api_memory_banks__memory_bank_id__get"];
         /**
@@ -1808,7 +1848,7 @@ export interface paths {
          *     Returns in-app notifications about model deprecations, sunsets, and newer model availability. Supports filtering by agent, unread-only, and pagination.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). Alerts are scoped to the authenticated account.
+         *     - Requires `X-API-Key` header or OAuth Bearer token. Alerts are scoped to the caller's account.
          */
         get: operations["list_alerts_api_models_alerts_get"];
         put?: never;
@@ -1833,7 +1873,7 @@ export interface paths {
          * @description Mark all model lifecycle alerts as read for the account.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). Scoped to the authenticated account.
+         *     - Requires `X-API-Key` header or OAuth Bearer token. Scoped to the caller's account.
          */
         post: operations["mark_all_read_api_models_alerts_mark_all_read_post"];
         delete?: never;
@@ -1856,7 +1896,7 @@ export interface paths {
          *     Useful for badge indicators in UIs and dashboards.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). Count is scoped to the authenticated account.
+         *     - Requires `X-API-Key` header or OAuth Bearer token. Count is scoped to the caller's account.
          */
         get: operations["get_alert_unread_count_api_models_alerts_unread_count_get"];
         put?: never;
@@ -1885,7 +1925,7 @@ export interface paths {
          * @description Mark a single model lifecycle alert as read (dismissed).
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). The alert must belong to the authenticated account.
+         *     - Requires `X-API-Key` header or OAuth Bearer token. The alert must belong to the caller's account.
          */
         patch: operations["mark_read_api_models_alerts__alert_id__read_patch"];
         trace?: never;
@@ -1904,7 +1944,7 @@ export interface paths {
          *     Returns a designated successor (if any), same-family upgrades, and cross-provider/cross-family alternatives.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token).
+         *     - Requires `X-API-Key` header or OAuth Bearer token.
          */
         get: operations["get_recommendations_api_models__model_id__recommendations_get"];
         put?: never;
@@ -1954,15 +1994,15 @@ export interface paths {
          *     - Filtering: `search` to filter by solution name (case-insensitive partial match).
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). Results are scoped to the authenticated account.
+         *     - Requires `X-API-Key` header or OAuth Bearer token. Results are scoped to the caller's account.
          */
         get: operations["list_solutions_api_solutions_get"];
         put?: never;
         /**
          * Create a solution
-         * @description Create a new solution for the authenticated account.
+         * @description Create a new solution for the caller's account.
          *
-         *     A *solution* groups agents, knowledge bases, and content sources into a cohesive unit. Provide a `name` and optional `description` in the request body. Requires authentication (API key or bearer token).
+         *     A *solution* groups agents, knowledge bases, and content sources into a cohesive unit. Provide a `name` and optional `description` in the request body.
          */
         post: operations["create_solution_api_solutions_post"];
         delete?: never;
@@ -1982,7 +2022,7 @@ export interface paths {
          * Get a solution
          * @description Retrieve a solution by its ID, including all linked agents, knowledge bases, and source connections.
          *
-         *     Returns the full solution detail with nested resource information. Requires authentication (API key or bearer token).
+         *     Returns the full solution detail with nested resource information.
          */
         get: operations["get_solution_api_solutions__solution_id__get"];
         put?: never;
@@ -1991,7 +2031,7 @@ export interface paths {
          * Delete a solution
          * @description Delete a solution by its ID.
          *
-         *     This permanently removes the solution and all its resource associations (agent links, knowledge base links, source connection links). The underlying resources themselves are not deleted. Requires authentication (API key or bearer token).
+         *     This permanently removes the solution and all its resource associations (agent links, knowledge base links, source connection links). The underlying resources themselves are not deleted.
          */
         delete: operations["delete_solution_api_solutions__solution_id__delete"];
         options?: never;
@@ -2000,7 +2040,7 @@ export interface paths {
          * Update a solution
          * @description Update an existing solution's name or description.
          *
-         *     Pass the fields you wish to change in the request body. Fields not included remain unchanged. Requires authentication (API key or bearer token).
+         *     Pass the fields you wish to change in the request body. Fields not included remain unchanged.
          */
         patch: operations["update_solution_api_solutions__solution_id__patch"];
         trace?: never;
@@ -2018,14 +2058,14 @@ export interface paths {
          * Link agents
          * @description Link one or more agents to a solution by their IDs.
          *
-         *     Pass a JSON body with an `ids` array of agent UUIDs. Already-linked agents are silently ignored. Returns the updated solution with all linked resources. Requires authentication (API key or bearer token).
+         *     Pass a JSON body with an `ids` array of agent UUIDs. Already-linked agents are silently ignored. Returns the updated solution with all linked resources.
          */
         post: operations["link_agents_api_solutions__solution_id__agents_post"];
         /**
          * Unlink agents
          * @description Unlink one or more agents from a solution by their IDs.
          *
-         *     Pass a JSON body with an `ids` array of agent UUIDs to remove. Agents not currently linked are silently ignored. Returns the updated solution with remaining linked resources. Requires authentication (API key or bearer token).
+         *     Pass a JSON body with an `ids` array of agent UUIDs to remove. Agents not currently linked are silently ignored. Returns the updated solution with remaining linked resources.
          */
         delete: operations["unlink_agents_api_solutions__solution_id__agents_delete"];
         options?: never;
@@ -2046,7 +2086,7 @@ export interface paths {
          * Generate solution plan
          * @description Generate a comprehensive solution management plan via the solution AI assistant.
          *
-         *     This is the most powerful assistant — it can propose changes across sources, knowledge bases, and agents. Describe your goal in natural language and the assistant will create a multi-step plan. Review the proposed actions and use the accept or decline endpoint. Requires authentication (API key or bearer token).
+         *     This is the most powerful assistant — it can propose changes across sources, knowledge bases, and agents. Describe your goal in natural language and the assistant will create a multi-step plan. Review the proposed actions and use the accept or decline endpoint.
          *
          *     Supports SSE streaming when `Accept: text/event-stream` is set.
          */
@@ -2070,7 +2110,7 @@ export interface paths {
          * Generate knowledge base plan
          * @description Generate a knowledge base plan via the KB AI assistant.
          *
-         *     Describe what knowledge bases you need in natural language and the assistant will propose a plan with create, update, or delete actions. The assistant may also propose creating new sources if needed. Review the proposed actions and use the accept or decline endpoint. Requires authentication (API key or bearer token).
+         *     Describe what knowledge bases you need in natural language and the assistant will propose a plan with create, update, or delete actions. The assistant may also propose creating new sources if needed. Review the proposed actions and use the accept or decline endpoint.
          */
         post: operations["ai_assistant_knowledge_base_api_solutions__solution_id__ai_assistant_knowledge_base_post"];
         delete?: never;
@@ -2092,7 +2132,7 @@ export interface paths {
          * Generate source plan
          * @description Generate a content source plan via the source AI assistant.
          *
-         *     Describe what sources you need in natural language and the assistant will propose a plan with create, update, or delete actions. Review the proposed actions and use the accept or decline endpoint to execute or discard the plan. Requires authentication (API key or bearer token).
+         *     Describe what sources you need in natural language and the assistant will propose a plan with create, update, or delete actions. Review the proposed actions and use the accept or decline endpoint to execute or discard the plan.
          */
         post: operations["ai_assistant_source_api_solutions__solution_id__ai_assistant_source_post"];
         delete?: never;
@@ -2114,7 +2154,7 @@ export interface paths {
          * Accept plan
          * @description Accept and execute a proposed plan generated by one of the AI assistant endpoints.
          *
-         *     Executes all proposed actions in the plan and returns the results of each action. If the plan contains destructive actions (e.g. deletions), you must set `confirm_deletions` to `true` in the request body. Returns a summary of executed actions with success/failure status. Requires authentication (API key or bearer token).
+         *     Executes all proposed actions in the plan and returns the results of each action. If the plan contains destructive actions (e.g. deletions), you must set `confirm_deletions` to `true` in the request body. Returns a summary of executed actions with success/failure status.
          */
         post: operations["ai_assistant_accept_api_solutions__solution_id__ai_assistant__conversation_id__accept_post"];
         delete?: never;
@@ -2136,7 +2176,7 @@ export interface paths {
          * Decline plan
          * @description Decline a proposed plan generated by one of the AI assistant endpoints.
          *
-         *     Marks the conversation as declined without executing any actions. The conversation history is preserved for reference. You can generate a new plan afterwards if needed. Requires authentication (API key or bearer token).
+         *     Marks the conversation as declined without executing any actions. The conversation history is preserved for reference. You can generate a new plan afterwards if needed.
          */
         post: operations["ai_assistant_decline_api_solutions__solution_id__ai_assistant__conversation_id__decline_post"];
         delete?: never;
@@ -2156,7 +2196,7 @@ export interface paths {
          * List conversations
          * @description List AI assistant conversation history for a solution.
          *
-         *     Returns all conversation turns for the given solution, including user inputs, AI responses, proposed actions, and acceptance status. Requires authentication (API key or bearer token).
+         *     Returns all conversation turns for the given solution, including user inputs, AI responses, proposed actions, and acceptance status.
          */
         get: operations["list_conversations_api_solutions__solution_id__conversations_get"];
         put?: never;
@@ -2164,7 +2204,7 @@ export interface paths {
          * Add conversation turn
          * @description Add a conversation turn to a solution's AI assistant history.
          *
-         *     Records a user input and optional AI response and actions taken. This is typically called internally by AI assistant endpoints, but can also be used to manually log interactions. Requires authentication (API key or bearer token).
+         *     Records a user input and optional AI response and actions taken. This is typically called internally by AI assistant endpoints, but can also be used to manually log interactions.
          */
         post: operations["add_conversation_turn_api_solutions__solution_id__conversations_post"];
         delete?: never;
@@ -2190,7 +2230,7 @@ export interface paths {
          * Mark conversation turn
          * @description Mark a conversation turn as accepted or declined.
          *
-         *     Updates the `accepted` field on an existing conversation turn. Use this after reviewing a proposed plan to record whether it was accepted or declined by the user. Requires authentication (API key or bearer token).
+         *     Updates the `accepted` field on an existing conversation turn. Use this after reviewing a proposed plan to record whether it was accepted or declined by the user.
          */
         patch: operations["mark_conversation_turn_api_solutions__solution_id__conversations__conversation_id__patch"];
         trace?: never;
@@ -2208,14 +2248,14 @@ export interface paths {
          * Link knowledge bases
          * @description Link one or more knowledge bases to a solution by their IDs.
          *
-         *     Pass a JSON body with an `ids` array of knowledge base UUIDs. Already-linked knowledge bases are silently ignored. Returns the updated solution with all linked resources. Requires authentication (API key or bearer token).
+         *     Pass a JSON body with an `ids` array of knowledge base UUIDs. Already-linked knowledge bases are silently ignored. Returns the updated solution with all linked resources.
          */
         post: operations["link_knowledge_bases_api_solutions__solution_id__knowledge_bases_post"];
         /**
          * Unlink knowledge bases
          * @description Unlink one or more knowledge bases from a solution by their IDs.
          *
-         *     Pass a JSON body with an `ids` array of knowledge base UUIDs to remove. Knowledge bases not currently linked are silently ignored. Returns the updated solution. Requires authentication (API key or bearer token).
+         *     Pass a JSON body with an `ids` array of knowledge base UUIDs to remove. Knowledge bases not currently linked are silently ignored. Returns the updated solution.
          */
         delete: operations["unlink_knowledge_bases_api_solutions__solution_id__knowledge_bases_delete"];
         options?: never;
@@ -2236,14 +2276,14 @@ export interface paths {
          * Link source connections
          * @description Link one or more source connections to a solution by their IDs.
          *
-         *     Pass a JSON body with an `ids` array of source connection UUIDs. Already-linked sources are silently ignored. Returns the updated solution with all linked resources. Requires authentication (API key or bearer token).
+         *     Pass a JSON body with an `ids` array of source connection UUIDs. Already-linked sources are silently ignored. Returns the updated solution with all linked resources.
          */
         post: operations["link_source_connections_api_solutions__solution_id__source_connections_post"];
         /**
          * Unlink source connections
          * @description Unlink one or more source connections from a solution by their IDs.
          *
-         *     Pass a JSON body with an `ids` array of source connection UUIDs to remove. Sources not currently linked are silently ignored. Returns the updated solution. Requires authentication (API key or bearer token).
+         *     Pass a JSON body with an `ids` array of source connection UUIDs to remove. Sources not currently linked are silently ignored. Returns the updated solution.
          */
         delete: operations["unlink_source_connections_api_solutions__solution_id__source_connections_delete"];
         options?: never;
@@ -2293,8 +2333,8 @@ export interface paths {
          *     - Sorting: `sort` (created_at/updated_at/name) and `order` (asc/desc).
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). Results are scoped to the authenticated account.
-         *     - The optional `account_id` query param is only allowed when it matches the authenticated account.
+         *     - Requires `X-API-Key` header or OAuth Bearer token. Results are scoped to the caller's account.
+         *     - The optional `account_id` query param is only allowed when it matches the caller's account.
          */
         get: operations["list_sources_api_sources__get"];
         put?: never;
@@ -2317,7 +2357,7 @@ export interface paths {
          * @description Fetch a content source by ID.
          *
          *     Auth & scoping:
-         *     - Requires authentication (API key or bearer token). You can only access sources belonging to your account.
+         *     - Requires `X-API-Key` header or OAuth Bearer token. You can only access sources belonging to your account.
          */
         get: operations["get_source_api_sources__source_connection_id__get"];
         /**
@@ -2652,6 +2692,69 @@ export interface components {
          * @enum {string}
          */
         AgentEvaluationTier: "fast" | "balanced" | "thorough";
+        /**
+         * AgentExportResponse
+         * @description Portable JSON snapshot of an agent definition.
+         */
+        AgentExportResponse: {
+            /**
+             * Agent
+             * @description Agent metadata and full definition. Keys: name, description, schema_version, definition, default_evaluation_tier, evaluation_mode, sampling_config, max_retries, retry_on_failure, prompt_model_auto_upgrade_strategy, prompt_model_auto_rollback_enabled, prompt_model_auto_rollback_triggers, created_at, updated_at.
+             */
+            agent: {
+                [key: string]: unknown;
+            };
+            /**
+             * Alert Configs
+             * @description Alert configurations.
+             */
+            alert_configs?: {
+                [key: string]: unknown;
+            }[] | null;
+            /**
+             * Dependencies
+             * @description Resolved dependency manifest. Keys: knowledge_bases, memory_banks, source_connections, agents, users — each a list of {id, name, description, …}.
+             */
+            dependencies?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Evaluation Criteria
+             * @description Evaluation criteria for agent steps.
+             */
+            evaluation_criteria?: {
+                [key: string]: unknown;
+            }[] | null;
+            /**
+             * Export Version
+             * @description Schema version of the export format (currently "2").
+             */
+            export_version: string;
+            /**
+             * Exported At
+             * @description ISO-8601 timestamp of when the export was generated.
+             */
+            exported_at: string;
+            /**
+             * Governance Policies
+             * @description Agent-scoped governance policies.
+             */
+            governance_policies?: {
+                [key: string]: unknown;
+            }[] | null;
+            /**
+             * Software Version
+             * @description Application version that produced this export.
+             */
+            software_version: string;
+            /**
+             * Trigger
+             * @description Trigger configuration with schedules.
+             */
+            trigger?: {
+                [key: string]: unknown;
+            } | null;
+        };
         /** AgentRunAttemptResponse */
         AgentRunAttemptResponse: {
             /**
@@ -2770,6 +2873,11 @@ export interface components {
              * @description Timestamp when the step attempt ended.
              */
             ended_at: string | null;
+            /**
+             * Input
+             * @description Input provided to the step, if any.
+             */
+            input: string | null;
             /**
              * Output
              * @description Output produced by the step, if any.
@@ -7274,6 +7382,43 @@ export interface operations {
             };
         };
     };
+    export_agent_api_agents__agent_id__export_get: {
+        parameters: {
+            query?: {
+                /** @description Return as file download */
+                download?: boolean;
+            };
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentExportResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     api_get_agent_input_upload_status_api_agents__agent_id__input_uploads__upload_id__get: {
         parameters: {
             query?: never;
@@ -8899,7 +9044,10 @@ export interface operations {
     get_me_api_me_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -10431,7 +10579,7 @@ export interface operations {
                 sort?: string;
                 /** @description Sort order */
                 order?: string;
-                /** @description List sources for the given account. Defaults to the api key's account. */
+                /** @description List sources for the given account. Defaults to the caller's account. */
                 account_id?: string | null;
             };
             header?: {

@@ -37,6 +37,9 @@ export type AgentListResponse = components["schemas"]["routers__api__agents__Age
 /** Full agent configuration including definition and metadata. */
 export type AgentDefinitionResponse = components["schemas"]["AgentDefinitionResponse"];
 
+/** Portable JSON snapshot of an agent definition. */
+export type AgentExportResponse = components["schemas"]["AgentExportResponse"];
+
 /** Summary of an agent (returned on create/update). */
 export type AgentSummaryResponse = components["schemas"]["AgentSummaryResponse"];
 
