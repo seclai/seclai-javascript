@@ -574,9 +574,7 @@ export interface paths {
          *     - `download` (default true): when true, sets `Content-Disposition: attachment` so clients treat the response as a file download.
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key` header or OAuth Bearer token.
-         *     - When using OAuth, you may target a different organization account with `X-Account-Id`; for API keys, the key's account is always used.
-         *     - You can only export agents belonging to the resolved account.
+         *     - Requires `X-API-Key`. You can only export agents belonging to your account.
          */
         get: operations["export_agent_api_agents__agent_id__export_get"];
         put?: never;
@@ -6867,7 +6865,11 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": {
+                        detail?: Record<string, never>;
+                    };
+                };
             };
             /** @description Validation Error */
             422: {
@@ -7952,7 +7954,15 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": {
+                        detail?: {
+                            error?: string;
+                            message?: string;
+                            account_id?: string;
+                        };
+                    };
+                };
             };
             /** @description Validation Error */
             422: {
@@ -8015,7 +8025,15 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": {
+                        detail?: {
+                            error?: string;
+                            message?: string;
+                            account_id?: string;
+                        };
+                    };
+                };
             };
             /** @description Validation Error */
             422: {
@@ -9363,7 +9381,11 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": {
+                        detail?: Record<string, never>;
+                    };
+                };
             };
             /** @description Validation Error */
             422: {
@@ -11222,7 +11244,11 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": {
+                        detail?: Record<string, never>;
+                    };
+                };
             };
             /** @description Validation Error */
             422: {

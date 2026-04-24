@@ -432,6 +432,15 @@ export type VariantOptionResponse = components["schemas"]["VariantOptionResponse
 /** Request body for creating a model playground experiment. */
 export type PlaygroundCreateRequest = components["schemas"]["PlaygroundCreateRequest"];
 
+/**
+ * Input type for {@link SeclaiClient.createExperiment}.
+ *
+ * Only `model_ids` and `prompt` are required — every other field has a
+ * server-side default and can be omitted.
+ */
+export type CreateExperimentInput = Pick<PlaygroundCreateRequest, "model_ids" | "prompt"> &
+  Partial<Omit<PlaygroundCreateRequest, "model_ids" | "prompt">>;
+
 // ─── Sources (enums) ─────────────────────────────────────────────────────────
 
 /** Source index mode: fast_and_cheap, balanced, slow_and_thorough, or custom. */

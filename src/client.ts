@@ -90,6 +90,7 @@ import type {
   NonManualEvaluationSummaryResponse,
   OrganizationAlertPreferenceListResponse,
   PlaygroundCreateRequest,
+  CreateExperimentInput,
   PromptModelResponse,
   ProviderGroupResponse,
   SolutionConversationResponse,
@@ -2315,9 +2316,9 @@ export class Seclai {
    *
    * @param opts - Optional filters.
    */
-  async listModels(opts: { provider?: string; supports_tool_use?: boolean; supports_thinking?: boolean } = {}): Promise<ProviderGroupResponse[]> {
+  async listModels(opts: { provider?: string; supportsToolUse?: boolean; supportsThinking?: boolean } = {}): Promise<ProviderGroupResponse[]> {
     return (await this.request("GET", "/models", {
-      query: { provider: opts.provider, supports_tool_use: opts.supports_tool_use, supports_thinking: opts.supports_thinking },
+      query: { provider: opts.provider, supports_tool_use: opts.supportsToolUse, supports_thinking: opts.supportsThinking },
     })) as ProviderGroupResponse[];
   }
 
@@ -2339,9 +2340,9 @@ export class Seclai {
    *
    * @param opts - Optional filters and pagination.
    */
-  async listExperiments(opts: { days?: number; start_date?: string; end_date?: string; limit?: number; offset?: number } = {}): Promise<unknown> {
+  async listExperiments(opts: { days?: number; startDate?: string; endDate?: string; limit?: number; offset?: number } = {}): Promise<unknown> {
     return await this.request("GET", "/models/playground/experiments", {
-      query: { days: opts.days, start_date: opts.start_date, end_date: opts.end_date, limit: opts.limit, offset: opts.offset },
+      query: { days: opts.days, start_date: opts.startDate, end_date: opts.endDate, limit: opts.limit, offset: opts.offset },
     });
   }
 
@@ -2350,7 +2351,7 @@ export class Seclai {
    *
    * @param body - Experiment configuration.
    */
-  async createExperiment(body: PlaygroundCreateRequest): Promise<unknown> {
+  async createExperiment(body: CreateExperimentInput): Promise<unknown> {
     return await this.request("POST", "/models/playground/experiments", { json: body });
   }
 

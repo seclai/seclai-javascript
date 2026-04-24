@@ -226,6 +226,7 @@ export type {
   VariantCategoryResponse,
   VariantOptionResponse,
   PlaygroundCreateRequest,
+  CreateExperimentInput,
 
   // Sources (enums)
   SourceIndexMode,

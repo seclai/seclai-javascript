@@ -8108,6 +8108,18 @@
             "description": "Successful Response"
           },
           "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "detail": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            },
             "description": "Plan limit exceeded \u2014 the account has reached the maximum number of agents allowed by its subscription plan."
           },
           "422": {
@@ -10005,6 +10017,29 @@
             "description": "Successful Response"
           },
           "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "detail": {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "account_id": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
             "description": "Insufficient credits \u2014 the account has exhausted its credits. The response body is `{\"detail\": {\"error\": \"insufficient_credits\", \"message\": ..., \"account_id\": ...}}`."
           },
           "422": {
@@ -10068,6 +10103,29 @@
             "description": "Streams agent run events via Server-Sent Events (SSE); run is always created as priority.\n\nSSE events:\n- `event: init` \u2014 `data` is an `AgentRunResponse` snapshot (includes `run_id`).\n- `event: done` \u2014 `data` is the final `AgentRunResponse` snapshot (includes `output`, `credits`, etc).\n- Other events (e.g. `status`, step events) are forwarded from the run event stream.\n- On `timeout` / `error`, the payload includes `run_id` so clients can fetch status via `GET /api/agents/runs/{run_id}`."
           },
           "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "detail": {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "account_id": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
             "description": "Insufficient credits \u2014 the account has exhausted its credits. The response body is `{\"detail\": {\"error\": \"insufficient_credits\", \"message\": ..., \"account_id\": ...}}`."
           },
           "422": {
@@ -12088,6 +12146,18 @@
             "description": "Successful Response"
           },
           "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "detail": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            },
             "description": "Insufficient credits or no active subscription \u2014 the account has exhausted its credits or does not have a valid subscription."
           },
           "422": {
@@ -15027,6 +15097,18 @@
             "description": "Successful Response"
           },
           "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "detail": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            },
             "description": "Insufficient credits or no active subscription \u2014 the account has exhausted its credits or does not have a valid subscription."
           },
           "422": {
