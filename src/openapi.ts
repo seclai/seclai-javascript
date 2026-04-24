@@ -407,7 +407,7 @@ export interface paths {
          *     - `retry`: Re-execute from a target ancestor step (for quality-control loops; pair with a `gate` step for conditional retrying. Fields: `target_step_id` (ancestor step ID), `max_retries` (1–10))
          *     - `evaluate_step`: Score a selected previous step output and emit JSON with `score`, `passed`, and `pass_threshold` (fields: `target_step_id`, `evaluation_prompt`, `pass_threshold`, optional `evaluation_tier`, optional `expectation_config`)
          *     - `insight`: Progressively read and analyze large input
-         *     - `extract_json` / `extract_html` / `extract_xml`: Extract structured data
+         *     - `extract_content`: Extract structured data (JSON, HTML, XML)
          *     - `send_email`: Send email with step output
          *     - `webhook_call`: POST data to an external URL
          *     - `write_aws_s3_object`: Write output to S3
@@ -416,6 +416,7 @@ export interface paths {
          *     - `write_content_attachment`: Write a file-backed attachment to content (optionally indexed for retrieval; content-triggered agents only. Fields: `attachment_key`, `content`, `content_type`, `indexed`)
          *     - `load_content_attachment`: Load a previously written attachment (content-triggered agents only. Fields: `attachment_key`)
          *     - `load_content`: Load the full text body of a source document (typically used with content-triggered agents; can also load by explicit `content_version_id`. Fields: `content_version_id` optional)
+         *     - `streaming_result`: Stream LLM tokens in real-time via SSE (must be a direct child of `prompt_call`; requires `dynamic_input` trigger; `priority: true` enables real-time streaming)
          *     - `display_result`: Show output to the user
          *     - `join`: Merge parallel branches
          *     - `combinator`: Combine multiple inputs
@@ -431,7 +432,7 @@ export interface paths {
          *
          *     Uses **optimistic locking**: provide `expected_change_id` from the last `GET /api/agents/{agent_id}/definition`. Returns `409 Conflict` if the definition was modified since your last read.
          *
-         *     The definition contains the agent's step workflow. Step types include `prompt_call`, `retrieval`, `transform`, `gate`, `retry`, `evaluate_step`, `insight`, `extract_json`, `extract_html`, `extract_xml`, `send_email`, `webhook_call`, `write_aws_s3_object`, `call_agent`, `write_metadata`, `write_content_attachment`, `load_content_attachment`, `load_content`, `display_result`, `join`, `combinator`, and `text`. Non-composite step types (`display_result`, `join`, `retry`, `evaluate_step`) cannot contain child steps.
+         *     The definition contains the agent's step workflow. Step types include `prompt_call`, `retrieval`, `transform`, `gate`, `retry`, `evaluate_step`, `insight`, `extract_content`, `streaming_result`, `send_email`, `webhook_call`, `write_aws_s3_object`, `call_agent`, `write_metadata`, `write_content_attachment`, `load_content_attachment`, `load_content`, `display_result`, `join`, `combinator`, and `text`. Non-composite step types (`display_result`, `join`, `retry`, `evaluate_step`, `streaming_result`) cannot contain child steps.
          *
          *     **Retry steps** re-execute from a target ancestor step for quality-control loops. Configure with `target_step_id` (ancestor step ID) and `max_retries` (1–10). Best practice: place a `gate` step before the retry to make retries conditional.
          *
@@ -573,9 +574,7 @@ export interface paths {
          *     - `download` (default true): when true, sets `Content-Disposition: attachment` so clients treat the response as a file download.
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key` header or OAuth Bearer token.
-         *     - When using OAuth, you may target a different organization account with `X-Account-Id`; for API keys, the key's account is always used.
-         *     - You can only export agents belonging to the resolved account.
+         *     - Requires `X-API-Key`. You can only export agents belonging to your account.
          */
         get: operations["export_agent_api_agents__agent_id__export_get"];
         put?: never;
@@ -647,7 +646,7 @@ export interface paths {
          *     Key fields:
          *     - `input`: text input for agents with a `dynamic_input` trigger.
          *     - `input_upload_id`: alternatively, reference a file previously uploaded via `POST /agents/{agent_id}/upload-input` (mutually exclusive with `input`).
-         *     - `priority`: set true for latency-sensitive, user-facing work.
+         *     - `priority`: set true for latency-sensitive, user-facing work. For agents with a `streaming_result` step, set `priority=true` to enable real-time token streaming; otherwise the run still proceeds, but without live token streaming.
          *     - `metadata`: a JSON object that becomes available to agent steps for string substitution.
          *
          *     After starting:
@@ -682,6 +681,7 @@ export interface paths {
          *     How it works:
          *     - The first `init` event contains an `AgentRunResponse` snapshot, including the `run_id`.
          *     - Subsequent events are forwarded from the run event stream (status changes, step events, etc).
+         *     - If the agent contains a `streaming_result` step, `stream_token` events deliver individual LLM tokens (with a `token` field) and a `stream_end` event signals completion.
          *     - The final `done` event contains the terminal snapshot (including `output` and `credits` when available).
          *
          *     Input options (for `dynamic_input` triggers):
@@ -1336,7 +1336,6 @@ export interface paths {
          *     **Supported MIME types:**
          *     - `application/epub+zip`
          *     - `application/json`
-         *     - `application/msword`
          *     - `application/pdf`
          *     - `application/vnd.ms-excel`
          *     - `application/vnd.ms-outlook`
@@ -1545,7 +1544,7 @@ export interface paths {
         };
         /**
          * Get current user identity
-         * @description Returns the authenticated user's personal account ID and a list of organizations they belong to. Each organization entry includes the organization's id, name, and account_id. Useful for CLI tooling that needs to let the user pick an organization context.
+         * @description Returns the authenticated user's personal account ID and a list of organisations they belong to.  Each organisation entry includes the organisation's own id, display name, and account_id.  Useful for CLI tooling that needs to let the user pick an org context.
          */
         get: operations["get_me_api_me_get"];
         put?: never;
@@ -1834,6 +1833,36 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Models
+         * @description List all enabled LLM models with full details.
+         *
+         *     Returns models grouped by provider, including capabilities, credit pricing, tool support, variant tiers, and lifecycle status.
+         *
+         *     Optional query parameters:
+         *     - `provider`: filter by provider (e.g. 'anthropic', 'openai')
+         *     - `supports_tool_use`: filter to models with tool calling support
+         *     - `supports_thinking`: filter to models with extended thinking support
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key` header or OAuth Bearer token.
+         */
+        get: operations["list_models_api_models_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/models/alerts": {
         parameters: {
             query?: never;
@@ -1928,6 +1957,117 @@ export interface paths {
          *     - Requires `X-API-Key` header or OAuth Bearer token. The alert must belong to the caller's account.
          */
         patch: operations["mark_read_api_models_alerts__alert_id__read_patch"];
+        trace?: never;
+    };
+    "/models/playground/experiments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Experiments
+         * @description List model playground experiments for the account.
+         *
+         *     Returns a paginated, time-filtered list of experiments ordered by creation date descending.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key` header or OAuth Bearer token. Experiments are scoped to the caller's account.
+         */
+        get: operations["list_experiments_api_models_playground_experiments_get"];
+        put?: never;
+        /**
+         * Create Experiment
+         * @description Create and schedule a model playground experiment.
+         *
+         *     Runs the given prompt against 1-10 models in parallel and optionally evaluates the outputs with an LLM judge.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key` header or OAuth Bearer token.
+         */
+        post: operations["create_experiment_api_models_playground_experiments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/models/playground/experiments/{experiment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Experiment
+         * @description Get details and results for a specific model playground experiment.
+         *
+         *     Returns the full experiment payload including prompt, model outputs, and evaluation results (if available).
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key` header or OAuth Bearer token. The experiment must belong to the caller's account.
+         */
+        get: operations["get_experiment_api_models_playground_experiments__experiment_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/models/playground/experiments/{experiment_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Experiment Endpoint
+         * @description Cancel a running or pending model playground experiment.
+         *
+         *     Signals running model calls to abort and marks the experiment as canceled.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key` header or OAuth Bearer token. The experiment must belong to the caller's account.
+         */
+        post: operations["cancel_experiment_endpoint_api_models_playground_experiments__experiment_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/models/{model_id}/details": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Model
+         * @description Get detailed information about a specific model.
+         *
+         *     Returns full model details including capabilities, credit pricing, tool support, variant tiers, and lifecycle status.
+         *
+         *     The `model_id` is the model enum identifier (e.g. 'anthropic_claude_opus_4_6').
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key` header or OAuth Bearer token.
+         */
+        get: operations["get_model_api_models__model_id__details_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/models/{model_id}/recommendations": {
@@ -2304,9 +2444,11 @@ export interface paths {
          * Create Source
          * @description Create a new content source.
          *
-         *     Source types: `rss`, `website`, `file_uploads`, `custom_index`.
+         *     Source types: `rss`, `website`, `custom_index`.
          *
-         *     For RSS and website sources, provide the URL. For file upload and custom index sources, the URL is created automatically.
+         *     For RSS and website sources, provide the URL. For custom index sources, the URL is created automatically.
+         *
+         *     For custom_index sources, you can optionally specify an `index_mode`: `fast_and_cheap` (default), `balanced`, `slow_and_thorough`, or `custom`. The legacy `file_uploads` source type is accepted as an alias for `custom_index` with `index_mode=fast_and_cheap`.
          */
         post: operations["create_source_api_sources_post"];
         delete?: never;
@@ -2326,7 +2468,7 @@ export interface paths {
          * List sources
          * @description List content sources for your account.
          *
-         *     A *source* is where Seclai pulls or receives content from (for example RSS feeds, websites, file uploads, or custom indexes). Sources are the inputs that power your agents and knowledge base workflows.
+         *     A *source* is where Seclai pulls or receives content from — RSS feeds, websites, or content stores (``custom_index``). Content stores support file uploads and API-driven content ingestion with configurable index modes (``fast_and_cheap``, ``balanced``, ``slow_and_thorough``, or ``custom``).
          *
          *     Parameters:
          *     - Pagination: `page` and `limit`.
@@ -2583,7 +2725,6 @@ export interface paths {
          *     **Supported MIME types:**
          *     - `application/epub+zip`
          *     - `application/json`
-         *     - `application/msword`
          *     - `application/pdf`
          *     - `application/vnd.ms-excel`
          *     - `application/vnd.ms-outlook`
@@ -2663,7 +2804,7 @@ export interface components {
             change_id: string;
             /**
              * Definition
-             * @description The agent definition containing name, description, tags, and step workflow tree. Step types include prompt_call, retrieval, transform, gate, retry, evaluate_step, insight, extract_json, send_email, webhook_call, call_agent, write_metadata, write_content_attachment, load_content_attachment, load_content, display_result, and others.
+             * @description The agent definition containing name, description, tags, and step workflow tree. Step types include prompt_call, retrieval, transform, gate, retry, evaluate_step, insight, extract_content, streaming_result, send_email, webhook_call, call_agent, write_metadata, write_content_attachment, load_content_attachment, load_content, display_result, and others.
              */
             definition: {
                 [key: string]: unknown;
@@ -3679,6 +3820,8 @@ export interface components {
              * @description Embedding model override.
              */
             embedding_model?: string | null;
+            /** @description Index mode for custom_index sources: fast_and_cheap (default), balanced, slow_and_thorough, or custom. */
+            index_mode?: components["schemas"]["SourceIndexMode"] | null;
             /**
              * Name
              * @description Source name.
@@ -3706,7 +3849,7 @@ export interface components {
             retention?: number | null;
             /**
              * Source Type
-             * @description Source type: rss, website, file_uploads, or custom_index.
+             * @description Source type: rss, website, or custom_index. The legacy value 'file_uploads' is accepted as an alias for custom_index.
              */
             source_type: string;
             /**
@@ -4667,10 +4810,95 @@ export interface components {
          */
         PendingProcessingCompletedFailedStatus: "pending" | "processing" | "completed" | "failed";
         /**
+         * PlaygroundCreateRequest
+         * @description Create a model playground experiment via the public API.
+         */
+        PlaygroundCreateRequest: {
+            /**
+             * Evaluation Complexity
+             * @description simple, medium, or complex
+             * @default medium
+             * @enum {string}
+             */
+            evaluation_complexity: "simple" | "medium" | "complex";
+            /**
+             * Evaluation Mode
+             * @description manual or prompt
+             * @default manual
+             * @enum {string}
+             */
+            evaluation_mode: "manual" | "prompt";
+            /**
+             * Evaluator Model Id
+             * @description Evaluator model ID when evaluation_mode is prompt.
+             */
+            evaluator_model_id?: string | null;
+            /**
+             * Include Step Output In Evaluation
+             * @description Whether to include selected step output as evaluator context.
+             * @default false
+             */
+            include_step_output_in_evaluation: boolean;
+            /**
+             * Json Template
+             * @description Optional JSON template for advanced mode.
+             */
+            json_template?: string | null;
+            /**
+             * Model Ids
+             * @description Selected model IDs (1-10).
+             */
+            model_ids: string[];
+            /**
+             * Prompt
+             * @description Prompt text for the experiment.
+             */
+            prompt: string;
+            /**
+             * Selected Step Output
+             * @description Optional step output text for evaluator context.
+             */
+            selected_step_output?: string | null;
+            /**
+             * System Prompt
+             * @description Optional system prompt.
+             * @default
+             */
+            system_prompt: string;
+        };
+        /**
          * PromptModelAutoUpgradeStrategy
          * @enum {string}
          */
         PromptModelAutoUpgradeStrategy: "none" | "early_adopter" | "middle_of_road" | "cautious_adopter";
+        /**
+         * PromptToolResponse
+         * @description Response model for a prompt tool.
+         */
+        PromptToolResponse: {
+            /** Description */
+            description?: string | null;
+            /** Documentation Url */
+            documentation_url?: string | null;
+            /** Example */
+            example?: string | null;
+            /** Headers */
+            headers?: {
+                [key: string]: string;
+            } | null;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Notes */
+            notes?: string | null;
+            /** Tool Name */
+            tool_name?: string | null;
+            /** Tool Type */
+            tool_type: string;
+            /** Tool Type Pattern */
+            tool_type_pattern?: string | null;
+        };
         /**
          * ProposedActionResponse
          * @description A single proposed action.
@@ -4859,6 +5087,22 @@ export interface components {
             updated_at: string;
         };
         /**
+         * SourceIndexMode
+         * @description Embedding quality / cost trade-off preset for custom_index sources.
+         *
+         *     Each preset controls the default embedding dimensions, chunk size, and
+         *     chunk overlap.  The embedding model is always the account-level default
+         *     (currently ``AWS_BEDROCK_AMAZON_NOVA_2_MULTIMODAL``).
+         *
+         *     Presets:
+         *         FAST_AND_CHEAP: 256 dimensions, 3 000 char chunks, 500 char overlap.
+         *         BALANCED: 384 dimensions, 1 500 char chunks, 300 char overlap.
+         *         SLOW_AND_THOROUGH: 1 024 dimensions, 1 000 char chunks, 200 char overlap.
+         *         CUSTOM: Caller supplies embedding model, dimensions, and chunk config.
+         * @enum {string}
+         */
+        SourceIndexMode: "fast_and_cheap" | "balanced" | "slow_and_thorough" | "custom";
+        /**
          * SourceResponse
          * @description Response model for source data.
          */
@@ -4951,6 +5195,8 @@ export interface components {
              * @description Unique identifier for the source connection.
              */
             id: string;
+            /** @description Index mode for custom_index sources: fast_and_cheap, balanced, slow_and_thorough, or custom. */
+            index_mode?: components["schemas"]["SourceIndexMode"] | null;
             /**
              * Name
              * @description Name of the source connection.
@@ -5424,6 +5670,54 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /**
+         * VariantCategoryResponse
+         * @description Response model for a variant category
+         */
+        VariantCategoryResponse: {
+            /** Category */
+            category: string;
+            /** Configurable */
+            configurable: boolean;
+            /** Description */
+            description: string;
+            /** Options */
+            options: components["schemas"]["VariantOptionResponse"][];
+            /** Title */
+            title: string;
+        };
+        /**
+         * VariantOptionResponse
+         * @description Response model for a variant option
+         */
+        VariantOptionResponse: {
+            /** Default */
+            default: boolean;
+            /** Description */
+            description?: string | null;
+            /** Input 1H Cache Write Credits Per 1000 Tokens */
+            input_1h_cache_write_credits_per_1000_tokens?: number | null;
+            /** Input 5M Cache Write Credits Per 1000 Tokens */
+            input_5m_cache_write_credits_per_1000_tokens?: number | null;
+            /** Input Cache Hit Credits Per 1000 Tokens */
+            input_cache_hit_credits_per_1000_tokens?: number | null;
+            /** Input Credits Per 1000 Tokens */
+            input_credits_per_1000_tokens?: number | null;
+            /** Long Context Input Cache Hit Credits Per 1000 Tokens */
+            long_context_input_cache_hit_credits_per_1000_tokens?: number | null;
+            /** Long Context Input Credits Per 1000 Tokens */
+            long_context_input_credits_per_1000_tokens?: number | null;
+            /** Long Context Output Credits Per 1000 Tokens */
+            long_context_output_credits_per_1000_tokens?: number | null;
+            /** Long Context Threshold */
+            long_context_threshold?: number | null;
+            /** Output Credits Per 1000 Tokens */
+            output_credits_per_1000_tokens?: number | null;
+            /** Title */
+            title: string;
+            /** Value */
+            value: string;
         };
         /** AgentListResponse */
         routers__api__agents__AgentListResponse: {
@@ -6322,6 +6616,135 @@ export interface components {
             /** Data */
             data: components["schemas"]["SourceResponse"][];
             pagination: components["schemas"]["PaginationResponse"];
+        };
+        /**
+         * PromptModelResponse
+         * @description Response model for prompt model data
+         */
+        schemas__model_responses__PromptModelResponse: {
+            /** Default */
+            default: boolean;
+            /** Deprecated At */
+            deprecated_at?: string | null;
+            /** Description */
+            description: string;
+            /** Enabled */
+            enabled: boolean;
+            /** Family */
+            family?: string | null;
+            /** Family Generation */
+            family_generation?: number | null;
+            /** Id */
+            id: string;
+            /** Input 1H Cache Write Credits Per 1000 Tokens */
+            input_1h_cache_write_credits_per_1000_tokens?: number | null;
+            /** Input 5M Cache Write Credits Per 1000 Tokens */
+            input_5m_cache_write_credits_per_1000_tokens?: number | null;
+            /** Input Cache Hit Credits Per 1000 Tokens */
+            input_cache_hit_credits_per_1000_tokens?: number | null;
+            /** Input Credits Per 1000 Tokens */
+            input_credits_per_1000_tokens?: number | null;
+            /**
+             * Is New
+             * @default false
+             */
+            is_new: boolean;
+            /**
+             * Last Used
+             * @default false
+             */
+            last_used: boolean;
+            /** Max Context Tokens */
+            max_context_tokens: number;
+            /** Max Conversation Length */
+            max_conversation_length: number;
+            /** Max Output Tokens */
+            max_output_tokens: number;
+            /** Model Id */
+            model_id: string;
+            /** Name */
+            name: string;
+            /** Output Credits Per 1000 Tokens */
+            output_credits_per_1000_tokens?: number | null;
+            /**
+             * Payload Schema
+             * @description Model-specific JSON schema for advanced prompt_call json_template payloads.
+             */
+            payload_schema?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Payload Schema Source Url
+             * @description Source URL used to derive payload_schema guidance for this model.
+             */
+            payload_schema_source_url?: string | null;
+            /** Provider */
+            provider: string;
+            /** Released At */
+            released_at?: string | null;
+            /**
+             * Schema Documentation Url
+             * @description Model documentation URL with request/response payload details.
+             */
+            schema_documentation_url?: string | null;
+            /**
+             * Schema Notes
+             * @description Human-readable notes about request payload compatibility.
+             */
+            schema_notes?: string | null;
+            /** Successor Model Id */
+            successor_model_id?: string | null;
+            /** Sunset At */
+            sunset_at?: string | null;
+            /** Supported Input Media */
+            supported_input_media?: string[] | null;
+            /** Supported Languages */
+            supported_languages?: string[] | null;
+            /**
+             * Supports Openai Arguments
+             * @default false
+             */
+            supports_openai_arguments: boolean;
+            /**
+             * Supports Streaming
+             * @default false
+             */
+            supports_streaming: boolean;
+            /**
+             * Supports Structured Output
+             * @default true
+             */
+            supports_structured_output: boolean;
+            /**
+             * Supports Thinking
+             * @default false
+             */
+            supports_thinking: boolean;
+            /**
+             * Supports Tool Use
+             * @default true
+             */
+            supports_tool_use: boolean;
+            /** Tools Disabled */
+            tools_disabled?: components["schemas"]["PromptToolResponse"][];
+            /** Tools Enabled */
+            tools_enabled?: components["schemas"]["PromptToolResponse"][];
+            /** Training Cutoff At */
+            training_cutoff_at?: string | null;
+            /** Url */
+            url?: string | null;
+            /** Variants */
+            variants?: components["schemas"]["VariantCategoryResponse"][] | null;
+        };
+        /**
+         * ProviderGroupResponse
+         * @description Response model for provider group with models
+         */
+        schemas__model_responses__ProviderGroupResponse: {
+            /** Models */
+            models: components["schemas"]["schemas__model_responses__PromptModelResponse"][];
+            /** Provider */
+            provider: string;
         };
         /**
          * NonManualEvaluationModeStatResponse
@@ -7522,6 +7945,13 @@ export interface operations {
                     "application/json": components["schemas"]["AgentRunResponse"];
                 };
             };
+            /** @description Insufficient credits — the account has exhausted its credits. The response body is `{"detail": {"error": "insufficient_credits", "message": ..., "account_id": ...}}`. */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -7577,6 +8007,13 @@ export interface operations {
                      */
                     "text/event-stream": string;
                 };
+            };
+            /** @description Insufficient credits — the account has exhausted its credits. The response body is `{"detail": {"error": "insufficient_credits", "message": ..., "account_id": ...}}`. */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -9610,6 +10047,45 @@ export interface operations {
             };
         };
     };
+    list_models_api_models_get: {
+        parameters: {
+            query?: {
+                /** @description Filter by provider name */
+                provider?: string | null;
+                /** @description Filter to models that support tool use */
+                supports_tool_use?: boolean | null;
+                /** @description Filter to models that support extended thinking */
+                supports_thinking?: boolean | null;
+            };
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["schemas__model_responses__ProviderGroupResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_alerts_api_models_alerts_get: {
         parameters: {
             query?: {
@@ -9719,6 +10195,195 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_experiments_api_models_playground_experiments_get: {
+        parameters: {
+            query?: {
+                /** @description Look-back window in days. */
+                days?: number;
+                /** @description Explicit start date (overrides days). */
+                start_date?: string | null;
+                /** @description Explicit end date (overrides days). */
+                end_date?: string | null;
+                /** @description Page size. */
+                limit?: number;
+                /** @description Pagination offset. */
+                offset?: number;
+            };
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_experiment_api_models_playground_experiments_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlaygroundCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_experiment_api_models_playground_experiments__experiment_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
+            path: {
+                experiment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_experiment_endpoint_api_models_playground_experiments__experiment_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
+            path: {
+                experiment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_model_api_models__model_id__details_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
+            path: {
+                model_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["schemas__model_responses__PromptModelResponse"];
+                };
             };
             /** @description Validation Error */
             422: {

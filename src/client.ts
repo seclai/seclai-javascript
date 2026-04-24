@@ -89,6 +89,9 @@ import type {
   MemoryBankResponse,
   NonManualEvaluationSummaryResponse,
   OrganizationAlertPreferenceListResponse,
+  PlaygroundCreateRequest,
+  PromptModelResponse,
+  ProviderGroupResponse,
   SolutionConversationResponse,
   SolutionListResponse,
   SolutionResponse,
@@ -2305,6 +2308,68 @@ export class Seclai {
    */
   async getModelRecommendations(modelId: string): Promise<unknown> {
     return await this.request("GET", `/models/${modelId}/recommendations`);
+  }
+
+  /**
+   * List all enabled LLM models grouped by provider.
+   *
+   * @param opts - Optional filters.
+   */
+  async listModels(opts: { provider?: string; supports_tool_use?: boolean; supports_thinking?: boolean } = {}): Promise<ProviderGroupResponse[]> {
+    return (await this.request("GET", "/models", {
+      query: { provider: opts.provider, supports_tool_use: opts.supports_tool_use, supports_thinking: opts.supports_thinking },
+    })) as ProviderGroupResponse[];
+  }
+
+  /**
+   * Get full details for a specific model.
+   *
+   * @param modelId - Model identifier.
+   */
+  async getModel(modelId: string): Promise<PromptModelResponse> {
+    return (await this.request("GET", `/models/${modelId}/details`)) as PromptModelResponse;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Model Playground Experiments
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * List model playground experiments.
+   *
+   * @param opts - Optional filters and pagination.
+   */
+  async listExperiments(opts: { days?: number; start_date?: string; end_date?: string; limit?: number; offset?: number } = {}): Promise<unknown> {
+    return await this.request("GET", "/models/playground/experiments", {
+      query: { days: opts.days, start_date: opts.start_date, end_date: opts.end_date, limit: opts.limit, offset: opts.offset },
+    });
+  }
+
+  /**
+   * Create a model playground experiment.
+   *
+   * @param body - Experiment configuration.
+   */
+  async createExperiment(body: PlaygroundCreateRequest): Promise<unknown> {
+    return await this.request("POST", "/models/playground/experiments", { json: body });
+  }
+
+  /**
+   * Get a model playground experiment by ID.
+   *
+   * @param experimentId - Experiment identifier.
+   */
+  async getExperiment(experimentId: string): Promise<unknown> {
+    return await this.request("GET", `/models/playground/experiments/${experimentId}`);
+  }
+
+  /**
+   * Cancel a running model playground experiment.
+   *
+   * @param experimentId - Experiment identifier.
+   */
+  async cancelExperiment(experimentId: string): Promise<unknown> {
+    return await this.request("POST", `/models/playground/experiments/${experimentId}/cancel`);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
