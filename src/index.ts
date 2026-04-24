@@ -220,6 +220,16 @@ export type {
 
   // Models
   PromptModelAutoUpgradeStrategy,
+  ProviderGroupResponse,
+  PromptModelResponse,
+  PromptToolResponse,
+  VariantCategoryResponse,
+  VariantOptionResponse,
+  PlaygroundCreateRequest,
+  CreateExperimentInput,
+
+  // Sources (enums)
+  SourceIndexMode,
 
   // Enums
   PendingProcessingCompletedFailedStatus,

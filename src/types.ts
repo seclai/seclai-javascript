@@ -414,6 +414,38 @@ export type AiAssistantFeedbackResponse = components["schemas"]["AiAssistantFeed
 /** Prompt model auto-upgrade strategy. */
 export type PromptModelAutoUpgradeStrategy = components["schemas"]["PromptModelAutoUpgradeStrategy"];
 
+/** Models grouped by provider. */
+export type ProviderGroupResponse = components["schemas"]["schemas__model_responses__ProviderGroupResponse"];
+
+/** Full model details including capabilities, pricing, and lifecycle status. */
+export type PromptModelResponse = components["schemas"]["schemas__model_responses__PromptModelResponse"];
+
+/** Prompt tool configuration within a model. */
+export type PromptToolResponse = components["schemas"]["PromptToolResponse"];
+
+/** Variant category for model pricing tiers. */
+export type VariantCategoryResponse = components["schemas"]["VariantCategoryResponse"];
+
+/** Variant option with credit pricing and context limits. */
+export type VariantOptionResponse = components["schemas"]["VariantOptionResponse"];
+
+/** Request body for creating a model playground experiment. */
+export type PlaygroundCreateRequest = components["schemas"]["PlaygroundCreateRequest"];
+
+/**
+ * Input type for {@link SeclaiClient.createExperiment}.
+ *
+ * Only `model_ids` and `prompt` are required — every other field has a
+ * server-side default and can be omitted.
+ */
+export type CreateExperimentInput = Pick<PlaygroundCreateRequest, "model_ids" | "prompt"> &
+  Partial<Omit<PlaygroundCreateRequest, "model_ids" | "prompt">>;
+
+// ─── Sources (enums) ─────────────────────────────────────────────────────────
+
+/** Source index mode: fast_and_cheap, balanced, slow_and_thorough, or custom. */
+export type SourceIndexMode = components["schemas"]["SourceIndexMode"];
+
 // ─── Enums ───────────────────────────────────────────────────────────────────
 
 /** Processing status: pending, processing, completed, or failed. */
