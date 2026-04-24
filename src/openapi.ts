@@ -574,7 +574,9 @@ export interface paths {
          *     - `download` (default true): when true, sets `Content-Disposition: attachment` so clients treat the response as a file download.
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key`. You can only export agents belonging to your account.
+         *     - Requires `X-API-Key` header or OAuth Bearer token.
+         *     - When using OAuth, you may target a different organization account with `X-Account-Id`; for API keys, the key's account is always used.
+         *     - You can only export agents belonging to the resolved account.
          */
         get: operations["export_agent_api_agents__agent_id__export_get"];
         put?: never;
@@ -1544,7 +1546,7 @@ export interface paths {
         };
         /**
          * Get current user identity
-         * @description Returns the authenticated user's personal account ID and a list of organisations they belong to.  Each organisation entry includes the organisation's own id, display name, and account_id.  Useful for CLI tooling that needs to let the user pick an org context.
+         * @description Returns the authenticated user's personal account ID and a list of organizations they belong to. Each organization entry includes the organization's id, name, and account_id. Useful for CLI tooling that needs to let the user pick an organization context.
          */
         get: operations["get_me_api_me_get"];
         put?: never;

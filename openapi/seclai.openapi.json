@@ -12246,7 +12246,7 @@
     },
     "/me": {
       "get": {
-        "description": "Returns the authenticated user's personal account ID and a list of organisations they belong to.  Each organisation entry includes the organisation's own id, display name, and account_id.  Useful for CLI tooling that needs to let the user pick an org context.",
+        "description": "Returns the authenticated user's personal account ID and a list of organizations they belong to. Each organization entry includes the organization's id, name, and account_id. Useful for CLI tooling that needs to let the user pick an organization context.",
         "operationId": "get_me_api_me_get",
         "parameters": [
           {
