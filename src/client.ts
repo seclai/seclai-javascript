@@ -19,8 +19,11 @@ import type { AuthState } from "./auth";
 import { resolveCredentialChain, resolveAuthHeaders } from "./auth";
 import type {
   AgentRunEvent,
+  AgentDefinitionImportErrorResponse,
   AgentDefinitionResponse,
   AgentExportResponse,
+  AgentImportPreviewRequest,
+  AgentImportPreviewResponse,
   AgentListResponse,
   AgentRunListResponse,
   AgentRunRequest,
@@ -72,7 +75,6 @@ import type {
   GovernanceAiAssistantRequest,
   GovernanceAiAssistantResponse,
   GovernanceConversationResponse,
-  HTTPValidationError,
   InlineTextReplaceRequest,
   InlineTextUploadRequest,
   KnowledgeBaseListResponse,
@@ -477,7 +479,7 @@ export class Seclai {
     if (!response.ok) {
       const responseText = await safeText(response);
       if (response.status === 422) {
-        const validation = (await safeJson(response)) as HTTPValidationError | undefined;
+        const validation = await safeJson(response);
         throw new SeclaiAPIValidationError({
           message: "Validation error",
           statusCode: response.status,
@@ -548,7 +550,7 @@ export class Seclai {
     if (!response.ok) {
       const responseText = await safeText(response);
       if (response.status === 422) {
-        const validation = (await safeJson(response)) as HTTPValidationError | undefined;
+        const validation = await safeJson(response);
         throw new SeclaiAPIValidationError({
           message: "Validation error",
           statusCode: response.status,
@@ -609,7 +611,7 @@ export class Seclai {
     if (!response.ok) {
       const responseText = await safeText(response);
       if (response.status === 422) {
-        const validation = (await safeJson(response)) as HTTPValidationError | undefined;
+        const validation = await safeJson(response);
         throw new SeclaiAPIValidationError({
           message: "Validation error",
           statusCode: response.status,
@@ -688,7 +690,7 @@ export class Seclai {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // Agent Export
+  // Agent Export / Import
   // ═══════════════════════════════════════════════════════════════════════════
 
   /**
@@ -702,6 +704,28 @@ export class Seclai {
     return (await this.request("GET", `/agents/${agentId}/export`, {
       query: { download },
     })) as AgentExportResponse;
+  }
+
+  /**
+   * Validate an `agent_definition` payload (same shape as {@link exportAgent})
+   * without creating or modifying any agent.
+   *
+   * Use this before {@link createAgent} or {@link updateAgent} with an
+   * `agent_definition` to surface `unresolved_refs` — workflow references to
+   * knowledge bases, memory banks, source connections, or sub-agents that
+   * don't exist in the target account. Pass the returned ids back in
+   * `entity_remap` on the commit call to substitute them.
+   *
+   * @param body - The preview payload (`{ agent_definition: ... }`).
+   * @returns Summary of the validated payload (step counts, schedules,
+   *   alert configs, evaluation criteria, governance policies, and any
+   *   `unresolved_refs`).
+   * @throws {SeclaiAPIValidationError} On HTTP 422 — the body is an
+   *   {@link AgentDefinitionImportErrorResponse} with 1-indexed
+   *   line/column-anchored errors against a canonical `source` echo.
+   */
+  async previewImportAgent(body: AgentImportPreviewRequest): Promise<AgentImportPreviewResponse> {
+    return (await this.request("POST", "/agents/preview-import", { json: body })) as AgentImportPreviewResponse;
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -861,7 +885,7 @@ export class Seclai {
       if (!response.ok) {
         const responseText = await safeText(response);
         if (response.status === 422) {
-          const validation = (await safeJson(response)) as HTTPValidationError | undefined;
+          const validation = await safeJson(response);
           throw new SeclaiAPIValidationError({
             message: "Validation error",
             statusCode: response.status,
@@ -991,7 +1015,7 @@ export class Seclai {
       if (!response.ok) {
         const responseText = await safeText(response);
         if (response.status === 422) {
-          const validation = (await safeJson(response)) as HTTPValidationError | undefined;
+          const validation = await safeJson(response);
           throw new SeclaiAPIValidationError({
             message: "Validation error",
             statusCode: response.status,

@@ -121,6 +121,25 @@ await client.deleteAgent("agent_id");
 // Definition (step workflow)
 const def = await client.getAgentDefinition("agent_id");
 await client.updateAgentDefinition("agent_id", { steps: [...], change_id: def.change_id });
+
+// Export / import an agent
+const exported = await client.exportAgent("agent_id");
+
+// Validate the payload first to surface unresolved entity refs in this account
+const preview = await client.previewImportAgent({ agent_definition: exported });
+const unresolved = (preview.unresolved_refs ?? []) as Array<{ ref_id: string }>;
+const entity_remap = Object.fromEntries(
+  unresolved.map((ref) => [ref.ref_id, /* picked target uuid */ ""]),
+);
+
+// Commit — `entity_remap` substitutes workflow refs before save
+const imported = await client.createAgent({
+  name: "Imported",
+  trigger_type: "dynamic_input",
+  agent_definition: exported,
+  entity_remap,
+});
+// `imported.import_warnings` lists any items that couldn't be applied.
 ```
 
 ### Agent runs
