@@ -19,6 +19,7 @@ import type { AuthState } from "./auth";
 import { resolveCredentialChain, resolveAuthHeaders } from "./auth";
 import type {
   AgentRunEvent,
+  AgentDefinitionImportErrorResponse,
   AgentDefinitionResponse,
   AgentExportResponse,
   AgentImportPreviewRequest,
@@ -74,7 +75,6 @@ import type {
   GovernanceAiAssistantRequest,
   GovernanceAiAssistantResponse,
   GovernanceConversationResponse,
-  HTTPValidationError,
   InlineTextReplaceRequest,
   InlineTextUploadRequest,
   KnowledgeBaseListResponse,
@@ -479,7 +479,7 @@ export class Seclai {
     if (!response.ok) {
       const responseText = await safeText(response);
       if (response.status === 422) {
-        const validation = (await safeJson(response)) as HTTPValidationError | undefined;
+        const validation = await safeJson(response);
         throw new SeclaiAPIValidationError({
           message: "Validation error",
           statusCode: response.status,
@@ -550,7 +550,7 @@ export class Seclai {
     if (!response.ok) {
       const responseText = await safeText(response);
       if (response.status === 422) {
-        const validation = (await safeJson(response)) as HTTPValidationError | undefined;
+        const validation = await safeJson(response);
         throw new SeclaiAPIValidationError({
           message: "Validation error",
           statusCode: response.status,
@@ -611,7 +611,7 @@ export class Seclai {
     if (!response.ok) {
       const responseText = await safeText(response);
       if (response.status === 422) {
-        const validation = (await safeJson(response)) as HTTPValidationError | undefined;
+        const validation = await safeJson(response);
         throw new SeclaiAPIValidationError({
           message: "Validation error",
           statusCode: response.status,
@@ -885,7 +885,7 @@ export class Seclai {
       if (!response.ok) {
         const responseText = await safeText(response);
         if (response.status === 422) {
-          const validation = (await safeJson(response)) as HTTPValidationError | undefined;
+          const validation = await safeJson(response);
           throw new SeclaiAPIValidationError({
             message: "Validation error",
             statusCode: response.status,
@@ -1015,7 +1015,7 @@ export class Seclai {
       if (!response.ok) {
         const responseText = await safeText(response);
         if (response.status === 422) {
-          const validation = (await safeJson(response)) as HTTPValidationError | undefined;
+          const validation = await safeJson(response);
           throw new SeclaiAPIValidationError({
             message: "Validation error",
             statusCode: response.status,

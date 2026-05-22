@@ -127,13 +127,15 @@ const exported = await client.exportAgent("agent_id");
 
 // Validate the payload first to surface unresolved entity refs in this account
 const preview = await client.previewImportAgent({ agent_definition: exported });
+const unresolved = (preview.unresolved_refs ?? []) as Array<{ ref_id: string }>;
 const entity_remap = Object.fromEntries(
-  preview.unresolved_refs.map((ref) => [ref.ref_id, /* picked target uuid */ ""]),
+  unresolved.map((ref) => [ref.ref_id, /* picked target uuid */ ""]),
 );
 
 // Commit — `entity_remap` substitutes workflow refs before save
 const imported = await client.createAgent({
   name: "Imported",
+  trigger_type: "dynamic_input",
   agent_definition: exported,
   entity_remap,
 });
