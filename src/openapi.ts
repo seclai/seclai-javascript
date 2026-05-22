@@ -32,6 +32,10 @@ export interface paths {
          *
          *     Templates: `blank`, `retrieval_example`, `simple_qa`, `summarizer`, `json_extractor`, `content_change_notifier`, `scheduled_report`, `webhook_pipeline`
          *
+         *     Importing an existing agent:
+         *     - Pass `agent_definition` with the JSON shape produced by `GET /agents/{id}/export`. The full extras suite (alert_configs, evaluation_criteria, governance_policies, schedules, solutions) is applied; items that don't resolve in this account are reported in the response's `import_warnings` array.
+         *     - Use `POST /agents/preview-import` first to surface `unresolved_refs` (workflow refs to KBs, memory banks, source connections, sub-agents that don't exist here). Then pass `entity_remap: {source_uuid: target_uuid}` on this call to substitute them before save.
+         *
          *     Auth & scoping:
          *     - Requires `X-API-Key` header or OAuth Bearer token. Agent is created in the caller's account.
          */
@@ -180,6 +184,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/agents/preview-import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview an agent_definition import
+         * @description Validate an `agent_definition` payload (the same shape produced by `GET /api/agents/{agent_id}/export`) without creating or modifying any agent. On success returns a summary the client can show before commit (counts of steps, schedules, alert configs, evaluation criteria, governance policies). On failure returns the same 422 body shape used by `POST /api/agents` and `PUT /api/agents/{id}` so callers can render line/column-anchored errors.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key` header or OAuth Bearer token. No DB writes.
+         */
+        post: operations["preview_import_agent_api_agents_preview_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/agents/runs/search": {
         parameters: {
             query?: never;
@@ -264,6 +291,10 @@ export interface paths {
          *     Evaluation settings: `evaluation_mode` ('output_expectation', 'eval_and_retry', 'sample_and_flag'), `default_evaluation_tier` ('fast', 'balanced', 'thorough'), `max_retries`, `retry_on_failure`, `sampling_config`.
          *
          *     Model lifecycle settings: `prompt_model_auto_upgrade_strategy` ('none', 'early_adopter', 'middle_of_road', 'cautious_adopter'), `prompt_model_auto_rollback_enabled`, `prompt_model_auto_rollback_triggers` (list of 'agent_eval_fail', 'governance_flag', 'governance_block', 'agent_run_failed').
+         *
+         *     Replacing the workflow from an export:
+         *     - Pass `agent_definition` with the JSON shape produced by `GET /agents/{id}/export`. Update only touches the workflow + agent metadata — alert_configs, evaluation_criteria, governance_policies, schedules, and solution links from the imported file are NOT applied (use the dedicated endpoints for those, or `POST /agents` to import as a new agent).
+         *     - `entity_remap: {source_uuid: target_uuid}` substitutes workflow entity refs before save (same shape as `POST /agents`).
          *
          *     At least one field must be provided.
          *
@@ -402,12 +433,14 @@ export interface paths {
          *     The definition contains the agent's step workflow. Available step types:
          *     - `prompt_call`: Call an LLM with a prompt template
          *     - `retrieval`: Search a knowledge base
-         *     - `transform`: Reshape data with a Liquid template
+         *     - `regex_replace`: Reshape text via ordered regex find/replace rules
          *     - `gate`: Evaluate conditions, stop or continue child execution
          *     - `retry`: Re-execute from a target ancestor step (for quality-control loops; pair with a `gate` step for conditional retrying. Fields: `target_step_id` (ancestor step ID), `max_retries` (1–10))
          *     - `evaluate_step`: Score a selected previous step output and emit JSON with `score`, `passed`, and `pass_threshold` (fields: `target_step_id`, `evaluation_prompt`, `pass_threshold`, optional `evaluation_tier`, optional `expectation_config`)
-         *     - `insight`: Progressively read and analyze large input
+         *     - `extract_data`: Progressively read and analyze large input
          *     - `extract_content`: Extract structured data (JSON, HTML, XML)
+         *     - `add_chat_turn` / `load_chat_history`: Record a turn or load running history from a conversation memory bank
+         *     - `add_memory` / `search_memory` / `load_memory`: Write, semantic-search, or load entries on a general memory bank
          *     - `send_email`: Send email with step output
          *     - `webhook_call`: POST data to an external URL
          *     - `write_aws_s3_object`: Write output to S3
@@ -416,11 +449,12 @@ export interface paths {
          *     - `write_content_attachment`: Write a file-backed attachment to content (optionally indexed for retrieval; content-triggered agents only. Fields: `attachment_key`, `content`, `content_type`, `indexed`)
          *     - `load_content_attachment`: Load a previously written attachment (content-triggered agents only. Fields: `attachment_key`)
          *     - `load_content`: Load the full text body of a source document (typically used with content-triggered agents; can also load by explicit `content_version_id`. Fields: `content_version_id` optional)
-         *     - `streaming_result`: Stream LLM tokens in real-time via SSE (must be a direct child of `prompt_call`; requires `dynamic_input` trigger; `priority: true` enables real-time streaming)
+         *     - `streaming_result`: Stream LLM tokens in real-time via SSE (must be a direct child of `prompt_call`; requires `dynamic_input` or `template_input` trigger; `priority: true` enables real-time streaming)
          *     - `display_result`: Show output to the user
          *     - `join`: Merge parallel branches
-         *     - `combinator`: Combine multiple inputs
+         *     - `merge`: Combine multiple inputs into a single templated output
          *     - `text`: Static text literal
+         *     - `for_each`: Iterate a body over a list of items (body lives in `body[]`)
          *
          *     Auth & scoping:
          *     - Requires `X-API-Key` header or OAuth Bearer token. You can only access agents belonging to your account.
@@ -432,7 +466,7 @@ export interface paths {
          *
          *     Uses **optimistic locking**: provide `expected_change_id` from the last `GET /api/agents/{agent_id}/definition`. Returns `409 Conflict` if the definition was modified since your last read.
          *
-         *     The definition contains the agent's step workflow. Step types include `prompt_call`, `retrieval`, `transform`, `gate`, `retry`, `evaluate_step`, `insight`, `extract_content`, `streaming_result`, `send_email`, `webhook_call`, `write_aws_s3_object`, `call_agent`, `write_metadata`, `write_content_attachment`, `load_content_attachment`, `load_content`, `display_result`, `join`, `combinator`, and `text`. Non-composite step types (`display_result`, `join`, `retry`, `evaluate_step`, `streaming_result`) cannot contain child steps.
+         *     The definition contains the agent's step workflow. Step types include `prompt_call`, `retrieval`, `regex_replace`, `gate`, `retry`, `evaluate_step`, `extract_data`, `extract_content`, `add_chat_turn`, `load_chat_history`, `add_memory`, `search_memory`, `load_memory`, `streaming_result`, `send_email`, `webhook_call`, `write_aws_s3_object`, `call_agent`, `write_metadata`, `write_content_attachment`, `load_content_attachment`, `load_content`, `display_result`, `join`, `merge`, `text`, and `for_each`. Non-composite step types (`display_result`, `join`, `retry`, `streaming_result`) cannot contain child steps.
          *
          *     **Retry steps** re-execute from a target ancestor step for quality-control loops. Configure with `target_step_id` (ancestor step ID) and `max_retries` (1–10). Best practice: place a `gate` step before the retry to make retries conditional.
          *
@@ -1544,7 +1578,7 @@ export interface paths {
         };
         /**
          * Get current user identity
-         * @description Returns the authenticated user's personal account ID and a list of organizations they belong to. Each organization entry includes the organization's id, name, and account_id. Useful for CLI tooling that needs to let the user pick an organization context.
+         * @description Returns the authenticated user's personal account ID and a list of organisations they belong to.  Each organisation entry includes the organisation's own id, display name, and account_id.  Useful for CLI tooling that needs to let the user pick an org context.
          */
         get: operations["get_me_api_me_get"];
         put?: never;
@@ -2795,6 +2829,28 @@ export interface components {
              */
             user_input: string;
         };
+        /**
+         * AgentDefinitionImportErrorResponse
+         * @description 422 body for invalid `agent_definition` payloads.
+         *
+         *     Mirrors :py:meth:`AgentDefinitionImportError.to_response_dict`.
+         */
+        AgentDefinitionImportErrorResponse: {
+            /**
+             * Error
+             * @default invalid_agent_definition
+             */
+            error: string;
+            /** Errors */
+            errors: components["schemas"]["ImportFieldErrorModel"][];
+            /** Message */
+            message: string;
+            /**
+             * Source
+             * @description Canonical pretty-printed echo of the supplied payload — error line/column refer to this string.
+             */
+            source: string;
+        };
         /** AgentDefinitionResponse */
         AgentDefinitionResponse: {
             /**
@@ -2804,7 +2860,7 @@ export interface components {
             change_id: string;
             /**
              * Definition
-             * @description The agent definition containing name, description, tags, and step workflow tree. Step types include prompt_call, retrieval, transform, gate, retry, evaluate_step, insight, extract_content, streaming_result, send_email, webhook_call, call_agent, write_metadata, write_content_attachment, load_content_attachment, load_content, display_result, and others.
+             * @description The agent definition containing name, description, tags, and step workflow tree. Step types include prompt_call, retrieval, regex_replace, gate, retry, evaluate_step, extract_data, extract_content, add_chat_turn, load_chat_history, add_memory, search_memory, load_memory, streaming_result, send_email, webhook_call, call_agent, write_metadata, write_content_attachment, load_content_attachment, load_content, display_result, merge, for_each, and others.
              */
             definition: {
                 [key: string]: unknown;
@@ -2955,6 +3011,11 @@ export interface components {
              */
             attempts: components["schemas"]["AgentRunAttemptResponse"][];
             /**
+             * Blocked Policies
+             * @description Governance policies that produced at least one BLOCK verdict during this run.  Deduplicated by policy id.
+             */
+            blocked_policies?: components["schemas"]["routers__api__agents__GovernancePolicyRefResponse"][];
+            /**
              * Credits
              * @description Credits consumed by the agent run, if applicable.
              */
@@ -2965,10 +3026,30 @@ export interface components {
              */
             error_count: number;
             /**
+             * Flagged Policies
+             * @description Governance policies that produced at least one FLAG verdict during this run.  Deduplicated by policy id.
+             */
+            flagged_policies?: components["schemas"]["routers__api__agents__GovernancePolicyRefResponse"][];
+            /**
+             * Governance Input Status
+             * @description Result of the governance input evaluation: safe, blocked, skipped, or timed_out.
+             */
+            governance_input_status?: string | null;
+            /**
+             * Governance Input Wait Ms
+             * @description Milliseconds spent waiting for governance input evaluation.
+             */
+            governance_input_wait_ms?: number | null;
+            /**
              * Input
              * @description Input provided to the agent for this run.
              */
             input: string | null;
+            /**
+             * Input Scan Status
+             * @description Result of the prompt injection scan: safe, unsafe, skipped, timed_out, or error.
+             */
+            input_scan_status?: string | null;
             /**
              * Output
              * @description Output produced by the agent run.
@@ -2984,6 +3065,11 @@ export interface components {
              * @description Unique identifier for the agent run.
              */
             run_id: string;
+            /**
+             * Scan Wait Ms
+             * @description Milliseconds spent waiting for prompt injection scan.
+             */
+            scan_wait_ms?: number | null;
             /** @description Current status of the agent run. */
             status: components["schemas"]["PendingProcessingCompletedFailedStatus"];
             /**
@@ -3090,6 +3176,11 @@ export interface components {
              * @description Unique agent identifier.
              */
             id: string;
+            /**
+             * Import Warnings
+             * @description One entry per item dropped or substituted during import. Present only on endpoints that accept agent_definition; null on non-import calls; [] when the import had no skips.
+             */
+            import_warnings?: components["schemas"]["ImportSkipResponse"][] | null;
             /**
              * Max Retries
              * @description Max retries for eval_and_retry mode.
@@ -4270,7 +4361,7 @@ export interface components {
             step_id?: string | null;
             /**
              * Step Type
-             * @description The step type to generate config for (e.g. 'transform', 'gate', 'text', 'prompt_call', 'retrieval').
+             * @description The step type to generate config for (e.g. 'regex_replace', 'gate', 'text', 'prompt_call', 'retrieval').
              */
             step_type: string;
             /**
@@ -4380,6 +4471,64 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * ImportFieldErrorModel
+         * @description Single agent_definition validation error with source position.
+         */
+        ImportFieldErrorModel: {
+            /**
+             * Column
+             * @description 1-indexed column in `source`.
+             */
+            column: number;
+            /**
+             * Line
+             * @description 1-indexed line in `source`.
+             */
+            line: number;
+            /**
+             * Message
+             * @description Human-readable description of the problem.
+             */
+            message: string;
+            /**
+             * Path
+             * @description Dotted path of the offending field, e.g. `agent.definition.child_steps[0].step_type`.
+             */
+            path: string;
+        };
+        /**
+         * ImportSkipResponse
+         * @description One item that was not applied during an agent import.
+         *
+         *     Used as the element type for ``import_warnings`` on every
+         *     response model that accepts an ``agent_definition`` payload.
+         *     See :py:class:`services.agent_definition_import.AgentImportSkip`
+         *     for the full category list.
+         *
+         *     Lives here (not on each router) so the authenticated and public
+         *     API responses share one definition — keeping the shape that
+         *     clients (UI modal, MCP, OpenAPI consumers) depend on aligned.
+         */
+        ImportSkipResponse: {
+            /**
+             * Category
+             * @description The kind of item that was skipped or substituted: 'schedule', 'evaluation_criteria', 'alert_config', 'alert_recipient', 'governance_policy', 'governance_kb_link', 'solution_link'.
+             */
+            category: string;
+            /**
+             * Details
+             * @description Category-specific identifiers for the skipped item (step_id, alert_type, kb_name, etc.).  Stable keys per category; absent keys are simply not applicable.
+             */
+            details?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Message
+             * @description Human-readable explanation of what was skipped and why.
+             */
+            message: string;
         };
         /**
          * InlineTextReplaceRequest
@@ -4927,6 +5076,13 @@ export interface components {
             params: {
                 [key: string]: unknown;
             };
+            /**
+             * Preview
+             * @description Planning-time dry-run preview attached by the solution AI assistant for create_agent / update_agent actions. Contains ``steps`` (the generated step tree), ``step_count``, ``warnings`` (a mix of heuristic structural issues — e.g. brittle JSONPath, pass-through ``regex_replace``, ``prompt_call`` missing a model — and deterministic resource-usage issues: every pre-bound knowledge base / memory bank must be referenced by at least one step, and no step may reference an unknown id), and ``skipped`` / ``skipped_reason`` when preview couldn't run (e.g. the action depends on resources created earlier in the same plan). ``None`` for non-agent actions or when generation failed.
+             */
+            preview?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * ProposedPolicyActionResponse
@@ -5719,6 +5875,94 @@ export interface components {
             /** Value */
             value: string;
         };
+        /**
+         * AgentImportPreviewRequest
+         * @description Dry-run import request — same payload shape as the export endpoint.
+         */
+        routers__api__agents__AgentImportPreviewRequest: {
+            /**
+             * Agent Definition
+             * @description Payload in the same shape as GET /api/agents/{agent_id}/export.
+             */
+            agent_definition: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * AgentImportPreviewResponse
+         * @description Summary of a successfully validated import payload (no DB writes).
+         *
+         *     Counts are derived from the validated payload as supplied — they
+         *     reflect what was requested, not what would eventually be persisted
+         *     (cross-account skips for recipients and KB names happen later, only
+         *     on commit).
+         */
+        routers__api__agents__AgentImportPreviewResponse: {
+            /**
+             * Agent Name
+             * @description Imported agent name, if any.
+             */
+            agent_name: string | null;
+            /**
+             * Alert Configs
+             * @description Number of alert configs in the payload.
+             */
+            alert_configs: number;
+            /**
+             * Description
+             * @description Imported agent description, if any.
+             */
+            description: string | null;
+            /**
+             * Evaluation Criteria
+             * @description Number of evaluation criteria in the payload.
+             */
+            evaluation_criteria: number;
+            /**
+             * Governance Policies
+             * @description Number of agent-scoped governance policies in the payload.
+             */
+            governance_policies: number;
+            /**
+             * Ok
+             * @description Always true on a 200 response; failures use HTTP 422.
+             */
+            ok: boolean;
+            /**
+             * Payload Export Version
+             * @description Export-format version the payload claims (or ``null`` for legacy payloads).  When this differs from ``supported_export_version``, fields may have been silently dropped or defaulted on import.
+             */
+            payload_export_version?: string | null;
+            /**
+             * Schedules
+             * @description Number of trigger schedules in the payload.
+             */
+            schedules: number;
+            /**
+             * Solutions
+             * @description Number of solutions the source agent belonged to. On import these are matched by name in the target account; unmatched names are silently skipped.
+             * @default 0
+             */
+            solutions: number;
+            /**
+             * Step Count
+             * @description Total number of steps in the workflow tree (recursive).
+             */
+            step_count: number;
+            /**
+             * Supported Export Version
+             * @description Export-format version this server understands.  Compare against ``payload_export_version`` to detect cross-version imports.
+             * @default 2
+             */
+            supported_export_version: string;
+            /**
+             * Unresolved Refs
+             * @description Entity references in the imported workflow that don't exist in the target account.  Each entry: {category, ref_id, ref_name?, locations:[step:<id>], alternatives:[{id, name, description?}]}. Pass {source_uuid: target_uuid} as ``entity_remap`` on the create/update call to substitute these references before save.
+             */
+            unresolved_refs?: {
+                [key: string]: unknown;
+            }[];
+        };
         /** AgentListResponse */
         routers__api__agents__AgentListResponse: {
             /**
@@ -5769,6 +6013,13 @@ export interface components {
         /** CreateAgentRequest */
         routers__api__agents__CreateAgentRequest: {
             /**
+             * Agent Definition
+             * @description Optional payload in the same format produced by GET /agents/{id}/export. When provided, replaces any template-derived workflow and pre-fills metadata/trigger fields the request does not specify explicitly. Validation errors include line/column references against a canonical pretty-printed echo of the supplied payload.
+             */
+            agent_definition?: {
+                [key: string]: unknown;
+            } | null;
+            /**
              * Agent Template
              * @description Template to initialize the agent from. Values: blank, retrieval_example, simple_qa, summarizer, json_extractor, content_change_notifier, scheduled_report, webhook_pipeline.
              */
@@ -5778,6 +6029,13 @@ export interface components {
              * @description Optional description.
              */
             description?: string | null;
+            /**
+             * Entity Remap
+             * @description Optional UUID-substitution map applied to the imported workflow before save. Each key is a source-account UUID (as returned by /agents/preview-import's ``unresolved_refs``); each value is the target-account UUID to substitute. Used to relink knowledge bases, memory banks, source connections, and sub-agents on cross-account imports.
+             */
+            entity_remap?: {
+                [key: string]: string;
+            } | null;
             /**
              * Name
              * @description Name for the new agent.
@@ -5790,8 +6048,31 @@ export interface components {
              */
             trigger_type: string;
         };
+        /**
+         * GovernancePolicyRefResponse
+         * @description Reference to a governance policy by id and name.
+         */
+        routers__api__agents__GovernancePolicyRefResponse: {
+            /**
+             * Policy Id
+             * @description Governance policy identifier.
+             */
+            policy_id: string;
+            /**
+             * Policy Name
+             * @description Display name of the policy at evaluation time. May be null when the policy has been deleted.
+             */
+            policy_name?: string | null;
+        };
         /** UpdateAgentRequest */
         routers__api__agents__UpdateAgentRequest: {
+            /**
+             * Agent Definition
+             * @description Optional payload in the same format produced by GET /agents/{id}/export. When provided, agent metadata fields the request does not set explicitly are taken from the payload, and the agent's workflow is replaced from `agent.definition`. The previous version is preserved in history. Validation errors include line/column references against a canonical pretty-printed echo of the supplied payload.
+             */
+            agent_definition?: {
+                [key: string]: unknown;
+            } | null;
             /**
              * Default Evaluation Tier
              * @description Default evaluation tier: 'fast', 'balanced', or 'thorough'.
@@ -5802,6 +6083,13 @@ export interface components {
              * @description New description for the agent.
              */
             description?: string | null;
+            /**
+             * Entity Remap
+             * @description Optional UUID-substitution map applied to the imported workflow before save (same shape as on POST /agents).
+             */
+            entity_remap?: {
+                [key: string]: string;
+            } | null;
             /**
              * Evaluation Mode
              * @description Evaluation mode: 'output_expectation', 'eval_and_retry', or 'sample_and_flag'.
@@ -6865,19 +7153,15 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": {
-                        detail?: Record<string, never>;
-                    };
-                };
+                content?: never;
             };
-            /** @description Validation Error */
+            /** @description The supplied `agent_definition` payload failed validation. The body lists each error with a 1-indexed line/column pointing into the canonical pretty-printed echo of the payload (also returned in `source`). */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["AgentDefinitionImportErrorResponse"];
                 };
             };
         };
@@ -7173,6 +7457,42 @@ export interface operations {
             };
         };
     };
+    preview_import_agent_api_agents_preview_import_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["routers__api__agents__AgentImportPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["routers__api__agents__AgentImportPreviewResponse"];
+                };
+            };
+            /** @description The supplied `agent_definition` payload failed validation. The body lists each error with a 1-indexed line/column pointing into the canonical pretty-printed echo of the payload (also returned in `source`). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentDefinitionImportErrorResponse"];
+                };
+            };
+        };
+    };
     search_agent_runs_api_agents_runs_search_post: {
         parameters: {
             query?: never;
@@ -7341,13 +7661,13 @@ export interface operations {
                     "application/json": components["schemas"]["AgentSummaryResponse"];
                 };
             };
-            /** @description Validation Error */
+            /** @description The supplied `agent_definition` payload failed validation. The body lists each error with a 1-indexed line/column pointing into the canonical pretty-printed echo of the payload (also returned in `source`). */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["AgentDefinitionImportErrorResponse"];
                 };
             };
         };
@@ -7954,15 +8274,7 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": {
-                        detail?: {
-                            error?: string;
-                            message?: string;
-                            account_id?: string;
-                        };
-                    };
-                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -8025,15 +8337,7 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": {
-                        detail?: {
-                            error?: string;
-                            message?: string;
-                            account_id?: string;
-                        };
-                    };
-                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -9381,11 +9685,7 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": {
-                        detail?: Record<string, never>;
-                    };
-                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -11244,11 +11544,7 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": {
-                        detail?: Record<string, never>;
-                    };
-                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

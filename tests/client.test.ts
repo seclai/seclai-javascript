@@ -263,6 +263,26 @@ describe("Agent Export", () => {
     });
     await client.exportAgent("ag_1", false);
   });
+
+  test("previewImportAgent sends POST /agents/preview-import", async () => {
+    const client = makeClient((req) => {
+      expect(req.method).toBe("POST");
+      expect(new URL(req.url).pathname).toBe("/agents/preview-import");
+      const body = JSON.parse(req.bodyText!);
+      expect(body.agent_definition).toEqual({ agent: { name: "n" } });
+      return jsonResponse({
+        ok: true,
+        agent_name: "n",
+        description: null,
+        step_count: 0,
+        schedules: 0,
+        alert_configs: 0,
+        evaluation_criteria: 0,
+        governance_policies: 0,
+      });
+    });
+    await client.previewImportAgent({ agent_definition: { agent: { name: "n" } } } as any);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

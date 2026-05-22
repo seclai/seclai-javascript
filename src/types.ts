@@ -52,6 +52,27 @@ export type UpdateAgentRequest = components["schemas"]["routers__api__agents__Up
 /** Request body for updating an agent definition (steps, model, etc.). */
 export type UpdateAgentDefinitionRequest = components["schemas"]["UpdateAgentDefinitionRequest"];
 
+/** Request body for previewing an agent_definition import (dry-run validation). */
+export type AgentImportPreviewRequest = components["schemas"]["routers__api__agents__AgentImportPreviewRequest"];
+
+/** Response body summarising a successfully validated agent_definition import payload. */
+export type AgentImportPreviewResponse = components["schemas"]["routers__api__agents__AgentImportPreviewResponse"];
+
+/**
+ * 422 response body for invalid `agent_definition` payloads on create/update/preview-import.
+ * Errors carry 1-indexed line/column references into the canonical `source` echo.
+ */
+export type AgentDefinitionImportErrorResponse = components["schemas"]["AgentDefinitionImportErrorResponse"];
+
+/** Single validation error within an {@link AgentDefinitionImportErrorResponse} (with source position). */
+export type ImportFieldErrorModel = components["schemas"]["ImportFieldErrorModel"];
+
+/** One item dropped or substituted during an agent import (emitted in `import_warnings`). */
+export type ImportSkipResponse = components["schemas"]["ImportSkipResponse"];
+
+/** Reference to a governance policy (id and optional display name). */
+export type GovernancePolicyRefResponse = components["schemas"]["routers__api__agents__GovernancePolicyRefResponse"];
+
 // ─── Agent Runs ──────────────────────────────────────────────────────────────
 
 /** Request body for starting an agent run. */

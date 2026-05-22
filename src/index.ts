@@ -77,6 +77,12 @@ export type {
   CreateAgentRequest,
   UpdateAgentRequest,
   UpdateAgentDefinitionRequest,
+  AgentImportPreviewRequest,
+  AgentImportPreviewResponse,
+  AgentDefinitionImportErrorResponse,
+  ImportFieldErrorModel,
+  ImportSkipResponse,
+  GovernancePolicyRefResponse,
 
   // Agent Runs
   AgentRunRequest,
