@@ -7153,7 +7153,11 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": {
+                        detail?: Record<string, never>;
+                    };
+                };
             };
             /** @description The supplied `agent_definition` payload failed validation. The body lists each error with a 1-indexed line/column pointing into the canonical pretty-printed echo of the payload (also returned in `source`). */
             422: {
@@ -9685,7 +9689,11 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": {
+                        detail?: Record<string, never>;
+                    };
+                };
             };
             /** @description Validation Error */
             422: {
@@ -11544,7 +11552,11 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": {
+                        detail?: Record<string, never>;
+                    };
+                };
             };
             /** @description Validation Error */
             422: {

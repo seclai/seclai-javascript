@@ -8496,6 +8496,18 @@
             "description": "Successful Response"
           },
           "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "detail": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            },
             "description": "Plan limit exceeded \u2014 the account has reached the maximum number of agents allowed by its subscription plan."
           },
           "422": {
@@ -12523,6 +12535,18 @@
             "description": "Successful Response"
           },
           "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "detail": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            },
             "description": "Insufficient credits or no active subscription \u2014 the account has exhausted its credits or does not have a valid subscription."
           },
           "422": {
@@ -15462,6 +15486,18 @@
             "description": "Successful Response"
           },
           "402": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "detail": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            },
             "description": "Insufficient credits or no active subscription \u2014 the account has exhausted its credits or does not have a valid subscription."
           },
           "422": {
