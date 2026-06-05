@@ -2515,7 +2515,7 @@ export class Seclai {
    *
    * @param body - Generation request.
    */
-  async aiAssistantMemoryBank(body: AiAssistantGenerateRequest): Promise<MemoryBankAiAssistantResponse> {
+  async aiAssistantMemoryBank(body: MemoryBankAiAssistantRequest): Promise<MemoryBankAiAssistantResponse> {
     return (await this.request("POST", "/ai-assistant/memory-bank", { json: body })) as MemoryBankAiAssistantResponse;
   }
 
