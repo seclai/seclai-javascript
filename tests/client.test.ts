@@ -1013,6 +1013,30 @@ describe("Agent Input Uploads", () => {
     });
     await client.getAgentInputUploadStatus("ag_1", "upl_1");
   });
+
+  test("getAgentAttachmentReferences sends GET /agents/:id/attachment-references", async () => {
+    const client = makeClient((req) => {
+      expect(req.method).toBe("GET");
+      expect(new URL(req.url).pathname).toBe("/agents/ag_1/attachment-references");
+      return jsonResponse({ requires_uploads: false });
+    });
+    const refs = await client.getAgentAttachmentReferences("ag_1");
+    expect(refs.requires_uploads).toBe(false);
+  });
+
+  test("downloadAgentRunAttachment returns raw Response with download_name", async () => {
+    const client = makeClient((req) => {
+      const url = new URL(req.url);
+      expect(req.method).toBe("GET");
+      expect(url.pathname).toBe("/v2/agent-runs/run_1/attachments/att_1");
+      expect(url.searchParams.get("download_name")).toBe("report.pdf");
+      return new Response("file-bytes", { status: 200 });
+    });
+    const resp = await client.downloadAgentRunAttachment("run_1", "att_1", {
+      downloadName: "report.pdf",
+    });
+    expect(await resp.text()).toBe("file-bytes");
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1829,6 +1853,21 @@ key = value
 `;
     const result = parseIni(ini);
     expect(result["default"]).toEqual({ key: "value" });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Model Playground Experiments
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("Model Playground Experiments", () => {
+  test("deleteExperiment sends DELETE /models/playground/experiments/:id", async () => {
+    const client = makeClient((req) => {
+      expect(req.method).toBe("DELETE");
+      expect(new URL(req.url).pathname).toBe("/models/playground/experiments/exp_1");
+      return new Response(null, { status: 204 });
+    });
+    await client.deleteExperiment("exp_1");
   });
 });
 

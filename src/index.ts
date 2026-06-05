@@ -91,6 +91,7 @@ export type {
   AgentRunListResponse,
   AgentRunStepResponse,
   AgentRunAttemptResponse,
+  AgentRunToolCallResponse,
   AgentTraceSearchRequest,
   AgentTraceSearchResponse,
   AgentTraceMatchResponse,
@@ -98,6 +99,8 @@ export type {
 
   // Agent Input Uploads
   UploadAgentInputApiResponse,
+  AgentAttachmentRefsApiResponse,
+  AttachmentRefsSourceApiSummary,
 
   // Agent AI Assistant
   GenerateAgentStepsRequest,
@@ -229,6 +232,7 @@ export type {
   ProviderGroupResponse,
   PromptModelResponse,
   PromptToolResponse,
+  ModalityRateResponse,
   VariantCategoryResponse,
   VariantOptionResponse,
   PlaygroundCreateRequest,
@@ -236,6 +240,10 @@ export type {
 
   // Sources (enums)
   SourceIndexMode,
+
+  // Errors
+  InsufficientCreditsResponse,
+  InsufficientCreditsDetail,
 
   // Enums
   PendingProcessingCompletedFailedStatus,

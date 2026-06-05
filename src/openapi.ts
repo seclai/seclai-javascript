@@ -417,6 +417,28 @@ export interface paths {
         patch: operations["mark_ai_suggestion_api_agents__agent_id__ai_assistant__conversation_id__patch"];
         trace?: never;
     };
+    "/agents/{agent_id}/attachment-references": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get agent attachment-reference contract
+         * @description Return the static attachment-reference contract for an agent — what files the agent's definition expects on a run.
+         *
+         *     Call this BEFORE staging uploads so you know whether the agent accepts files at all (``requires_uploads``), and which specific filenames/indexes/patterns the templates reference. Mismatched batches are rejected at run time with HTTP 400.
+         */
+        get: operations["api_get_agent_attachment_references_api_agents__agent_id__attachment_references_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/agents/{agent_id}/definition": {
         parameters: {
             query?: never;
@@ -455,6 +477,8 @@ export interface paths {
          *     - `merge`: Combine multiple inputs into a single templated output
          *     - `text`: Static text literal
          *     - `for_each`: Iterate a body over a list of items (body lives in `body[]`)
+         *     - `if_else`: Conditional dispatch. Evaluates `conditions` (same shape as `gate`) and runs `then_steps` on match, otherwise the optional `else_steps`. The chosen branch's output flows to the if_else step's own `child_steps` (post-branch continuation chain). **`display_result` and `streaming_result` are not allowed inside `then_steps` / `else_steps`** — end each branch with a content-producing step (e.g. `text`, `prompt_call`) and place the single `display_result` in `child_steps`.
+         *     - `switch`: Single-discriminator dispatch. Renders `discriminator` (default `{{input}}`) and routes to the first matching `cases[]` entry (equality by default; pass a list in `match` for `$in` semantics) or to `else_steps` when nothing matches. The chosen case's output flows to the switch step's own `child_steps`. **`display_result` and `streaming_result` are not allowed inside `cases[].steps` or `else_steps`** — end each case with a content-producing step and place the single `display_result` in `child_steps`.
          *
          *     Auth & scoping:
          *     - Requires `X-API-Key` header or OAuth Bearer token. You can only access agents belonging to your account.
@@ -466,9 +490,13 @@ export interface paths {
          *
          *     Uses **optimistic locking**: provide `expected_change_id` from the last `GET /api/agents/{agent_id}/definition`. Returns `409 Conflict` if the definition was modified since your last read.
          *
-         *     The definition contains the agent's step workflow. Step types include `prompt_call`, `retrieval`, `regex_replace`, `gate`, `retry`, `evaluate_step`, `extract_data`, `extract_content`, `add_chat_turn`, `load_chat_history`, `add_memory`, `search_memory`, `load_memory`, `streaming_result`, `send_email`, `webhook_call`, `write_aws_s3_object`, `call_agent`, `write_metadata`, `write_content_attachment`, `load_content_attachment`, `load_content`, `display_result`, `join`, `merge`, `text`, and `for_each`. Non-composite step types (`display_result`, `join`, `retry`, `streaming_result`) cannot contain child steps.
+         *     The definition contains the agent's step workflow. Step types include `prompt_call`, `retrieval`, `regex_replace`, `gate`, `retry`, `evaluate_step`, `extract_data`, `extract_content`, `add_chat_turn`, `load_chat_history`, `add_memory`, `search_memory`, `load_memory`, `streaming_result`, `send_email`, `webhook_call`, `write_aws_s3_object`, `call_agent`, `write_metadata`, `write_content_attachment`, `load_content_attachment`, `load_content`, `display_result`, `join`, `merge`, `text`, `for_each`, `if_else`, and `switch`. Non-composite step types (`display_result`, `join`, `retry`, `streaming_result`) cannot contain child steps.
          *
          *     **Retry steps** re-execute from a target ancestor step for quality-control loops. Configure with `target_step_id` (ancestor step ID) and `max_retries` (1–10). Best practice: place a `gate` step before the retry to make retries conditional.
+         *
+         *     **if_else** runs `then_steps` when its `conditions` (same shape as `gate`) match, otherwise its optional `else_steps`. Either branch's output flows to the if_else step's own `child_steps` (the post-branch continuation chain).
+         *
+         *     **switch** dispatches on a `discriminator` template (default `{{input}}`) to the first matching case (equality by default; pass a list in `match` for `$in` semantics) or to `else_steps` when no case matches. Cases own their own `steps` subtrees; the chosen branch's output flows to the switch step's own `child_steps`.
          *
          *     Auth & scoping:
          *     - Requires `X-API-Key` header or OAuth Bearer token. You can only update agents belonging to your account.
@@ -779,6 +807,8 @@ export interface paths {
          *     **Supported extensions:** txt, html, md, csv, xml, json, pdf, msg, docx, doc, pptx, ppt, xlsx, xls, zip, epub, png, jpg, gif, bmp, tiff, webp, mp3, wav, m4a, flac, ogg, mp4, mov, avi.
          *
          *     After uploading, poll `GET /agents/{agent_id}/input-uploads/{upload_id}` until `status` is `ready`, then pass `input_upload_id` to `POST /agents/{agent_id}/runs`.
+         *
+         *     **Multi-modal routing:** non-text uploads (image, audio, video, PDF) are surfaced natively to multi-modal-capable prompt steps; text-only models fall back to the OCR / transcript text counterpart.  Audio originals are preserved past transcription so audio-capable models (Gemini 2.5/3, GPT-5 audio) read them directly; the agent-input-binary janitor sweeps originals once they pass your account's agent-trace retention (the agent-traces source's retention period; free default 7 days).
          *
          *     Auth & scoping:
          *     - Requires `X-API-Key` header or OAuth Bearer token. All resources are scoped to the caller's account.
@@ -1388,6 +1418,7 @@ export interface paths {
          *     - `image/gif`
          *     - `image/jpeg`
          *     - `image/png`
+         *     - `image/svg+xml`
          *     - `image/tiff`
          *     - `image/webp`
          *     - `text/csv`
@@ -2046,7 +2077,16 @@ export interface paths {
         get: operations["get_experiment_api_models_playground_experiments__experiment_id__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete Experiment Endpoint
+         * @description Soft-delete a model playground experiment.
+         *
+         *     Removes the experiment from list/detail views while preserving audit history.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key` header or OAuth access token. The experiment must belong to the caller's account.
+         */
+        delete: operations["delete_experiment_endpoint_api_models_playground_experiments__experiment_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2777,6 +2817,7 @@ export interface paths {
          *     - `image/gif`
          *     - `image/jpeg`
          *     - `image/png`
+         *     - `image/svg+xml`
          *     - `image/tiff`
          *     - `image/webp`
          *     - `text/csv`
@@ -2799,6 +2840,34 @@ export interface paths {
          *     - `status` is `uploaded` for a new upload, or `duplicate` when the same file already exists for this source.
          */
         post: operations["upload_file_to_source_api_sources__source_connection_id__upload_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v2/agent-runs/{run_id}/attachments/{attachment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download an agent-run attachment
+         * @description Streams the bytes of an attachment emitted by a step in the given agent run.  ``attachment_id`` is the URL-safe-base64-encoded ``storage_key`` (use the encoder shared by webhook + email payload builders).
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key` header or OAuth Bearer token.
+         *     - The calling account must own ``run_id``; lookup failures (missing run, cross-account run, soft-deleted agent, unreferenced storage_key) all collapse to a single 404 to prevent cross-tenant existence enumeration.
+         *
+         *     MIME handling:
+         *     - Inline-safe MIMEs (image/*, audio/*, video/*, application/pdf, text/plain, application/vnd.seclai.manifest+json) are served with their declared type.
+         *     - Everything else is served as ``application/octet-stream`` with an attachment disposition to prevent stored-XSS.
+         */
+        get: operations["serve_agent_run_attachment_api_v2_agent_runs__run_id__attachments__attachment_id__get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2830,17 +2899,36 @@ export interface components {
             user_input: string;
         };
         /**
+         * AgentAttachmentRefsApiResponse
+         * @description Static attachment-reference contract for an agent.
+         *
+         *     Mirrors the MCP ``get_agent_attachment_references`` tool: returns
+         *     what files (if any) an agent's templates expect on a run so API
+         *     consumers can stage uploads correctly before calling
+         *     ``POST /agents/{id}/runs``.
+         */
+        AgentAttachmentRefsApiResponse: {
+            /** @description Aggregated selector summary across all consumer steps. ``exact_names`` entries must each appear in the upload batch; ``indexes_max+1`` is the minimum file count; every ``patterns`` glob must match at least one upload. */
+            agent?: components["schemas"]["AttachmentRefsSourceApiSummary"];
+            /**
+             * Requires Uploads
+             * @description When ``false`` the agent's definition does NOT reference any uploaded attachments — ``POST /agents/{id}/upload-input`` will reject with HTTP 400. When ``true`` the ``agent`` block lists the specific selectors a run-time batch must satisfy.
+             */
+            requires_uploads: boolean;
+        };
+        /**
          * AgentDefinitionImportErrorResponse
          * @description 422 body for invalid `agent_definition` payloads.
          *
-         *     Mirrors :py:meth:`AgentDefinitionImportError.to_response_dict`.
+         *     Mirrors `AgentDefinitionImportError.to_response_dict`.
          */
         AgentDefinitionImportErrorResponse: {
             /**
              * Error
-             * @default invalid_agent_definition
+             * @description Stable machine-readable error code.
+             * @constant
              */
-            error: string;
+            error: "invalid_agent_definition";
             /** Errors */
             errors: components["schemas"]["ImportFieldErrorModel"][];
             /** Message */
@@ -2860,7 +2948,7 @@ export interface components {
             change_id: string;
             /**
              * Definition
-             * @description The agent definition containing name, description, tags, and step workflow tree. Step types include prompt_call, retrieval, regex_replace, gate, retry, evaluate_step, extract_data, extract_content, add_chat_turn, load_chat_history, add_memory, search_memory, load_memory, streaming_result, send_email, webhook_call, call_agent, write_metadata, write_content_attachment, load_content_attachment, load_content, display_result, merge, for_each, and others.
+             * @description The agent definition containing name, description, tags, and step workflow tree. Step types include prompt_call, retrieval, regex_replace, gate, retry, evaluate_step, extract_data, extract_content, add_chat_turn, load_chat_history, add_memory, search_memory, load_memory, streaming_result, send_email, webhook_call, call_agent, write_metadata, write_content_attachment, load_content_attachment, load_content, display_result, merge, for_each, if_else, switch, and others.
              */
             definition: {
                 [key: string]: unknown;
@@ -2986,9 +3074,18 @@ export interface components {
             input?: string | null;
             /**
              * Input Upload Id
-             * @description ID of a previously uploaded file (via POST /{agent_id}/upload-input) to use as the run input for dynamic-input triggers. Mutually exclusive with the 'input' field.
+             * @description ID of a previously uploaded file (via POST /{agent_id}/upload-input) to use as the run input for dynamic-input triggers. Mutually exclusive with the 'input' field. Use ``input_upload_ids`` to attach multiple files.
+             *
+             *     **Attachment visibility:** a step only sees the upload when its template references the input — via ``{{input}}`` / ``{{agent.input}}`` / ``{{step.<id>.input|output}}`` (implicit, all attachments) or the ``{{attachments[…]}}`` family (explicit narrowing — e.g. ``{{attachments[0]}}``, ``{{attachments[*.pdf]}}``).
+             *
+             *     **Per-batch validation:** every selector the agent's definition declares must be satisfied or the run is rejected with HTTP 400. Exact-name selectors require that filename to be present; indexed selectors require at least N+1 files; glob patterns require at least one matching filename.
              */
             input_upload_id?: string | null;
+            /**
+             * Input Upload Ids
+             * @description IDs of multiple previously uploaded files. Each upload's extracted text is concatenated under a heading; each upload's binary is surfaced as a separate ``MediaAttachment`` so multi-modal prompt steps reason over all files at once. Steps narrow visibility via ``{{attachments[…]}}`` selectors (by index, filename, or fnmatch glob). The batch must satisfy every selector the agent declares — exact names, indexed references (length must exceed the highest index), and glob patterns (each pattern needs at least one match). Mismatches return HTTP 400 with the unmet requirements listed.  Mutually exclusive with ``input`` and ``input_upload_id`` — pass exactly one of the three. Max 20 uploads per run.
+             */
+            input_upload_ids?: string[] | null;
             /**
              * Metadata
              * @description Metadata to make available for string substitution expressions in agent tasks.
@@ -3002,6 +3099,11 @@ export interface components {
              * @default false
              */
             priority: boolean;
+            /**
+             * Replay Of Run Id
+             * @description Re-run this agent reusing a prior run's uploaded input files. The files are re-resolved server-side from the source run (which must belong to this account and agent) — you do not re-upload them. Combine with ``input`` to change the text while keeping the files. A fresh upload batch (``input_upload_id(s)``) takes precedence and disables replay. Binaries swept by retention fall back to their extracted text.
+             */
+            replay_of_run_id?: string | null;
         };
         /** AgentRunResponse */
         AgentRunResponse: {
@@ -3041,6 +3143,11 @@ export interface components {
              */
             governance_input_wait_ms?: number | null;
             /**
+             * Hitl Wait Ms
+             * @description Cumulative milliseconds the run was parked waiting for a human decision on a human_in_the_loop step.  Subtracted from active duration in run-detail and duration-stats responses.
+             */
+            hitl_wait_ms?: number | null;
+            /**
              * Input
              * @description Input provided to the agent for this run.
              */
@@ -3055,6 +3162,11 @@ export interface components {
              * @description Output produced by the agent run.
              */
             output: string | null;
+            /**
+             * Output Content Type
+             * @description MIME type of `output` — mirrors the terminal step's `output_content_type`.  Consumers interpret `output` differently depending on this value: `application/vnd.seclai.manifest+json` is a multi-asset manifest with shape `{text, attachments: [{storage_key, mime, name, bytes}]}` — fetch each attachment via `GET /authenticated/storage-blobs/{storage_key}`.  `text/plain` / `text/*` are free-form text.  `application/json` is a JSON document.  Null on runs that produced no terminal output or that pre-date this column.
+             */
+            output_content_type?: string | null;
             /**
              * Priority
              * @description Indicates if the run was treated as a priority execution.
@@ -3127,6 +3239,11 @@ export interface components {
              * @description Type of the agent step.
              */
             step_type: string;
+            /**
+             * Tool Calls
+             * @description LLM tool calls made during this step (prompt_call steps only), ordered by execution. Empty for steps that invoked no tools.
+             */
+            tool_calls?: components["schemas"]["AgentRunToolCallResponse"][];
         };
         /** AgentRunStreamRequest */
         AgentRunStreamRequest: {
@@ -3137,9 +3254,14 @@ export interface components {
             input?: string | null;
             /**
              * Input Upload Id
-             * @description ID of a previously uploaded file (via POST /{agent_id}/upload-input) to use as the run input for dynamic-input triggers. Mutually exclusive with the 'input' field.
+             * @description ID of a previously uploaded file (via POST /{agent_id}/upload-input) to use as the run input for dynamic-input triggers. Mutually exclusive with the 'input' field. Use ``input_upload_ids`` to attach multiple files. Subject to the same per-batch attachment-selector validation as the non-streaming endpoint.
              */
             input_upload_id?: string | null;
+            /**
+             * Input Upload Ids
+             * @description IDs of multiple previously uploaded files. See the non-streaming endpoint for full semantics, including per-batch selector validation (exact names, indexed references, and glob patterns must all be satisfied or the run is rejected with HTTP 400). Max 20.
+             */
+            input_upload_ids?: string[] | null;
             /**
              * Metadata
              * @description Metadata to make available for string substitution expressions in agent tasks.
@@ -3147,6 +3269,81 @@ export interface components {
             metadata?: {
                 [key: string]: components["schemas"]["JsonValue"];
             } | null;
+            /**
+             * Replay Of Run Id
+             * @description Re-run reusing a prior run's uploaded input files (re-resolved server-side from the source run, which must belong to this account and agent). A fresh upload batch takes precedence.
+             */
+            replay_of_run_id?: string | null;
+        };
+        /**
+         * AgentRunToolCallResponse
+         * @description A single LLM tool call made during a prompt_call step.
+         */
+        AgentRunToolCallResponse: {
+            /**
+             * Credits Used
+             * @description Credits consumed by this tool call (0 for tools that don't bill).
+             * @default 0
+             */
+            credits_used: number;
+            /**
+             * Duration Seconds
+             * @description Duration of the tool call in seconds.
+             */
+            duration_seconds?: number | null;
+            /**
+             * Ended At
+             * @description Timestamp when the tool call ended.
+             */
+            ended_at?: string | null;
+            /**
+             * Error
+             * @description Error message when the tool call failed.
+             */
+            error?: string | null;
+            /**
+             * Function Name
+             * @description Name of the tool/function invoked.
+             */
+            function_name: string;
+            /**
+             * Id
+             * @description Tool call identifier.
+             */
+            id: string;
+            /**
+             * Input
+             * @description JSON arguments the LLM passed to the tool, if persisted.
+             */
+            input?: string | null;
+            /**
+             * Output
+             * @description JSON result the tool returned to the LLM, if persisted.
+             */
+            output?: string | null;
+            /**
+             * Round Index
+             * @description 0-based tool-loop round this call belonged to.
+             * @default 0
+             */
+            round_index: number;
+            /**
+             * Sequence
+             * @description 0-based ordinal of this call within its step run.
+             * @default 0
+             */
+            sequence: number;
+            /**
+             * Started At
+             * @description Timestamp when the tool call started.
+             */
+            started_at?: string | null;
+            /**
+             * Succeeded
+             * @description Whether the tool call completed without error.
+             * @default true
+             */
+            succeeded: boolean;
         };
         /** AgentSummaryResponse */
         AgentSummaryResponse: {
@@ -3226,7 +3423,7 @@ export interface components {
              * Trigger Type
              * @description Trigger type for the agent.
              */
-            trigger_type: string | null;
+            trigger_type?: string | null;
             /**
              * Updated At
              * @description ISO 8601 last-updated timestamp.
@@ -3341,17 +3538,6 @@ export interface components {
             flag_reason?: string | null;
             /** Flagged */
             flagged: boolean;
-        };
-        /**
-         * AiAssistantGenerateRequest
-         * @description Request body for AI assistant generate endpoints.
-         */
-        AiAssistantGenerateRequest: {
-            /**
-             * User Input
-             * @description User input describing what to do
-             */
-            user_input: string;
         };
         /**
          * AiAssistantGenerateResponse
@@ -3475,6 +3661,20 @@ export interface components {
              * @description Whether this individual action succeeded.
              */
             success: boolean;
+        };
+        /**
+         * AttachmentRefsSourceApiSummary
+         * @description Per-source attachment-reference summary.
+         */
+        AttachmentRefsSourceApiSummary: {
+            /** Exact Names */
+            exact_names?: string[];
+            /** Indexes Max */
+            indexes_max?: number | null;
+            /** Kinds */
+            kinds?: string[];
+            /** Patterns */
+            patterns?: string[];
         };
         /** Body_upload_file_to_content_api_contents__source_connection_content_version__upload_post */
         Body_upload_file_to_content_api_contents__source_connection_content_version__upload_post: {
@@ -4504,8 +4704,8 @@ export interface components {
          *
          *     Used as the element type for ``import_warnings`` on every
          *     response model that accepts an ``agent_definition`` payload.
-         *     See :py:class:`services.agent_definition_import.AgentImportSkip`
-         *     for the full category list.
+         *     See ``services.agent_definition_import.AgentImportSkip`` for the
+         *     full category list.
          *
          *     Lives here (not on each router) so the authenticated and public
          *     API responses share one definition — keeping the shape that
@@ -4587,6 +4787,35 @@ export interface components {
              * @description Optional title
              */
             title?: string | null;
+        };
+        /**
+         * InsufficientCreditsDetail
+         * @description ``detail`` body for a 402 ``insufficient_credits`` response.
+         */
+        InsufficientCreditsDetail: {
+            /**
+             * Account Id
+             * @description UUID of the account that ran out of credits.
+             */
+            account_id: string;
+            /**
+             * Error
+             * @description Stable machine-readable error code.
+             * @constant
+             */
+            error: "insufficient_credits";
+            /**
+             * Message
+             * @description Human-readable explanation.
+             */
+            message: string;
+        };
+        /**
+         * InsufficientCreditsResponse
+         * @description 402 envelope returned when the account has exhausted its credits.
+         */
+        InsufficientCreditsResponse: {
+            detail: components["schemas"]["InsufficientCreditsDetail"];
         };
         JsonValue: unknown;
         /**
@@ -4913,6 +5142,24 @@ export interface components {
              */
             updated_at: string;
         };
+        /**
+         * ModalityRateResponse
+         * @description Per-modality rate for an LLM that prices image/audio/video output
+         *     (or input) at a rate distinct from the default text rate.
+         *
+         *     Example: Gemini 3.1 Flash Image charges $3/1M output tokens for
+         *     text but $60/1M output tokens for generated images.  The image rate
+         *     surfaces here with ``modality="image"`` and ``output_credits_per_1000_tokens``
+         *     set; the default text rate stays on the parent model fields.
+         */
+        ModalityRateResponse: {
+            /** Input Credits Per 1000 Tokens */
+            input_credits_per_1000_tokens?: number | null;
+            /** Modality */
+            modality: string;
+            /** Output Credits Per 1000 Tokens */
+            output_credits_per_1000_tokens?: number | null;
+        };
         /** OrganizationAlertPreferenceListResponse */
         OrganizationAlertPreferenceListResponse: {
             /** Preferences */
@@ -4957,7 +5204,7 @@ export interface components {
          * PendingProcessingCompletedFailedStatus
          * @enum {string}
          */
-        PendingProcessingCompletedFailedStatus: "pending" | "processing" | "completed" | "failed";
+        PendingProcessingCompletedFailedStatus: "pending" | "processing" | "completed" | "failed" | "waiting_human";
         /**
          * PlaygroundCreateRequest
          * @description Create a model playground experiment via the public API.
@@ -6437,17 +6684,17 @@ export interface components {
          */
         routers__api__memory_banks__MemoryBankAiAssistantRequest: {
             /**
-             * Conversation Id
-             * @description Previous conversation ID to continue.
-             */
-            conversation_id?: string | null;
-            /**
              * Current Config
              * @description Current configuration to refine, if any.
              */
             current_config?: {
                 [key: string]: unknown;
             } | null;
+            /**
+             * History Since
+             * @description Optional ISO 8601 timestamp.  When set, only conversation turns created at or after this timestamp are loaded as context, scoping history to the current session so the assistant remembers earlier turns in a multi-turn refinement.
+             */
+            history_since?: string | null;
             /**
              * User Input
              * @description Natural-language description of the memory bank.
@@ -6540,6 +6787,22 @@ export interface components {
              * @description When running in standalone mode (no pre-existing solution), provide a name to auto-create a solution and link resources.
              */
             solution_name?: string | null;
+        };
+        /**
+         * AiAssistantGenerateRequest
+         * @description Request body for AI assistant generate endpoints.
+         */
+        routers__api__solutions__AiAssistantGenerateRequest: {
+            /**
+             * History Since
+             * @description Optional ISO 8601 timestamp.  When set, only conversation turns created at or after this timestamp are loaded as context, scoping history to the current session so the assistant remembers earlier turns in a create flow.
+             */
+            history_since?: string | null;
+            /**
+             * User Input
+             * @description User input describing what to do
+             */
+            user_input: string;
         };
         /** SolutionAgentResponse */
         routers__api__solutions__SolutionAgentResponse: {
@@ -6881,6 +7144,11 @@ export interface components {
              */
             content_version_id: string | null;
             /**
+             * Embedder Warning
+             * @description Set when the file is non-text but the source's embedder is text-only — indexing will rely on OCR / transcription and may produce a FAILED row if no text can be extracted.
+             */
+            embedder_warning?: string | null;
+            /**
              * Filename
              * @description Original filename
              */
@@ -6966,6 +7234,8 @@ export interface components {
              * @description Source URL used to derive payload_schema guidance for this model.
              */
             payload_schema_source_url?: string | null;
+            /** Per Modality Rates */
+            per_modality_rates?: components["schemas"]["ModalityRateResponse"][];
             /** Provider */
             provider: string;
             /** Released At */
@@ -6988,6 +7258,8 @@ export interface components {
             supported_input_media?: string[] | null;
             /** Supported Languages */
             supported_languages?: string[] | null;
+            /** Supported Output Media */
+            supported_output_media?: string[] | null;
             /**
              * Supports Openai Arguments
              * @default false
@@ -7153,11 +7425,7 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": {
-                        detail?: Record<string, never>;
-                    };
-                };
+                content?: never;
             };
             /** @description The supplied `agent_definition` payload failed validation. The body lists each error with a 1-indexed line/column pointing into the canonical pretty-printed echo of the payload (also returned in `source`). */
             422: {
@@ -7868,6 +8136,40 @@ export interface operations {
             };
         };
     };
+    api_get_agent_attachment_references_api_agents__agent_id__attachment_references_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentAttachmentRefsApiResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_agent_definition_api_agents__agent_id__definition_get: {
         parameters: {
             query?: never;
@@ -8273,12 +8575,14 @@ export interface operations {
                     "application/json": components["schemas"]["AgentRunResponse"];
                 };
             };
-            /** @description Insufficient credits — the account has exhausted its credits. The response body is `{"detail": {"error": "insufficient_credits", "message": ..., "account_id": ...}}`. */
+            /** @description Insufficient credits — the account has exhausted its credits. */
             402: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["InsufficientCreditsResponse"];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -8336,12 +8640,14 @@ export interface operations {
                     "text/event-stream": string;
                 };
             };
-            /** @description Insufficient credits — the account has exhausted its credits. The response body is `{"detail": {"error": "insufficient_credits", "message": ..., "account_id": ...}}`. */
+            /** @description Insufficient credits — the account has exhausted its credits. */
             402: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["InsufficientCreditsResponse"];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -8471,7 +8777,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["AiAssistantGenerateRequest"];
+                "application/json": components["schemas"]["routers__api__solutions__AiAssistantGenerateRequest"];
             };
         };
         responses: {
@@ -8620,7 +8926,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["AiAssistantGenerateRequest"];
+                "application/json": components["schemas"]["routers__api__solutions__AiAssistantGenerateRequest"];
             };
         };
         responses: {
@@ -8656,7 +8962,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["AiAssistantGenerateRequest"];
+                "application/json": components["schemas"]["routers__api__solutions__AiAssistantGenerateRequest"];
             };
         };
         responses: {
@@ -9689,11 +9995,7 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": {
-                        detail?: Record<string, never>;
-                    };
-                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -10658,6 +10960,38 @@ export interface operations {
             };
         };
     };
+    delete_experiment_endpoint_api_models_playground_experiments__experiment_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
+            path: {
+                experiment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     cancel_experiment_endpoint_api_models_playground_experiments__experiment_id__cancel_post: {
         parameters: {
             query?: never;
@@ -11089,7 +11423,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["AiAssistantGenerateRequest"];
+                "application/json": components["schemas"]["routers__api__solutions__AiAssistantGenerateRequest"];
             };
         };
         responses: {
@@ -11127,7 +11461,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["AiAssistantGenerateRequest"];
+                "application/json": components["schemas"]["routers__api__solutions__AiAssistantGenerateRequest"];
             };
         };
         responses: {
@@ -11165,7 +11499,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["AiAssistantGenerateRequest"];
+                "application/json": components["schemas"]["routers__api__solutions__AiAssistantGenerateRequest"];
             };
         };
         responses: {
@@ -11552,11 +11886,7 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": {
-                        detail?: Record<string, never>;
-                    };
-                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -12143,6 +12473,49 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["routers__api__sources__FileUploadResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    serve_agent_run_attachment_api_v2_agent_runs__run_id__attachments__attachment_id__get: {
+        parameters: {
+            query?: {
+                download_name?: string | null;
+            };
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
+            path: {
+                run_id: string;
+                attachment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Attachment bytes streamed with the resolved MIME type (inline-safe types keep their declared type; everything else is ``application/octet-stream``). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                    "application/pdf": string;
+                    "application/vnd.seclai.manifest+json": string;
+                    "audio/*": string;
+                    "image/*": string;
+                    "text/plain": string;
+                    "video/*": string;
                 };
             };
             /** @description Validation Error */

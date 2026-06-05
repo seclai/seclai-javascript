@@ -202,11 +202,26 @@ const result = await client.runAgentAndPoll(
 ### Agent input uploads
 
 ```ts
+// Discover which files (if any) the agent expects before staging uploads
+const refs = await client.getAgentAttachmentReferences("agent_id");
+if (refs.requires_uploads) {
+  // refs.agent lists the exact_names / indexes_max / patterns a run batch must satisfy
+}
+
 const upload = await client.uploadAgentInput("agent_id", {
   file: new Uint8Array([...]),
   fileName: "input.pdf",
 });
 const status = await client.getAgentInputUploadStatus("agent_id", upload.upload_id);
+```
+
+### Agent run attachments
+
+```ts
+// Download a file emitted by a step in an agent run. The attachment_id is the
+// URL-safe-base64 storage_key surfaced in run output manifests / webhooks.
+const resp = await client.downloadAgentRunAttachment("run_id", "attachment_id");
+const blob = await resp.blob(); // raw Response — stream or save the bytes
 ```
 
 ### Agent AI assistant
@@ -441,6 +456,13 @@ await client.markModelAlertRead("alert_id");
 await client.markAllModelAlertsRead();
 const unread = await client.getUnreadModelAlertCount();
 const recs = await client.getModelRecommendations("model_id");
+
+// Model playground experiments
+const experiment = await client.createExperiment({ model_ids: ["model_id"], prompt: "..." });
+const experiments = await client.listExperiments();
+const detail = await client.getExperiment("experiment_id");
+await client.cancelExperiment("experiment_id");
+await client.deleteExperiment("experiment_id"); // soft-delete, preserves audit history
 ```
 
 ### Search
