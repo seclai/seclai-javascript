@@ -1023,6 +1023,20 @@ describe("Agent Input Uploads", () => {
     const refs = await client.getAgentAttachmentReferences("ag_1");
     expect(refs.requires_uploads).toBe(false);
   });
+
+  test("downloadAgentRunAttachment returns raw Response with download_name", async () => {
+    const client = makeClient((req) => {
+      const url = new URL(req.url);
+      expect(req.method).toBe("GET");
+      expect(url.pathname).toBe("/v2/agent-runs/run_1/attachments/att_1");
+      expect(url.searchParams.get("download_name")).toBe("report.pdf");
+      return new Response("file-bytes", { status: 200 });
+    });
+    const resp = await client.downloadAgentRunAttachment("run_1", "att_1", {
+      downloadName: "report.pdf",
+    });
+    expect(await resp.text()).toBe("file-bytes");
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

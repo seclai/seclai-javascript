@@ -1220,6 +1220,27 @@ export class Seclai {
     return (await this.request("GET", `/agents/${agentId}/attachment-references`)) as AgentAttachmentRefsApiResponse;
   }
 
+  /**
+   * Download a file attachment emitted by a step in an agent run.
+   *
+   * Returns the raw `Response` so you can stream or save the binary data.
+   *
+   * @param runId - Run identifier.
+   * @param attachmentId - URL-safe-base64-encoded `storage_key` of the attachment
+   *   (as surfaced in run output manifests and webhook/email payloads).
+   * @param opts - Optional `downloadName` filename hint for the download disposition.
+   * @returns Raw response with the attachment bytes.
+   */
+  async downloadAgentRunAttachment(
+    runId: string,
+    attachmentId: string,
+    opts: { downloadName?: string } = {},
+  ): Promise<Response> {
+    return await this.requestRaw("GET", `/v2/agent-runs/${runId}/attachments/${attachmentId}`, {
+      query: { download_name: opts.downloadName },
+    });
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
   // Agent AI Assistant (Steps Generation)
   // ═══════════════════════════════════════════════════════════════════════════

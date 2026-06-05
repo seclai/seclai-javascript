@@ -215,6 +215,15 @@ const upload = await client.uploadAgentInput("agent_id", {
 const status = await client.getAgentInputUploadStatus("agent_id", upload.upload_id);
 ```
 
+### Agent run attachments
+
+```ts
+// Download a file emitted by a step in an agent run. The attachment_id is the
+// URL-safe-base64 storage_key surfaced in run output manifests / webhooks.
+const resp = await client.downloadAgentRunAttachment("run_id", "attachment_id");
+const blob = await resp.blob(); // raw Response — stream or save the bytes
+```
+
 ### Agent AI assistant
 
 ```ts
