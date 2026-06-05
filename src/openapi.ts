@@ -12503,13 +12503,19 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description Attachment bytes streamed with the resolved MIME type (inline-safe types keep their declared type; everything else is ``application/octet-stream``). */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/octet-stream": string;
+                    "application/pdf": string;
+                    "application/vnd.seclai.manifest+json": string;
+                    "audio/*": string;
+                    "image/*": string;
+                    "text/plain": string;
+                    "video/*": string;
                 };
             };
             /** @description Validation Error */
