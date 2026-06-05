@@ -93,6 +93,9 @@ export type AgentRunStepResponse = components["schemas"]["AgentRunStepResponse"]
 /** Details of a single attempt within an agent run step. */
 export type AgentRunAttemptResponse = components["schemas"]["AgentRunAttemptResponse"];
 
+/** A single LLM tool call made during a `prompt_call` step (within {@link AgentRunStepResponse}'s `tool_calls`). */
+export type AgentRunToolCallResponse = components["schemas"]["AgentRunToolCallResponse"];
+
 /** Search request for agent runs (traces). */
 export type AgentTraceSearchRequest = components["schemas"]["routers__api__agents__AgentTraceSearchRequest"];
 
@@ -106,6 +109,15 @@ export type AgentTraceMatchResponse = components["schemas"]["AgentTraceMatchResp
 
 /** Response from uploading a file input for an agent run. */
 export type UploadAgentInputApiResponse = components["schemas"]["UploadAgentInputApiResponse"];
+
+/**
+ * Static attachment-reference contract for an agent — what files (if any) its
+ * templates expect on a run, so uploads can be staged before calling `runAgent`.
+ */
+export type AgentAttachmentRefsApiResponse = components["schemas"]["AgentAttachmentRefsApiResponse"];
+
+/** Per-source attachment-reference summary (exact names, indexes, glob patterns) within an {@link AgentAttachmentRefsApiResponse}. */
+export type AttachmentRefsSourceApiSummary = components["schemas"]["AttachmentRefsSourceApiSummary"];
 
 // ─── Agent Steps AI Assistant ────────────────────────────────────────────────
 
@@ -354,7 +366,7 @@ export type AddConversationTurnRequest = components["schemas"]["AddConversationT
 export type MarkConversationTurnRequest = components["schemas"]["MarkConversationTurnRequest"];
 
 /** AI assistant generate request for solutions. */
-export type AiAssistantGenerateRequest = components["schemas"]["AiAssistantGenerateRequest"];
+export type AiAssistantGenerateRequest = components["schemas"]["routers__api__solutions__AiAssistantGenerateRequest"];
 
 /** AI assistant generate response for solutions. */
 export type AiAssistantGenerateResponse = components["schemas"]["AiAssistantGenerateResponse"];
@@ -444,6 +456,9 @@ export type PromptModelResponse = components["schemas"]["schemas__model_response
 /** Prompt tool configuration within a model. */
 export type PromptToolResponse = components["schemas"]["PromptToolResponse"];
 
+/** Per-modality rate for a model that prices image/audio/video distinctly from its default text rate. */
+export type ModalityRateResponse = components["schemas"]["ModalityRateResponse"];
+
 /** Variant category for model pricing tiers. */
 export type VariantCategoryResponse = components["schemas"]["VariantCategoryResponse"];
 
@@ -461,6 +476,14 @@ export type PlaygroundCreateRequest = components["schemas"]["PlaygroundCreateReq
  */
 export type CreateExperimentInput = Pick<PlaygroundCreateRequest, "model_ids" | "prompt"> &
   Partial<Omit<PlaygroundCreateRequest, "model_ids" | "prompt">>;
+
+// ─── Errors ──────────────────────────────────────────────────────────────────
+
+/** 402 envelope returned when an account has exhausted its credits. */
+export type InsufficientCreditsResponse = components["schemas"]["InsufficientCreditsResponse"];
+
+/** `detail` body of an {@link InsufficientCreditsResponse} (error code, message, and account id). */
+export type InsufficientCreditsDetail = components["schemas"]["InsufficientCreditsDetail"];
 
 // ─── Sources (enums) ─────────────────────────────────────────────────────────
 

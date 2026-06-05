@@ -19,6 +19,7 @@ import type { AuthState } from "./auth";
 import { resolveCredentialChain, resolveAuthHeaders } from "./auth";
 import type {
   AgentRunEvent,
+  AgentAttachmentRefsApiResponse,
   AgentDefinitionImportErrorResponse,
   AgentDefinitionResponse,
   AgentExportResponse,
@@ -1201,6 +1202,22 @@ export class Seclai {
    */
   async getAgentInputUploadStatus(agentId: string, uploadId: string): Promise<UploadAgentInputApiResponse> {
     return (await this.request("GET", `/agents/${agentId}/input-uploads/${uploadId}`)) as UploadAgentInputApiResponse;
+  }
+
+  /**
+   * Get the static attachment-reference contract for an agent — what files (if
+   * any) its definition expects on a run.
+   *
+   * Call this before staging uploads to learn whether the agent accepts files
+   * at all (`requires_uploads`) and which specific filenames, indexes, or glob
+   * patterns its templates reference. A run-time upload batch that doesn't
+   * satisfy every declared selector is rejected with HTTP 400.
+   *
+   * @param agentId - Agent identifier.
+   * @returns The agent's attachment-reference contract.
+   */
+  async getAgentAttachmentReferences(agentId: string): Promise<AgentAttachmentRefsApiResponse> {
+    return (await this.request("GET", `/agents/${agentId}/attachment-references`)) as AgentAttachmentRefsApiResponse;
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -2395,6 +2412,18 @@ export class Seclai {
    */
   async cancelExperiment(experimentId: string): Promise<unknown> {
     return await this.request("POST", `/models/playground/experiments/${experimentId}/cancel`);
+  }
+
+  /**
+   * Soft-delete a model playground experiment.
+   *
+   * Removes the experiment from list/detail views while preserving audit
+   * history. Returns HTTP 204 with no body.
+   *
+   * @param experimentId - Experiment identifier.
+   */
+  async deleteExperiment(experimentId: string): Promise<void> {
+    await this.request("DELETE", `/models/playground/experiments/${experimentId}`);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

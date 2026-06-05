@@ -202,6 +202,12 @@ const result = await client.runAgentAndPoll(
 ### Agent input uploads
 
 ```ts
+// Discover which files (if any) the agent expects before staging uploads
+const refs = await client.getAgentAttachmentReferences("agent_id");
+if (refs.requires_uploads) {
+  // refs.agent lists the exact_names / indexes_max / patterns a run batch must satisfy
+}
+
 const upload = await client.uploadAgentInput("agent_id", {
   file: new Uint8Array([...]),
   fileName: "input.pdf",
@@ -441,6 +447,13 @@ await client.markModelAlertRead("alert_id");
 await client.markAllModelAlertsRead();
 const unread = await client.getUnreadModelAlertCount();
 const recs = await client.getModelRecommendations("model_id");
+
+// Model playground experiments
+const experiment = await client.createExperiment({ model_ids: ["model_id"], prompt: "..." });
+const experiments = await client.listExperiments();
+const detail = await client.getExperiment("experiment_id");
+await client.cancelExperiment("experiment_id");
+await client.deleteExperiment("experiment_id"); // soft-delete, preserves audit history
 ```
 
 ### Search

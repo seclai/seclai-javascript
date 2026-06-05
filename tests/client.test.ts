@@ -1013,6 +1013,16 @@ describe("Agent Input Uploads", () => {
     });
     await client.getAgentInputUploadStatus("ag_1", "upl_1");
   });
+
+  test("getAgentAttachmentReferences sends GET /agents/:id/attachment-references", async () => {
+    const client = makeClient((req) => {
+      expect(req.method).toBe("GET");
+      expect(new URL(req.url).pathname).toBe("/agents/ag_1/attachment-references");
+      return jsonResponse({ requires_uploads: false });
+    });
+    const refs = await client.getAgentAttachmentReferences("ag_1");
+    expect(refs.requires_uploads).toBe(false);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1829,6 +1839,21 @@ key = value
 `;
     const result = parseIni(ini);
     expect(result["default"]).toEqual({ key: "value" });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Model Playground Experiments
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("Model Playground Experiments", () => {
+  test("deleteExperiment sends DELETE /models/playground/experiments/:id", async () => {
+    const client = makeClient((req) => {
+      expect(req.method).toBe("DELETE");
+      expect(new URL(req.url).pathname).toBe("/models/playground/experiments/exp_1");
+      return new Response(null, { status: 204 });
+    });
+    await client.deleteExperiment("exp_1");
   });
 });
 
