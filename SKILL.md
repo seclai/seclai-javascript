@@ -80,6 +80,51 @@ Reference the PR when there is one (`([#9](https://github.com/seclai/<repo>/pull
 
 Group related additions into one entry when they ship as a unit (e.g. eight email-domain methods), and give standalone capabilities their own line. Aim for entries a user scanning for "what changed for me" can act on.
 
+## Check the surface before you describe it
+
+The changelog is the last gate before a release, so use the entries you are
+writing as a prompt to spot-check the public surface they describe. Fix these, or
+raise them, before they ship — each one is far cheaper now than after consumers
+depend on it.
+
+**Return the shape the spec declares.** Look up the endpoint's 2xx response schema
+and mirror it:
+
+| Spec response | Return type |
+| --- | --- |
+| `$ref` to a schema | that aliased type — never `unknown` |
+| `type: object`, `additionalProperties: true` | `Record<string, unknown>` |
+| `additionalProperties: {type: T}` | `Record<string, T>` |
+| `type: array` | `T[]` / `unknown[]` — **not** `Record` |
+
+A hand-written wrapper returning `unknown` where the generator had a real type
+available is a bug, not a style choice.
+
+**Widening `unknown` is breaking.** Changing a released method from `unknown` to
+`Record<string, unknown>` breaks consumer code that does `result as SomeInterface`
+— TypeScript rejects it with TS2352 and demands `as unknown as SomeInterface`.
+That makes it a `#major`, never a patch or minor. New methods have no consumers
+yet, so type them correctly from the start rather than inheriting a neighbour's
+`unknown`.
+
+**Server-defaulted request fields must be optional.** openapi-typescript emits any
+property carrying a `default` as **required**, even when the spec leaves it out of
+`required`. Callers then have to pass a value the server would have defaulted.
+Wrap the generated request in an input type:
+
+```ts
+export type AddEmailDomainInput = Pick<AddEmailDomainRequest, "kind" | "value"> &
+  Partial<Omit<AddEmailDomainRequest, "kind" | "value">>;
+```
+
+See `AddEmailDomainInput` and `CreateExperimentInput` in `src/types.ts`.
+
+**Compile the doc examples.** `npm run typecheck` covers `src/` and `tests/`, not
+README or changelog snippets. Paste any example you write into a scratch `.ts`
+that imports from `../src/index` and compile it — that is how the
+`delegated`-is-required bug above was found, after the snippet had already shipped
+in a PR.
+
 ## Validate
 
 Run the bundled checker from the repo root before declaring done:
