@@ -261,6 +261,7 @@ export type {
 
   // Email Domains
   AddEmailDomainRequest,
+  AddEmailDomainInput,
   EmailDomainResponse,
   EmailDomainsListResponse,
   RemoveEmailDomainResponse,

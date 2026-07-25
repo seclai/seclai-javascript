@@ -537,6 +537,16 @@ export type CreateExperimentInput = Pick<PlaygroundCreateRequest, "model_ids" | 
 /** Request body for adding a vanity or custom agent-email domain. */
 export type AddEmailDomainRequest = components["schemas"]["AddEmailDomainRequest"];
 
+/**
+ * Input type for {@link Seclai.addEmailDomain}.
+ *
+ * Only `kind` and `value` are required. `delegated` has a server-side default
+ * of `false` and can be omitted — the generated {@link AddEmailDomainRequest}
+ * marks it required only because the schema declares a default.
+ */
+export type AddEmailDomainInput = Pick<AddEmailDomainRequest, "kind" | "value"> &
+  Partial<Omit<AddEmailDomainRequest, "kind" | "value">>;
+
 /** An agent-email domain with its verification status and required DNS records. */
 export type EmailDomainResponse = components["schemas"]["EmailDomainResponse"];
 

@@ -19,7 +19,7 @@ import type { AuthState } from "./auth";
 import { resolveCredentialChain, resolveAuthHeaders } from "./auth";
 import type {
   AgentRunEvent,
-  AddEmailDomainRequest,
+  AddEmailDomainInput,
   AgentAttachmentRefsApiResponse,
   AgentCallerApiResponse,
   AgentDefinitionImportErrorResponse,
@@ -2663,8 +2663,8 @@ export class Seclai {
    *
    * Global routing/pricing (the same for every account); read-only.
    */
-  async getGenerationTiers(): Promise<unknown> {
-    return await this.request("GET", "/models/generation-tiers");
+  async getGenerationTiers(): Promise<Record<string, unknown>> {
+    return (await this.request("GET", "/models/generation-tiers")) as Record<string, unknown>;
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -2761,10 +2761,10 @@ export class Seclai {
    * @param opts.mode - Search strategy (default `"keyword"`).
    * @param opts.limit - Maximum results (1-20, default 8).
    */
-  async searchDocs(opts: { query: string; mode?: "keyword" | "semantic"; limit?: number }): Promise<unknown> {
-    return await this.request("GET", "/docs-search", {
+  async searchDocs(opts: { query: string; mode?: "keyword" | "semantic"; limit?: number }): Promise<Record<string, unknown>> {
+    return (await this.request("GET", "/docs-search", {
       query: { q: opts.query, mode: opts.mode, limit: opts.limit },
-    });
+    })) as Record<string, unknown>;
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -2795,9 +2795,9 @@ export class Seclai {
    * returns the records the customer must publish. Requires an account
    * owner/admin.
    *
-   * @param body - The domain to add.
+   * @param body - The domain to add. `delegated` defaults to `false` server-side.
    */
-  async addEmailDomain(body: AddEmailDomainRequest): Promise<EmailDomainResponse> {
+  async addEmailDomain(body: AddEmailDomainInput): Promise<EmailDomainResponse> {
     return (await this.request("POST", "/email-domains", { json: body })) as EmailDomainResponse;
   }
 

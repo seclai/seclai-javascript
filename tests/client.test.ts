@@ -2148,6 +2148,21 @@ describe("Email Domains", () => {
     expect(domain.id).toBe("dom_1");
   });
 
+  test("addEmailDomain accepts a vanity domain without `delegated`", async () => {
+    const client = makeClient((req) => {
+      const body = JSON.parse(req.bodyText!);
+      expect(body).toEqual({ kind: "vanity", value: "acme" });
+      expect("delegated" in body).toBe(false);
+      return jsonResponse({
+        id: "dom_2", domain: "acme.seclai.com", kind: "vanity",
+        status: "pending", is_primary: false,
+      });
+    });
+    // Compiles without `delegated` — the server defaults it to false.
+    const domain = await client.addEmailDomain({ kind: "vanity", value: "acme" });
+    expect(domain.kind).toBe("vanity");
+  });
+
   test("removeEmailDomain sends DELETE /email-domains/:id", async () => {
     const client = makeClient((req) => {
       expect(req.method).toBe("DELETE");
