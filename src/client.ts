@@ -106,6 +106,7 @@ import type {
   MemoryBankResponse,
   NonManualEvaluationSummaryResponse,
   OrganizationAlertPreferenceListResponse,
+  OrganizationAlertPreferenceResponse,
   PlaygroundCreateRequest,
   CreateExperimentInput,
   PromptModelResponse,
@@ -2567,8 +2568,12 @@ export class Seclai {
     organizationId: string,
     alertType: string,
     body: UpdateOrganizationAlertPreferenceRequest,
-  ): Promise<unknown> {
-    return await this.request("PATCH", `/alerts/organization-preferences/${organizationId}/${alertType}`, { json: body });
+  ): Promise<OrganizationAlertPreferenceResponse> {
+    return (await this.request(
+      "PATCH",
+      `/alerts/organization-preferences/${organizationId}/${alertType}`,
+      { json: body },
+    )) as OrganizationAlertPreferenceResponse;
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

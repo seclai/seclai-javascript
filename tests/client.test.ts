@@ -1425,13 +1425,22 @@ describe("Alerts — extended", () => {
     await client.listOrganizationAlertPreferences();
   });
 
-  test("updateOrganizationAlertPreference sends PATCH", async () => {
+  test("updateOrganizationAlertPreference sends PATCH and returns the typed preference", async () => {
     const client = makeClient((req) => {
       expect(req.method).toBe("PATCH");
       expect(new URL(req.url).pathname).toBe("/alerts/organization-preferences/org_1/model_alert");
-      return jsonResponse({});
+      return jsonResponse({
+        organization_id: "org_1",
+        alert_type: "model_alert",
+        subscribed: true,
+        is_override: false,
+      });
     });
-    await client.updateOrganizationAlertPreference("org_1", "model_alert", {} as any);
+    const pref = await client.updateOrganizationAlertPreference("org_1", "model_alert", {} as any);
+    // Typed fields are reachable without a cast.
+    expect(pref.subscribed).toBe(true);
+    expect(pref.alert_type).toBe("model_alert");
+    expect(pref.is_override).toBe(false);
   });
 });
 

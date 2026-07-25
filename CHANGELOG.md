@@ -19,6 +19,10 @@
 - Add `getGenerationTiers()` mapping each media-generation modality and tier to its model and cost
 - Add `searchDocs()` for keyword or semantic search over the Seclai documentation
 
+### Fixed
+
+- Return `OrganizationAlertPreferenceResponse` from `updateOrganizationAlertPreference()` instead of `unknown`, so the response fields are reachable without a cast
+
 ## [1.3.0] - 2026-06-05
 
 ### Changed
