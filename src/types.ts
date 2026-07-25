@@ -29,6 +29,14 @@ export type ValidationError = components["schemas"]["ValidationError"];
 /** Pagination metadata included in list responses. */
 export type PaginationResponse = components["schemas"]["PaginationResponse"];
 
+// ─── Identity ────────────────────────────────────────────────────────────────
+
+/** The authenticated user's personal account ID and the organizations they belong to. */
+export type MeResponse = components["schemas"]["MeResponse"];
+
+/** One organization the authenticated user belongs to, within a {@link MeResponse}. */
+export type OrganizationInfoResponse = components["schemas"]["OrganizationInfoResponse"];
+
 // ─── Agents ──────────────────────────────────────────────────────────────────
 
 /** Paginated list of agents. */
@@ -72,6 +80,53 @@ export type ImportSkipResponse = components["schemas"]["ImportSkipResponse"];
 
 /** Reference to a governance policy (id and optional display name). */
 export type GovernancePolicyRefResponse = components["schemas"]["routers__api__agents__GovernancePolicyRefResponse"];
+
+/** A live agent that calls another agent via a `call_agent` step (blocks disabling the callee). */
+export type AgentCallerApiResponse = components["schemas"]["AgentCallerApiResponse"];
+
+// ─── Agent Email Triggers ────────────────────────────────────────────────────
+
+/**
+ * Request body for configuring an `EMAIL_RECEIVED` trigger.
+ *
+ * An omitted field is left unchanged; passing `null` (or `""` for `alias`) clears it.
+ */
+export type SetEmailTriggerConfigRequest = components["schemas"]["routers__api__agents__SetEmailTriggerConfigRequest"];
+
+/** An `EMAIL_RECEIVED` trigger's resolved email address(es) and inbound-handling config. */
+export type EmailTriggerConfigResponse = components["schemas"]["EmailTriggerConfigResponse"];
+
+// ─── Agent Email Governance ──────────────────────────────────────────────────
+
+/** A recipient's opt-out from an account's agent emails (one agent, or account-wide). */
+export type AgentEmailOptOutResponse = components["schemas"]["AgentEmailOptOutResponse"];
+
+/** A page of agent-email opt-outs plus the total count. */
+export type AgentEmailOptOutListResponse = components["schemas"]["AgentEmailOptOutListResponse"];
+
+/** Request body for blocking an inbound email sender or domain. */
+export type BlockEmailSenderRequest = components["schemas"]["BlockEmailSenderRequest"];
+
+/** A single blocked inbound email sender. */
+export type BlockedEmailSenderResponse = components["schemas"]["BlockedEmailSenderResponse"];
+
+/** A page of blocked senders plus the account's governance auto-block mode. */
+export type BlockedEmailSenderListResponse = components["schemas"]["BlockedEmailSenderListResponse"];
+
+/** Request body for setting the governance auto-block mode. */
+export type SetAutoBlockModeRequest = components["schemas"]["SetAutoBlockModeRequest"];
+
+/** An inbound email that was discarded before running an agent. */
+export type InboundEmailRejectionResponse = components["schemas"]["InboundEmailRejectionResponse"];
+
+/** Account-wide inbound-email overload state (breaker paused + queued backlog size). */
+export type InboundEmailStatusResponse = components["schemas"]["InboundEmailStatusResponse"];
+
+/** Number of queued inbound-email runs cancelled. */
+export type CancelQueuedRunsResponse = components["schemas"]["CancelQueuedRunsResponse"];
+
+/** Result of manually lifting the inbound-email pause. */
+export type ResumeInboundResponse = components["schemas"]["ResumeInboundResponse"];
 
 // ─── Agent Runs ──────────────────────────────────────────────────────────────
 
@@ -476,6 +531,35 @@ export type PlaygroundCreateRequest = components["schemas"]["PlaygroundCreateReq
  */
 export type CreateExperimentInput = Pick<PlaygroundCreateRequest, "model_ids" | "prompt"> &
   Partial<Omit<PlaygroundCreateRequest, "model_ids" | "prompt">>;
+
+// ─── Email Domains ───────────────────────────────────────────────────────────
+
+/** Request body for adding a vanity or custom agent-email domain. */
+export type AddEmailDomainRequest = components["schemas"]["AddEmailDomainRequest"];
+
+/** An agent-email domain with its verification status and required DNS records. */
+export type EmailDomainResponse = components["schemas"]["EmailDomainResponse"];
+
+/** The account's email domains plus the plan capabilities for adding more. */
+export type EmailDomainsListResponse = components["schemas"]["EmailDomainsListResponse"];
+
+/** Result of removing an email domain (with an optional registrar `cleanup_note`). */
+export type RemoveEmailDomainResponse = components["schemas"]["RemoveEmailDomainResponse"];
+
+/** Result of sending a test email from a verified domain. */
+export type SendTestEmailResponse = components["schemas"]["SendTestEmailResponse"];
+
+/** A DNS record the customer must publish for a domain, plus whether it currently resolves. */
+export type DnsRecordResponse = components["schemas"]["DnsRecordResponse"];
+
+/** Detected DNS provider for a domain, with dashboard URL and provider-specific tips. */
+export type DnsProviderResponse = components["schemas"]["DnsProviderResponse"];
+
+/** DMARC aggregate-report summary for a domain over a time window. */
+export type DmarcSummaryResponse = components["schemas"]["DmarcSummaryResponse"];
+
+/** A top DMARC-failing source IP within a {@link DmarcSummaryResponse}. */
+export type DmarcFailingSourceResponse = components["schemas"]["DmarcFailingSourceResponse"];
 
 // ─── Errors ──────────────────────────────────────────────────────────────────
 

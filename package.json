@@ -18,7 +18,8 @@
   "files": [
     "dist",
     "LICENSE",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md"
   ],
   "homepage": "https://seclai.github.io/seclai-javascript/latest/",
   "bugs": {

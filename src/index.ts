@@ -69,6 +69,10 @@ export type {
   ListOptions,
   SortableListOptions,
 
+  // Identity
+  MeResponse,
+  OrganizationInfoResponse,
+
   // Agents
   AgentListResponse,
   AgentDefinitionResponse,
@@ -83,6 +87,23 @@ export type {
   ImportFieldErrorModel,
   ImportSkipResponse,
   GovernancePolicyRefResponse,
+  AgentCallerApiResponse,
+
+  // Agent Email Triggers
+  SetEmailTriggerConfigRequest,
+  EmailTriggerConfigResponse,
+
+  // Agent Email Governance
+  AgentEmailOptOutResponse,
+  AgentEmailOptOutListResponse,
+  BlockEmailSenderRequest,
+  BlockedEmailSenderResponse,
+  BlockedEmailSenderListResponse,
+  SetAutoBlockModeRequest,
+  InboundEmailRejectionResponse,
+  InboundEmailStatusResponse,
+  CancelQueuedRunsResponse,
+  ResumeInboundResponse,
 
   // Agent Runs
   AgentRunRequest,
@@ -237,6 +258,17 @@ export type {
   VariantOptionResponse,
   PlaygroundCreateRequest,
   CreateExperimentInput,
+
+  // Email Domains
+  AddEmailDomainRequest,
+  EmailDomainResponse,
+  EmailDomainsListResponse,
+  RemoveEmailDomainResponse,
+  SendTestEmailResponse,
+  DnsRecordResponse,
+  DnsProviderResponse,
+  DmarcSummaryResponse,
+  DmarcFailingSourceResponse,
 
   // Sources (enums)
   SourceIndexMode,
