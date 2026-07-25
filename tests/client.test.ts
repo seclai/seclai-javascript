@@ -1425,13 +1425,22 @@ describe("Alerts — extended", () => {
     await client.listOrganizationAlertPreferences();
   });
 
-  test("updateOrganizationAlertPreference sends PATCH", async () => {
+  test("updateOrganizationAlertPreference sends PATCH and returns the typed preference", async () => {
     const client = makeClient((req) => {
       expect(req.method).toBe("PATCH");
       expect(new URL(req.url).pathname).toBe("/alerts/organization-preferences/org_1/model_alert");
-      return jsonResponse({});
+      return jsonResponse({
+        organization_id: "org_1",
+        alert_type: "model_alert",
+        subscribed: true,
+        is_override: false,
+      });
     });
-    await client.updateOrganizationAlertPreference("org_1", "model_alert", {} as any);
+    const pref = await client.updateOrganizationAlertPreference("org_1", "model_alert", {} as any);
+    // Typed fields are reachable without a cast.
+    expect(pref.subscribed).toBe(true);
+    expect(pref.alert_type).toBe("model_alert");
+    expect(pref.is_override).toBe(false);
   });
 });
 
@@ -1868,6 +1877,431 @@ describe("Model Playground Experiments", () => {
       return new Response(null, { status: 204 });
     });
     await client.deleteExperiment("exp_1");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Identity
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("Identity", () => {
+  test("getMe sends GET /me", async () => {
+    const client = makeClient((req) => {
+      expect(req.method).toBe("GET");
+      expect(new URL(req.url).pathname).toBe("/me");
+      return jsonResponse({
+        account_id: "acct_personal",
+        organizations: [{ id: "org_1", name: "Acme", account_id: "acct_acme" }],
+      });
+    });
+    const me = await client.getMe();
+    expect(me.account_id).toBe("acct_personal");
+    expect(me.organizations[0].name).toBe("Acme");
+  });
+
+  test("getMe sends X-Account-Id when the client targets an org", async () => {
+    const client = new Seclai({
+      apiKey: "test-key",
+      baseUrl: "https://api.test",
+      accountId: "acct_acme",
+      fetch: makeFetch((req) => {
+        expect(req.headers["x-account-id"]).toBe("acct_acme");
+        return jsonResponse({ account_id: "acct_acme", organizations: [] });
+      }),
+    });
+    await client.getMe();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Agents — Enable / Disable
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("Agents — Enable / Disable", () => {
+  test("disableAgent sends POST /agents/:id/disable", async () => {
+    const client = makeClient((req) => {
+      expect(req.method).toBe("POST");
+      expect(new URL(req.url).pathname).toBe("/agents/ag_1/disable");
+      return jsonResponse({ id: "ag_1", disabled: true });
+    });
+    const agent = await client.disableAgent("ag_1");
+    expect(agent.disabled).toBe(true);
+  });
+
+  test("enableAgent sends POST /agents/:id/enable", async () => {
+    const client = makeClient((req) => {
+      expect(req.method).toBe("POST");
+      expect(new URL(req.url).pathname).toBe("/agents/ag_1/enable");
+      return jsonResponse({ id: "ag_1", disabled: false });
+    });
+    const agent = await client.enableAgent("ag_1");
+    expect(agent.disabled).toBe(false);
+  });
+
+  test("getAgentCallers sends GET /agents/:id/callers", async () => {
+    const client = makeClient((req) => {
+      expect(req.method).toBe("GET");
+      expect(new URL(req.url).pathname).toBe("/agents/ag_1/callers");
+      return jsonResponse([{ id: "ag_2", name: "Caller", disabled: false }]);
+    });
+    const callers = await client.getAgentCallers("ag_1");
+    expect(callers).toHaveLength(1);
+    expect(callers[0].name).toBe("Caller");
+  });
+
+  test("disableAgent surfaces a 409 as SeclaiAPIStatusError", async () => {
+    const client = makeClient(() => jsonResponse({ detail: "blocked by callers" }, 409));
+    await expect(client.disableAgent("ag_1")).rejects.toThrow(SeclaiAPIStatusError);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Agent Email Triggers
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("Agent Email Triggers", () => {
+  test("setEmailTriggerConfig sends PUT /agents/:id/triggers/:tid/email-config", async () => {
+    const client = makeClient((req) => {
+      expect(req.method).toBe("PUT");
+      expect(new URL(req.url).pathname).toBe("/agents/ag_1/triggers/tr_1/email-config");
+      const body = JSON.parse(req.bodyText!);
+      expect(body.alias).toBe("support");
+      expect(body.allowed_senders).toEqual(["example.com"]);
+      expect(body.require_sender_auth).toBe(false);
+      return jsonResponse({
+        trigger_id: "tr_1",
+        agent_id: "ag_1",
+        trigger_type: "EMAIL_RECEIVED",
+        email_addresses: ["support.acct@agent.seclai.com"],
+      });
+    });
+    const config = await client.setEmailTriggerConfig("ag_1", "tr_1", {
+      alias: "support",
+      allowed_senders: ["example.com"],
+      require_sender_auth: false,
+    });
+    expect(config.email_addresses).toEqual(["support.acct@agent.seclai.com"]);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Agent Email Governance
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("Agent Email Governance", () => {
+  test("listAgentEmailOptOuts sends GET with agent_id/limit/offset", async () => {
+    const client = makeClient((req) => {
+      const u = new URL(req.url);
+      expect(u.pathname).toBe("/agents/agent-email-optouts");
+      expect(u.searchParams.get("agent_id")).toBe("ag_1");
+      expect(u.searchParams.get("limit")).toBe("25");
+      expect(u.searchParams.get("offset")).toBe("50");
+      return jsonResponse({ items: [], total: 0 });
+    });
+    await client.listAgentEmailOptOuts({ agentId: "ag_1", limit: 25, offset: 50 });
+  });
+
+  test("listAgentEmailOptOuts omits unset filters", async () => {
+    const client = makeClient((req) => {
+      const u = new URL(req.url);
+      expect(u.searchParams.has("agent_id")).toBe(false);
+      expect(u.searchParams.has("limit")).toBe(false);
+      return jsonResponse({ items: [], total: 0 });
+    });
+    await client.listAgentEmailOptOuts();
+  });
+
+  test("removeAgentEmailOptOut sends DELETE /agents/agent-email-optouts/:id", async () => {
+    const client = makeClient((req) => {
+      expect(req.method).toBe("DELETE");
+      expect(new URL(req.url).pathname).toBe("/agents/agent-email-optouts/oo_1");
+      return new Response(null, { status: 204 });
+    });
+    await client.removeAgentEmailOptOut("oo_1");
+  });
+
+  test("listBlockedEmailSenders sends GET with limit/offset", async () => {
+    const client = makeClient((req) => {
+      const u = new URL(req.url);
+      expect(u.pathname).toBe("/agents/blocked-email-senders");
+      expect(u.searchParams.get("limit")).toBe("10");
+      expect(u.searchParams.get("offset")).toBe("0");
+      return jsonResponse({ items: [], total: 0, auto_block_mode: "disabled" });
+    });
+    const result = await client.listBlockedEmailSenders({ limit: 10, offset: 0 });
+    expect(result.auto_block_mode).toBe("disabled");
+  });
+
+  test("blockEmailSender sends POST /agents/blocked-email-senders", async () => {
+    const client = makeClient((req) => {
+      expect(req.method).toBe("POST");
+      expect(new URL(req.url).pathname).toBe("/agents/blocked-email-senders");
+      const body = JSON.parse(req.bodyText!);
+      expect(body.sender_email).toBe("spam@example.com");
+      expect(body.match_type).toBe("domain");
+      return jsonResponse({
+        id: "bl_1",
+        created_at: "2026-07-01T00:00:00Z",
+        sender_email: "spam@example.com",
+        match_type: "domain",
+        source: "manual",
+        note: null,
+      }, 201);
+    });
+    const blocked = await client.blockEmailSender({
+      sender_email: "spam@example.com",
+      match_type: "domain",
+    });
+    expect(blocked.id).toBe("bl_1");
+  });
+
+  test("unblockEmailSender sends DELETE /agents/blocked-email-senders/:id", async () => {
+    const client = makeClient((req) => {
+      expect(req.method).toBe("DELETE");
+      expect(new URL(req.url).pathname).toBe("/agents/blocked-email-senders/bl_1");
+      return new Response(null, { status: 204 });
+    });
+    await client.unblockEmailSender("bl_1");
+  });
+
+  test("setAutoBlockMode sends PUT /agents/blocked-email-senders/mode", async () => {
+    const client = makeClient((req) => {
+      expect(req.method).toBe("PUT");
+      expect(new URL(req.url).pathname).toBe("/agents/blocked-email-senders/mode");
+      expect(JSON.parse(req.bodyText!).mode).toBe("input_and_output");
+      return jsonResponse({ items: [], total: 0, auto_block_mode: "input_and_output" });
+    });
+    const result = await client.setAutoBlockMode({ mode: "input_and_output" });
+    expect(result.auto_block_mode).toBe("input_and_output");
+  });
+
+  test("listInboundEmailRejections sends GET with agent_id/limit", async () => {
+    const client = makeClient((req) => {
+      const u = new URL(req.url);
+      expect(u.pathname).toBe("/agents/inbound-email-rejections");
+      expect(u.searchParams.get("agent_id")).toBe("ag_1");
+      expect(u.searchParams.get("limit")).toBe("5");
+      return jsonResponse([{ id: "rj_1", reason: "unauthorized_sender" }]);
+    });
+    const rejections = await client.listInboundEmailRejections({ agentId: "ag_1", limit: 5 });
+    expect(rejections).toHaveLength(1);
+  });
+
+  test("getInboundEmailStatus sends GET /agents/inbound-email-status", async () => {
+    const client = makeClient((req) => {
+      expect(new URL(req.url).pathname).toBe("/agents/inbound-email-status");
+      return jsonResponse({ paused: true, queued_backlog: 42 });
+    });
+    const status = await client.getInboundEmailStatus();
+    expect(status.paused).toBe(true);
+    expect(status.queued_backlog).toBe(42);
+  });
+
+  test("cancelQueuedEmailRuns sends POST .../cancel-queued", async () => {
+    const client = makeClient((req) => {
+      expect(req.method).toBe("POST");
+      expect(new URL(req.url).pathname).toBe("/agents/inbound-email-status/cancel-queued");
+      return jsonResponse({ cancelled: 7 });
+    });
+    const result = await client.cancelQueuedEmailRuns();
+    expect(result.cancelled).toBe(7);
+  });
+
+  test("resumeInboundEmail sends POST .../resume", async () => {
+    const client = makeClient((req) => {
+      expect(req.method).toBe("POST");
+      expect(new URL(req.url).pathname).toBe("/agents/inbound-email-status/resume");
+      return jsonResponse({ resumed: true });
+    });
+    const result = await client.resumeInboundEmail();
+    expect(result.resumed).toBe(true);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Email Domains
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("Email Domains", () => {
+  test("listEmailDomains sends GET /email-domains", async () => {
+    const client = makeClient((req) => {
+      expect(req.method).toBe("GET");
+      expect(new URL(req.url).pathname).toBe("/email-domains");
+      return jsonResponse({ domains: [], can_add_vanity: true, has_vanity: false });
+    });
+    const result = await client.listEmailDomains();
+    expect(result.can_add_vanity).toBe(true);
+  });
+
+  test("addEmailDomain sends POST /email-domains", async () => {
+    const client = makeClient((req) => {
+      expect(req.method).toBe("POST");
+      expect(new URL(req.url).pathname).toBe("/email-domains");
+      const body = JSON.parse(req.bodyText!);
+      expect(body.kind).toBe("custom");
+      expect(body.value).toBe("agent.example.com");
+      expect(body.delegated).toBe(true);
+      return jsonResponse({
+        id: "dom_1",
+        domain: "agent.example.com",
+        kind: "custom",
+        status: "pending",
+        is_primary: false,
+      });
+    });
+    const domain = await client.addEmailDomain({
+      kind: "custom",
+      value: "agent.example.com",
+      delegated: true,
+    });
+    expect(domain.id).toBe("dom_1");
+  });
+
+  test("addEmailDomain accepts a vanity domain without `delegated`", async () => {
+    const client = makeClient((req) => {
+      const body = JSON.parse(req.bodyText!);
+      expect(body).toEqual({ kind: "vanity", value: "acme" });
+      expect("delegated" in body).toBe(false);
+      return jsonResponse({
+        id: "dom_2", domain: "acme.seclai.com", kind: "vanity",
+        status: "pending", is_primary: false,
+      });
+    });
+    // Compiles without `delegated` — the server defaults it to false.
+    const domain = await client.addEmailDomain({ kind: "vanity", value: "acme" });
+    expect(domain.kind).toBe("vanity");
+  });
+
+  test("removeEmailDomain sends DELETE /email-domains/:id", async () => {
+    const client = makeClient((req) => {
+      expect(req.method).toBe("DELETE");
+      expect(new URL(req.url).pathname).toBe("/email-domains/dom_1");
+      return jsonResponse({ removed: true, cleanup_note: "Delete the NS record" });
+    });
+    const result = await client.removeEmailDomain("dom_1");
+    expect(result.cleanup_note).toBe("Delete the NS record");
+  });
+
+  test("verifyEmailDomain sends POST /email-domains/:id/verify", async () => {
+    const client = makeClient((req) => {
+      expect(req.method).toBe("POST");
+      expect(new URL(req.url).pathname).toBe("/email-domains/dom_1/verify");
+      return jsonResponse({
+        id: "dom_1", domain: "agent.example.com", kind: "custom",
+        status: "verified", is_primary: false, verified: true,
+      });
+    });
+    const domain = await client.verifyEmailDomain("dom_1");
+    expect(domain.verified).toBe(true);
+  });
+
+  test("setPrimaryEmailDomain sends POST /email-domains/:id/primary", async () => {
+    const client = makeClient((req) => {
+      expect(req.method).toBe("POST");
+      expect(new URL(req.url).pathname).toBe("/email-domains/dom_1/primary");
+      return jsonResponse({
+        id: "dom_1", domain: "agent.example.com", kind: "custom",
+        status: "verified", is_primary: true,
+      });
+    });
+    const domain = await client.setPrimaryEmailDomain("dom_1");
+    expect(domain.is_primary).toBe(true);
+  });
+
+  test("useSharedEmailDomain sends POST /email-domains/use-shared-domain", async () => {
+    const client = makeClient((req) => {
+      expect(req.method).toBe("POST");
+      expect(new URL(req.url).pathname).toBe("/email-domains/use-shared-domain");
+      return new Response(null, { status: 204 });
+    });
+    await client.useSharedEmailDomain();
+  });
+
+  test("sendEmailDomainTestEmail sends POST /email-domains/:id/test-email", async () => {
+    const client = makeClient((req) => {
+      expect(req.method).toBe("POST");
+      expect(new URL(req.url).pathname).toBe("/email-domains/dom_1/test-email");
+      return jsonResponse({ sent: true });
+    });
+    const result = await client.sendEmailDomainTestEmail("dom_1");
+    expect(result.sent).toBe(true);
+  });
+
+  test("getDmarcSummary sends GET /email-domains/:id/dmarc with window params", async () => {
+    const client = makeClient((req) => {
+      const u = new URL(req.url);
+      expect(u.pathname).toBe("/email-domains/dom_1/dmarc");
+      expect(u.searchParams.get("days")).toBe("7");
+      expect(u.searchParams.get("top_sources")).toBe("3");
+      return jsonResponse({
+        window_days: 7, report_count: 2, total_messages: 100,
+        passed_messages: 99, failed_messages: 1, top_failing_sources: [],
+      });
+    });
+    const summary = await client.getDmarcSummary("dom_1", { days: 7, topSources: 3 });
+    expect(summary.window_days).toBe(7);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Models — media filters & generation tiers
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("Models — media filters & generation tiers", () => {
+  test("listModels forwards the media capability filters", async () => {
+    const client = makeClient((req) => {
+      const u = new URL(req.url);
+      expect(u.pathname).toBe("/models");
+      expect(u.searchParams.get("supports_input_media")).toBe("pdf");
+      expect(u.searchParams.get("supports_output_media")).toBe("image");
+      expect(u.searchParams.get("supports_tool_use")).toBe("true");
+      return jsonResponse([]);
+    });
+    await client.listModels({
+      supportsInputMedia: "pdf",
+      supportsOutputMedia: "image",
+      supportsToolUse: true,
+    });
+  });
+
+  test("getGenerationTiers sends GET /models/generation-tiers", async () => {
+    const client = makeClient((req) => {
+      expect(req.method).toBe("GET");
+      expect(new URL(req.url).pathname).toBe("/models/generation-tiers");
+      return jsonResponse({ image: { fast: { model: "m_1" } } });
+    });
+    const tiers = await client.getGenerationTiers() as Record<string, unknown>;
+    expect(tiers["image"]).toEqual({ fast: { model: "m_1" } });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Docs Search
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("Docs Search", () => {
+  test("searchDocs sends GET /docs-search with query params", async () => {
+    const client = makeClient((req) => {
+      expect(req.method).toBe("GET");
+      const u = new URL(req.url);
+      expect(u.pathname).toBe("/docs-search");
+      expect(u.searchParams.get("q")).toBe("agent triggers");
+      expect(u.searchParams.get("mode")).toBe("semantic");
+      expect(u.searchParams.get("limit")).toBe("3");
+      return jsonResponse({ results: [] });
+    });
+    await client.searchDocs({ query: "agent triggers", mode: "semantic", limit: 3 });
+  });
+
+  test("searchDocs omits mode and limit when unset", async () => {
+    const client = makeClient((req) => {
+      const u = new URL(req.url);
+      expect(u.searchParams.get("q")).toBe("webhooks");
+      expect(u.searchParams.has("mode")).toBe(false);
+      expect(u.searchParams.has("limit")).toBe(false);
+      return jsonResponse({ results: [] });
+    });
+    await client.searchDocs({ query: "webhooks" });
   });
 });
 

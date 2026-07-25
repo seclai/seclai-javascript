@@ -106,7 +106,26 @@ Online API documentation (latest):
 
 https://seclai.github.io/seclai-javascript/latest/
 
+Release history is in [`CHANGELOG.md`](CHANGELOG.md).
+
 ## Resources
+
+### Identity
+
+Discover who the credential belongs to and which organizations it can act for.
+Each organization's `account_id` is what you pass as the client's `accountId`
+option (sent as the `X-Account-Id` header) to target that org context.
+
+```ts
+const me = await client.getMe();
+console.log(me.account_id);     // the user's personal account
+for (const org of me.organizations) {
+  console.log(org.name, org.account_id);
+}
+
+// Act as an organization
+const orgClient = new Seclai({ accountId: me.organizations[0].account_id });
+```
 
 ### Agents
 
@@ -117,6 +136,11 @@ const agent = await client.createAgent({ name: "My Agent", description: "..." })
 const fetched = await client.getAgent("agent_id");
 const updated = await client.updateAgent("agent_id", { name: "Renamed" });
 await client.deleteAgent("agent_id");
+
+// Pause / resume — a disabled agent stops firing from every trigger path
+const callers = await client.getAgentCallers("agent_id"); // live agents calling this one
+await client.disableAgent("agent_id"); // 409 if any caller above is still live
+await client.enableAgent("agent_id");
 
 // Definition (step workflow)
 const def = await client.getAgentDefinition("agent_id");
@@ -222,6 +246,46 @@ const status = await client.getAgentInputUploadStatus("agent_id", upload.upload_
 // URL-safe-base64 storage_key surfaced in run output manifests / webhooks.
 const resp = await client.downloadAgentRunAttachment("run_id", "attachment_id");
 const blob = await resp.blob(); // raw Response — stream or save the bytes
+```
+
+### Agent email triggers
+
+Configure the inbound address and handling rules on an agent's `EMAIL_RECEIVED`
+trigger. Omitted fields are left unchanged; `null` (or `""` for `alias`) clears them.
+
+```ts
+const config = await client.setEmailTriggerConfig("agent_id", "trigger_id", {
+  alias: "support",
+  allowed_senders: ["example.com", "ops@partner.com"], // empty/null accepts any sender
+  ignore_auto_generated: true,  // drop auto-replies/bulk mail to prevent loops
+  require_sender_auth: true,    // require SPF or DMARC even on an open inbox
+  queue_on_quota: false,        // park over-rate mail instead of failing it
+});
+console.log(config.email_addresses); // ["support.<accountID>@agent.seclai.com", ...]
+```
+
+### Agent email governance
+
+```ts
+// Recipients who opted out of this account's agent emails
+const optOuts = await client.listAgentEmailOptOuts({ agentId: "agent_id", limit: 50 });
+await client.removeAgentEmailOptOut("optout_id"); // opt them back in
+
+// Blocked inbound senders (owner/admin only)
+const blocked = await client.listBlockedEmailSenders({ limit: 50, offset: 0 });
+await client.blockEmailSender({ sender_email: "spam.example.com", match_type: "domain" });
+await client.unblockEmailSender("blocked_id");
+
+// Auto-block on a governance BLOCK: "disabled" | "input" | "input_and_output"
+await client.setAutoBlockMode({ mode: "input_and_output" });
+
+// Inbound emails discarded before running an agent
+const rejections = await client.listInboundEmailRejections({ agentId: "agent_id" });
+
+// Account-wide overload circuit breaker
+const status = await client.getInboundEmailStatus(); // { paused, queued_backlog }
+await client.cancelQueuedEmailRuns();  // fail all QUEUED (over-quota parked) runs
+await client.resumeInboundEmail();     // one-shot override; re-arms if still overloaded
 ```
 
 ### Agent AI assistant
@@ -451,6 +515,15 @@ await client.updateOrganizationAlertPreference("org_id", "alert_type", { ... });
 ### Models
 
 ```ts
+// List models, optionally filtered by capability
+const providers = await client.listModels({ supportsToolUse: true });
+const imageModels = await client.listModels({ supportsOutputMedia: "image" });
+const pdfModels = await client.listModels({ supportsInputMedia: "pdf" });
+const model = await client.getModel("model_id");
+
+// Media-generation quality tiers (fast/balanced/thorough) and what each resolves to
+const tiers = await client.getGenerationTiers();
+
 const alerts = await client.listModelAlerts();
 await client.markModelAlertRead("alert_id");
 await client.markAllModelAlertsRead();
@@ -470,6 +543,60 @@ await client.deleteExperiment("experiment_id"); // soft-delete, preserves audit 
 ```ts
 const results = await client.search({ query: "quarterly report" });
 const filtered = await client.search({ query: "my agent", entityType: "agent", limit: 5 });
+```
+
+### Documentation search
+
+Search the Seclai docs. Results are global (not account-scoped) and each carries a
+`doc_slug` plus an optional `anchor` for building a
+`https://seclai.com/docs/<doc_slug>[#<anchor>]` link.
+
+```ts
+// Fast title/summary match, no AI cost
+const hits = await client.searchDocs({ query: "email triggers" });
+
+// Semantic body match — adds a `highlight` with the best matching sentence
+const semantic = await client.searchDocs({
+  query: "how do I stop auto-reply loops",
+  mode: "semantic",
+  limit: 5,
+});
+```
+
+### Email domains
+
+Send and receive agent email on your own domain instead of the shared
+`agent.seclai.com`. These endpoints require a user-bound credential (an
+account-only API key is refused with 403) and, for mutations, an account owner/admin.
+
+```ts
+// Current domains, their DNS records, and what your plan allows
+const { domains, can_add_custom, has_custom } = await client.listEmailDomains();
+
+// Add a vanity subdomain (<slug>.seclai.com) or your own custom domain
+const vanity = await client.addEmailDomain({ kind: "vanity", value: "acme" });
+const custom = await client.addEmailDomain({
+  kind: "custom",
+  value: "agent.mycompany.com",
+  delegated: true, // let Seclai manage a dedicated Route53 zone
+});
+
+// Publish custom.dns_records at your DNS provider, then check without waiting
+// for the background sweep
+const checked = await client.verifyEmailDomain(custom.id);
+
+// Promote a verified domain, or fall back to the shared domain
+await client.setPrimaryEmailDomain(custom.id);
+await client.useSharedEmailDomain(); // keeps the domain configured & verified
+
+// Confirm delivery end-to-end (always sends to the account owner only)
+await client.sendEmailDomainTestEmail(custom.id);
+
+// DMARC aggregate-report summary
+const dmarc = await client.getDmarcSummary(custom.id, { days: 30, topSources: 10 });
+
+// Removing a delegated domain returns a cleanup_note about the registrar NS record
+const { cleanup_note } = await client.removeEmailDomain(custom.id);
 ```
 
 ### Top-level AI assistant

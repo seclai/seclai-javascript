@@ -29,6 +29,7 @@ export interface paths {
          *     - `template_input`: triggered via API with a predefined template
          *     - `schedule`: triggered on a schedule
          *     - `new_content`: triggered when new content arrives
+         *     - `email_received`: a virtual email inbox; runs when mail arrives at the agent's address. Configure the alias/allowlist with `PUT /api/agents/{agent_id}/triggers/{trigger_id}/email-config`.
          *
          *     Templates: `blank`, `retrieval_example`, `simple_qa`, `summarizer`, `json_extractor`, `content_change_notifier`, `scheduled_report`, `webhook_pipeline`
          *
@@ -41,6 +42,122 @@ export interface paths {
          */
         post: operations["create_agent_api_agents_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/agent-email-optouts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List agent-email opt-outs
+         * @description List recipients who have opted out of this account's agent emails (filter to one agent via `agent_id`; account-wide opt-outs always apply). Paginated via `limit`/`offset`; returns the page plus the `total` count.
+         *
+         *     Auth & scoping: requires `X-API-Key` header or OAuth Bearer token; always scoped to the key's account.
+         */
+        get: operations["list_agent_email_optouts_api_api_agents_agent_email_optouts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/agent-email-optouts/{optout_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke an agent-email opt-out
+         * @description Revoke an opt-out (opt the recipient back in to agent emails).
+         *
+         *     Auth & scoping: requires `X-API-Key` header or OAuth Bearer token; the opt-out must belong to the key's account.
+         */
+        delete: operations["remove_agent_email_optout_api_api_agents_agent_email_optouts__optout_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/blocked-email-senders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List blocked inbound email senders + the auto-block mode
+         * @description List the account's blocked inbound email senders (newest first, paginated via `limit`/`offset`) plus the governance `auto_block_mode`.
+         *
+         *     Auth & scoping: requires `X-API-Key` header or OAuth Bearer token; always scoped to the key's account.
+         */
+        get: operations["list_blocked_email_senders_api_api_agents_blocked_email_senders_get"];
+        put?: never;
+        /**
+         * Block an inbound email sender or domain
+         * @description Add a sender address or a whole domain to the account blocklist (idempotent; `match_type` is `address` (default) or `domain`).
+         *
+         *     Auth & scoping: requires `X-API-Key` header or OAuth Bearer token for an account owner/admin; scoped to the key's account.
+         */
+        post: operations["block_email_sender_api_api_agents_blocked_email_senders_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/blocked-email-senders/mode": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set the governance auto-block mode
+         * @description Set whether a governance BLOCK on an authenticated inbound email sender auto-adds them to the blocklist (`disabled`, `input`, or `input_and_output`); returns the updated list.
+         *
+         *     Auth & scoping: requires `X-API-Key` header or OAuth Bearer token for an account owner/admin; scoped to the key's account.
+         */
+        put: operations["set_auto_block_mode_api_api_agents_blocked_email_senders_mode_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/blocked-email-senders/{blocked_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Unblock an inbound email sender
+         * @description Remove a blocked sender by id.
+         *
+         *     Auth & scoping: requires `X-API-Key` header or OAuth Bearer token for an account owner/admin; the blocked sender must belong to the key's account.
+         */
+        delete: operations["unblock_email_sender_api_api_agents_blocked_email_senders__blocked_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -178,6 +295,94 @@ export interface paths {
         get: operations["get_non_manual_evaluation_summary_api_agents_evaluation_results_non_manual_summary_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/inbound-email-rejections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List discarded inbound emails
+         * @description List recent inbound emails that were quietly discarded before running an agent (unauthorized sender, unknown alias, spam/virus, flood-shed) for this account's agents.
+         *
+         *     Auth & scoping: requires `X-API-Key` header or OAuth Bearer token; always scoped to the key's account.
+         */
+        get: operations["list_inbound_email_rejections_api_api_agents_inbound_email_rejections_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/inbound-email-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Account inbound-email overload status
+         * @description Whether the account-wide overload circuit breaker has currently paused new inbound email (all inbound turned away until the queued backlog drains), plus the size of the QUEUED (over-quota parked) run backlog.
+         *
+         *     Auth & scoping: requires `X-API-Key` header or OAuth Bearer token; always scoped to the key's account.
+         */
+        get: operations["get_inbound_email_status_api_api_agents_inbound_email_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/inbound-email-status/cancel-queued": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel all queued inbound-email runs
+         * @description Fail all of the account's QUEUED (over-quota parked) inbound-email runs at once. A queued run consumed no quota or credits at queue time, so this merely fails them. Returns the count cancelled.
+         *
+         *     Auth & scoping: requires `X-API-Key` header or OAuth Bearer token for an account owner/admin; scoped to the key's account.
+         */
+        post: operations["cancel_queued_email_runs_api_api_agents_inbound_email_status_cancel_queued_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/inbound-email-status/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Manually resume paused inbound email
+         * @description Manually lift the account-wide inbound pause. If the queued backlog is still above the ceiling the breaker re-arms on the next evaluation — this is a one-shot override, not a permanent disable.
+         *
+         *     Auth & scoping: requires `X-API-Key` header or OAuth Bearer token for an account owner/admin; scoped to the key's account.
+         */
+        post: operations["resume_inbound_email_api_api_agents_inbound_email_status_resume_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -439,6 +644,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/agents/{agent_id}/callers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List agents that call this agent
+         * @description List the live agents that call this agent via a `call_agent` step. They must be disabled before this agent can be paused.
+         *
+         *     Auth & scoping: requires `X-API-Key` header or OAuth Bearer token; the agent must belong to the key's account.
+         */
+        get: operations["get_agent_callers_api_api_agents__agent_id__callers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/agents/{agent_id}/definition": {
         parameters: {
             query?: never;
@@ -503,6 +730,52 @@ export interface paths {
          */
         put: operations["update_agent_definition_api_agents__agent_id__definition_put"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/{agent_id}/disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pause (disable) an agent
+         * @description Disable an agent so it stops firing from every trigger path (API runs return 409, inbound email is turned away, scheduled/content triggers are skipped).
+         *
+         *     Returns **409** with the blocking callers when other live agents still call this one via a `call_agent` step — disable those first.
+         *
+         *     Auth & scoping: requires `X-API-Key` header or OAuth Bearer token bound to a user; the agent must belong to the key's account.
+         */
+        post: operations["disable_agent_api_api_agents__agent_id__disable_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/{agent_id}/enable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resume (enable) a paused agent
+         * @description Re-enable a paused agent (clears the disable state, whether it was paused manually or auto-paused by the inbound-email overload safeguard).
+         *
+         *     Auth & scoping: requires `X-API-Key` header or OAuth Bearer token bound to a user; the agent must belong to the key's account.
+         */
+        post: operations["enable_agent_api_api_agents__agent_id__enable_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -780,6 +1053,28 @@ export interface paths {
          */
         get: operations["list_run_evaluation_results_api_agents__agent_id__runs__run_id__evaluation_results_get"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/{agent_id}/triggers/{trigger_id}/email-config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Configure an EMAIL_RECEIVED trigger
+         * @description Set the custom alias, sender allowlist, and inbound-handling flags (`ignore_auto_generated`, `require_sender_auth`, `queue_on_quota`) on an agent's EMAIL_RECEIVED trigger, and return its computed email address(es). Omitted fields are left unchanged.
+         *
+         *     Auth & scoping: requires `X-API-Key` header or OAuth Bearer token; the trigger must belong to an agent in the key's account.
+         */
+        put: operations["set_email_trigger_config_api_api_agents__agent_id__triggers__trigger_id__email_config_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1447,6 +1742,186 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/docs-search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search documentation
+         * @description Search the Seclai documentation by content and return matching pages. `mode=keyword` matches page titles and summaries (fast, no AI cost); `mode=semantic` matches page body content by meaning (uses an embedding). Each result carries a `doc_slug` and an optional section `anchor` for building a `https://seclai.com/docs/<doc_slug>[#<anchor>]` link, a `score` (relevance; not comparable across modes), and — in semantic mode — a `highlight` (best matching verbatim sentence; `null` for keyword). Documentation is global, so results are not account-scoped.
+         */
+        get: operations["docs_search_api_docs_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/email-domains": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the account's email domains + plan capabilities
+         * @description List the account's vanity (`<slug>.seclai.com`) and custom (`agent.mycompany.com`) agent-email domains with their verification status, the DNS records the customer must publish, and the plan capabilities (`can_add_vanity`/`can_add_custom`) plus whether one of each kind already exists (`has_vanity`/`has_custom` — the per-kind limit is 1).
+         *
+         *     Auth & scoping: requires an `X-API-Key` header or OAuth Bearer token bound to a **user** (an account-only key is refused with 403); the domain is scoped to the key's account.
+         */
+        get: operations["list_email_domains_api_api_email_domains_get"];
+        put?: never;
+        /**
+         * Add + provision an email domain
+         * @description Add a new vanity subdomain (`kind=vanity`, `value=<slug>`) or custom domain (`kind=custom`, `value=agent.mycompany.com`; optional `delegated=true` to let Seclai manage a dedicated Route53 zone). Stands up the SES identity + DNS and returns the records the customer must publish. Owner/admin only.
+         *
+         *     Auth & scoping: requires an `X-API-Key` header or OAuth Bearer token bound to a **user** (an account-only key is refused with 403); the domain is scoped to the key's account.
+         */
+        post: operations["add_email_domain_api_api_email_domains_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/email-domains/use-shared-domain": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revert to the shared agent.seclai.com sending domain
+         * @description Clear the account's primary domain so agent email reverts to the shared `agent.seclai.com` sending/inbound scheme, WITHOUT removing the configured domain(s) — they stay verified and can be promoted again later. Owner/admin only.
+         *
+         *     Auth & scoping: requires an `X-API-Key` header or OAuth Bearer token bound to a **user** (an account-only key is refused with 403); the domain is scoped to the key's account.
+         */
+        post: operations["use_shared_domain_api_api_email_domains_use_shared_domain_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/email-domains/{domain_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove an email domain
+         * @description Remove a domain and tear down its SES identity + DNS / receipt-rule recipient. Returns a `cleanup_note` when the removed domain was Seclai-managed (delegated), reminding the caller to delete the registrar NS delegation record (dangling-delegation / subdomain-takeover guard). Owner/admin only.
+         *
+         *     Auth & scoping: requires an `X-API-Key` header or OAuth Bearer token bound to a **user** (an account-only key is refused with 403); the domain is scoped to the key's account.
+         */
+        delete: operations["remove_email_domain_api_api_email_domains__domain_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/email-domains/{domain_id}/dmarc": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * DMARC aggregate-report summary for a domain
+         * @description Pass rate, disposition breakdown (`none`/`quarantine`/`reject`), and top failing source IPs from the DMARC `rua` aggregate reports over the last `days` (clamped by the service). Populated for domains whose DNS zone Seclai controls (vanity + delegated custom); a self-managed custom domain keeps its own DMARC reporting and returns an all-zero summary.
+         *
+         *     Auth & scoping: requires an `X-API-Key` header or OAuth Bearer token bound to a **user** (an account-only key is refused with 403); the domain is scoped to the key's account.
+         */
+        get: operations["get_dmarc_summary_api_api_email_domains__domain_id__dmarc_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/email-domains/{domain_id}/primary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Make a verified domain the account's primary sending/inbound domain
+         * @description Promote a verified domain to the account's primary domain — agent email then sends FROM and receives ON this domain (`<agentID>@<domain>`, `<alias>@<domain>`) instead of the shared `agent.seclai.com`. The domain must be verified. Owner/admin only.
+         *
+         *     Auth & scoping: requires an `X-API-Key` header or OAuth Bearer token bound to a **user** (an account-only key is refused with 403); the domain is scoped to the key's account.
+         */
+        post: operations["set_primary_email_domain_api_api_email_domains__domain_id__primary_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/email-domains/{domain_id}/test-email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send a test email from a verified domain to the account owner
+         * @description Send a test message FROM the verified domain (`noreply@<domain>`) TO the account owner's email, to confirm end-to-end that the domain actually sends (SES verified, DKIM/SPF aligned). Never sends to any other address, so it can't be used as an open relay. Owner/admin only.
+         *
+         *     Auth & scoping: requires an `X-API-Key` header or OAuth Bearer token bound to a **user** (an account-only key is refused with 403); the domain is scoped to the key's account.
+         */
+        post: operations["send_test_email_api_api_email_domains__domain_id__test_email_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/email-domains/{domain_id}/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run a verification check immediately ('Check now')
+         * @description Re-poll SES + DNS for this domain right now instead of waiting for the background verification sweep, and return its updated status + DNS-record check results. Useful right after publishing the required records. Owner/admin only.
+         *
+         *     Auth & scoping: requires an `X-API-Key` header or OAuth Bearer token bound to a **user** (an account-only key is refused with 403); the domain is scoped to the key's account.
+         */
+        post: operations["verify_email_domain_api_api_email_domains__domain_id__verify_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/governance/ai-assistant": {
         parameters: {
             query?: never;
@@ -1915,6 +2390,8 @@ export interface paths {
          *     - `provider`: filter by provider (e.g. 'anthropic', 'openai')
          *     - `supports_tool_use`: filter to models with tool calling support
          *     - `supports_thinking`: filter to models with extended thinking support
+         *     - `supports_input_media`: filter to models accepting an input modality (`image`/`audio`/`video`/`pdf` or a full MIME)
+         *     - `supports_output_media`: filter to models producing an output modality (`image`/`audio`/`video`) — e.g. to find generation models
          *
          *     Auth & scoping:
          *     - Requires `X-API-Key` header or OAuth Bearer token.
@@ -2022,6 +2499,31 @@ export interface paths {
          *     - Requires `X-API-Key` header or OAuth Bearer token. The alert must belong to the caller's account.
          */
         patch: operations["mark_read_api_models_alerts__alert_id__read_patch"];
+        trace?: never;
+    };
+    "/models/generation-tiers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Generation Tiers
+         * @description List the media-generation quality tiers and the model + cost each resolves to.
+         *
+         *     On a prompt_call's `media_generation` tool — and the dedicated generate_* steps via tier routing — the author/LLM chooses a *tier* (fast/balanced/thorough), never a model. This is the surface that maps each `(modality, tier)` to its concrete generator, raw `credits_per_unit`, `unit_label`, and a human-readable scaled `price_label`. Global routing/pricing (the same for every account); read-only. REST parity with the `list_generation_tiers` MCP tool.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key` header or OAuth Bearer token.
+         */
+        get: operations["get_generation_tiers_api_models_generation_tiers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/models/playground/experiments": {
@@ -2178,7 +2680,7 @@ export interface paths {
         };
         /**
          * Search resources
-         * @description Search across all resource types in your account.  Accepts a free-text keyword query or a UUID.  UUIDs are matched exactly; keywords are matched by name and description (case-insensitive substring).  Results are ranked: name-prefix > name-substring > description-substring.  Searchable types: agent, knowledge_base, source_connection, solution, memory_bank, alert, api_key, governance_policy.
+         * @description Search across all resource types in your account.  Accepts a free-text keyword query or a UUID.  UUIDs are matched exactly; keywords are matched by name and description (case-insensitive substring).  Results are ranked: name-prefix > name-substring > description-substring.  Searchable types: agent, knowledge_base, source_connection, solution, memory_bank, alert, api_key, governance_policy, mcp_client.
          */
         get: operations["search_api_search_get"];
         put?: never;
@@ -2898,6 +3400,21 @@ export interface components {
              */
             user_input: string;
         };
+        /** AddEmailDomainRequest */
+        AddEmailDomainRequest: {
+            /**
+             * Delegated
+             * @default false
+             */
+            delegated: boolean;
+            /**
+             * Kind
+             * @description 'vanity' or 'custom'
+             */
+            kind: string;
+            /** Value */
+            value: string;
+        };
         /**
          * AgentAttachmentRefsApiResponse
          * @description Static attachment-reference contract for an agent.
@@ -2915,6 +3432,21 @@ export interface components {
              * @description When ``false`` the agent's definition does NOT reference any uploaded attachments — ``POST /agents/{id}/upload-input`` will reject with HTTP 400. When ``true`` the ``agent`` block lists the specific selectors a run-time batch must satisfy.
              */
             requires_uploads: boolean;
+        };
+        /**
+         * AgentCallerApiResponse
+         * @description One agent that calls another (blocks disabling the callee while live).
+         */
+        AgentCallerApiResponse: {
+            /** Disabled */
+            disabled: boolean;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
         };
         /**
          * AgentDefinitionImportErrorResponse
@@ -2965,6 +3497,39 @@ export interface components {
             warnings?: {
                 [key: string]: string;
             }[] | null;
+        };
+        /**
+         * AgentEmailOptOutListResponse
+         * @description A page of agent-email opt-outs plus the total (for pagination).
+         */
+        AgentEmailOptOutListResponse: {
+            /** Items */
+            items: components["schemas"]["AgentEmailOptOutResponse"][];
+            /** Total */
+            total: number;
+        };
+        /**
+         * AgentEmailOptOutResponse
+         * @description A recipient's opt-out from an account's agent emails (one agent or all).
+         */
+        AgentEmailOptOutResponse: {
+            /** Agent Id */
+            agent_id: string | null;
+            /** Agent Name */
+            agent_name: string | null;
+            /** Comment */
+            comment: string | null;
+            /** Created At */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Reason */
+            reason: string | null;
+            /** Recipient Email */
+            recipient_email: string;
         };
         /**
          * AgentEvaluationTier
@@ -3164,7 +3729,7 @@ export interface components {
             output: string | null;
             /**
              * Output Content Type
-             * @description MIME type of `output` — mirrors the terminal step's `output_content_type`.  Consumers interpret `output` differently depending on this value: `application/vnd.seclai.manifest+json` is a multi-asset manifest with shape `{text, attachments: [{storage_key, mime, name, bytes}]}` — fetch each attachment via `GET /authenticated/storage-blobs/{storage_key}`.  `text/plain` / `text/*` are free-form text.  `application/json` is a JSON document.  Null on runs that produced no terminal output or that pre-date this column.
+             * @description MIME type of `output` — mirrors the terminal step's `output_content_type`.  Consumers interpret `output` differently depending on this value: `application/vnd.seclai.manifest+json` is a multi-asset manifest with shape `{text, attachments: [{storage_key, mime, name, bytes}]}` — fetch each attachment via `GET /api/v2/agent-runs/{run_id}/attachments/{attachment_id}`, where `attachment_id` is the URL-safe base64 of the attachment's `storage_key` (accepts an API key or OAuth token).  `text/plain` / `text/*` are free-form text.  `application/json` is a JSON document.  Null on runs that produced no terminal output or that pre-date this column.
              */
             output_content_type?: string | null;
             /**
@@ -3189,6 +3754,11 @@ export interface components {
              * @description Step outputs and per-step timing/credits. Only included when requested.
              */
             steps?: components["schemas"]["AgentRunStepResponse"][] | null;
+            /**
+             * Wait Ms
+             * @description Cumulative milliseconds the run was parked on standard-mode wait steps.  Subtracted from active duration in run-detail and duration-stats responses, exactly like hitl_wait_ms.  Priority waits block inline and are not counted here.
+             */
+            wait_ms?: number | null;
         };
         /** AgentRunStepResponse */
         AgentRunStepResponse: {
@@ -3362,6 +3932,22 @@ export interface components {
              * @description Agent description.
              */
             description: string | null;
+            /**
+             * Disabled
+             * @description Whether the agent is paused (disabled).
+             * @default false
+             */
+            disabled: boolean;
+            /**
+             * Disabled At
+             * @description ISO 8601 timestamp the agent was paused.
+             */
+            disabled_at?: string | null;
+            /**
+             * Disabled Reason
+             * @description Why the agent is paused: 'manual' or 'email_overload'.
+             */
+            disabled_reason?: string | null;
             /**
              * Evaluation Mode
              * @description Evaluation mode: output_expectation, eval_and_retry, or sample_and_flag.
@@ -3676,6 +4262,54 @@ export interface components {
             /** Patterns */
             patterns?: string[];
         };
+        /**
+         * BlockEmailSenderRequest
+         * @description Add one sender/domain to the account blocklist (shared REST request).
+         */
+        BlockEmailSenderRequest: {
+            /**
+             * Match Type
+             * @default address
+             */
+            match_type: string;
+            /** Note */
+            note?: string | null;
+            /** Sender Email */
+            sender_email: string;
+        };
+        /**
+         * BlockedEmailSenderListResponse
+         * @description A page of blocked senders + the account's auto-block mode.
+         */
+        BlockedEmailSenderListResponse: {
+            /** Auto Block Mode */
+            auto_block_mode: string;
+            /** Items */
+            items: components["schemas"]["BlockedEmailSenderResponse"][];
+            /** Total */
+            total: number;
+        };
+        /**
+         * BlockedEmailSenderResponse
+         * @description A single blocked inbound email sender.
+         */
+        BlockedEmailSenderResponse: {
+            /** Created At */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Match Type */
+            match_type: string;
+            /** Note */
+            note: string | null;
+            /** Sender Email */
+            sender_email: string;
+            /** Source */
+            source: string;
+        };
         /** Body_upload_file_to_content_api_contents__source_connection_content_version__upload_post */
         Body_upload_file_to_content_api_contents__source_connection_content_version__upload_post: {
             /**
@@ -3713,6 +4347,11 @@ export interface components {
              * @description Optional title for the content
              */
             title?: string;
+        };
+        /** CancelQueuedRunsResponse */
+        CancelQueuedRunsResponse: {
+            /** Cancelled */
+            cancelled: number;
         };
         /** ChangeStatusRequest */
         ChangeStatusRequest: {
@@ -4114,6 +4753,11 @@ export interface components {
             /** @description Index mode for custom_index sources: fast_and_cheap (default), balanced, slow_and_thorough, or custom. */
             index_mode?: components["schemas"]["SourceIndexMode"] | null;
             /**
+             * Media Types
+             * @description Media kinds to extract from indexed content and embed as multi-modal KB chunks. Subset of ['images', 'video']. Only kinds the source's embedder can index are honored; unsupported values are dropped. Omit / [] for text-only.
+             */
+            media_types?: string[] | null;
+            /**
              * Name
              * @description Source name.
              */
@@ -4148,6 +4792,196 @@ export interface components {
              * @description URL record ID (required for rss/website sources).
              */
             url_id?: string | null;
+        };
+        /** DmarcFailingSourceResponse */
+        DmarcFailingSourceResponse: {
+            /** Failed Count */
+            failed_count: number;
+            /** Header From */
+            header_from?: string | null;
+            /** Source Ip */
+            source_ip: string;
+        };
+        /** DmarcSummaryResponse */
+        DmarcSummaryResponse: {
+            /** Dispositions */
+            dispositions?: {
+                [key: string]: number;
+            };
+            /** Failed Messages */
+            failed_messages: number;
+            /**
+             * Monitored
+             * @default true
+             */
+            monitored: boolean;
+            /** Pass Rate */
+            pass_rate?: number | null;
+            /** Passed Messages */
+            passed_messages: number;
+            /** Report Count */
+            report_count: number;
+            /** Top Failing Sources */
+            top_failing_sources?: components["schemas"]["DmarcFailingSourceResponse"][];
+            /** Total Messages */
+            total_messages: number;
+            /** Window Days */
+            window_days: number;
+        };
+        /** DnsProviderResponse */
+        DnsProviderResponse: {
+            /** Dashboard Url */
+            dashboard_url?: string | null;
+            /** Key */
+            key: string;
+            /**
+             * Mx Priority Separate
+             * @default true
+             */
+            mx_priority_separate: boolean;
+            /** Name */
+            name: string;
+            /** Tips */
+            tips?: string[];
+            /**
+             * Txt Quotes
+             * @default strip
+             */
+            txt_quotes: string;
+        };
+        /** DnsRecordResponse */
+        DnsRecordResponse: {
+            /** Detail */
+            detail?: string | null;
+            /** Key */
+            key: string;
+            /** Mx Host */
+            mx_host?: string | null;
+            /** Mx Priority */
+            mx_priority?: number | null;
+            /** Name */
+            name: string;
+            /** Ok */
+            ok: boolean;
+            /** Relative Name */
+            relative_name: string;
+            /** Type */
+            type: string;
+            /** Value */
+            value: string;
+        };
+        /** EmailDomainResponse */
+        EmailDomainResponse: {
+            /**
+             * Delegated
+             * @default false
+             */
+            delegated: boolean;
+            /** Dns Records */
+            dns_records?: components["schemas"]["DnsRecordResponse"][];
+            /** Domain */
+            domain: string;
+            /** Error Message */
+            error_message?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Primary */
+            is_primary: boolean;
+            /** Kind */
+            kind: string;
+            /** Last Checked At */
+            last_checked_at?: string | null;
+            provider?: components["schemas"]["DnsProviderResponse"] | null;
+            /**
+             * Regressing
+             * @default false
+             */
+            regressing: boolean;
+            /** Status */
+            status: string;
+            /**
+             * Verified
+             * @default false
+             */
+            verified: boolean;
+            /** Verified At */
+            verified_at?: string | null;
+            /**
+             * Zone Apex
+             * @default
+             */
+            zone_apex: string;
+        };
+        /** EmailDomainsListResponse */
+        EmailDomainsListResponse: {
+            /**
+             * Can Add Custom
+             * @default false
+             */
+            can_add_custom: boolean;
+            /**
+             * Can Add Vanity
+             * @default false
+             */
+            can_add_vanity: boolean;
+            /** Custom Plan Names */
+            custom_plan_names?: string[];
+            /** Domains */
+            domains?: components["schemas"]["EmailDomainResponse"][];
+            /**
+             * Has Custom
+             * @default false
+             */
+            has_custom: boolean;
+            /**
+             * Has Vanity
+             * @default false
+             */
+            has_vanity: boolean;
+            /** Vanity Plan Names */
+            vanity_plan_names?: string[];
+        };
+        /**
+         * EmailTriggerConfigResponse
+         * @description An EMAIL_RECEIVED trigger's resolved address(es) and config.
+         */
+        EmailTriggerConfigResponse: {
+            /**
+             * Agent Id
+             * Format: uuid
+             */
+            agent_id: string;
+            /** Email Addresses */
+            email_addresses?: string[];
+            /** Email Alias */
+            email_alias?: string | null;
+            /** Email Allowed Senders */
+            email_allowed_senders?: string[] | null;
+            /**
+             * Email Ignore Auto Generated
+             * @default true
+             */
+            email_ignore_auto_generated: boolean;
+            /**
+             * Email Queue On Quota
+             * @default false
+             */
+            email_queue_on_quota: boolean;
+            /**
+             * Email Require Sender Auth
+             * @default true
+             */
+            email_require_sender_auth: boolean;
+            /**
+             * Trigger Id
+             * Format: uuid
+             */
+            trigger_id: string;
+            /** Trigger Type */
+            trigger_type: string;
         };
         /**
          * EvaluationCriteriaResponse
@@ -4439,6 +5273,12 @@ export interface components {
              */
             error?: string | null;
             /**
+             * Needs Clarification
+             * @description True when the action paused for a clarifying question rather than failing. The created resource is kept and the question is in ``description``/``error``.
+             * @default false
+             */
+            needs_clarification: boolean;
+            /**
              * Resource Id
              * @description ID of the affected resource.
              */
@@ -4520,6 +5360,11 @@ export interface components {
              * @description Example natural-language prompts that demonstrate the capabilities of this AI assistant for the given mode.
              */
             example_prompts?: components["schemas"]["ExamplePrompt"][];
+            /**
+             * Intent Assessment
+             * @description How the assistant interpreted the request: 'clear' when steps were generated, or an ask-path value (e.g. 'ambiguous_output', 'cannot_build') when it returned no steps and put a clarifying question or blocker in `note`. Mirrors the MCP surface so callers can distinguish a clarification pause from a hard failure.
+             */
+            intent_assessment?: string | null;
             /**
              * Note
              * @description AI explanation of the proposed workflow.
@@ -4729,6 +5574,40 @@ export interface components {
              * @description Human-readable explanation of what was skipped and why.
              */
             message: string;
+        };
+        /**
+         * InboundEmailRejectionResponse
+         * @description An inbound email that was discarded without running an agent.
+         */
+        InboundEmailRejectionResponse: {
+            /** Agent Id */
+            agent_id: string | null;
+            /** Created At */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Message Id */
+            message_id: string | null;
+            /** Reason */
+            reason: string;
+            /** Recipient */
+            recipient: string;
+            /** Sender */
+            sender: string;
+            /** Sender Ip */
+            sender_ip: string | null;
+            /** Subject */
+            subject: string | null;
+        };
+        /** InboundEmailStatusResponse */
+        InboundEmailStatusResponse: {
+            /** Paused */
+            paused: boolean;
+            /** Queued Backlog */
+            queued_backlog: number;
         };
         /**
          * InlineTextReplaceRequest
@@ -5204,7 +6083,7 @@ export interface components {
          * PendingProcessingCompletedFailedStatus
          * @enum {string}
          */
-        PendingProcessingCompletedFailedStatus: "pending" | "processing" | "completed" | "failed" | "waiting_human";
+        PendingProcessingCompletedFailedStatus: "pending" | "processing" | "completed" | "failed" | "queued" | "waiting_human" | "waiting_scheduled";
         /**
          * PlaygroundCreateRequest
          * @description Create a model playground experiment via the public API.
@@ -5353,6 +6232,37 @@ export interface components {
             params: {
                 [key: string]: unknown;
             };
+        };
+        /** RemoveEmailDomainResponse */
+        RemoveEmailDomainResponse: {
+            /** Cleanup Note */
+            cleanup_note?: string | null;
+            /**
+             * Removed
+             * @default true
+             */
+            removed: boolean;
+        };
+        /** ResumeInboundResponse */
+        ResumeInboundResponse: {
+            /** Resumed */
+            resumed: boolean;
+        };
+        /** SendTestEmailResponse */
+        SendTestEmailResponse: {
+            /**
+             * Sent
+             * @default true
+             */
+            sent: boolean;
+        };
+        /**
+         * SetAutoBlockModeRequest
+         * @description Set the account's governance auto-block mode (shared REST request).
+         */
+        SetAutoBlockModeRequest: {
+            /** Mode */
+            mode: string;
         };
         /** SolutionSourceConnectionResponse */
         SolutionSourceConnectionResponse: {
@@ -5600,6 +6510,11 @@ export interface components {
             id: string;
             /** @description Index mode for custom_index sources: fast_and_cheap, balanced, slow_and_thorough, or custom. */
             index_mode?: components["schemas"]["SourceIndexMode"] | null;
+            /**
+             * Media Types
+             * @description Media kinds extracted from indexed content and embedded as multi-modal KB chunks (subset of ['images', 'video']). Empty = text-only.
+             */
+            media_types?: string[];
             /**
              * Name
              * @description Name of the source connection.
@@ -6016,6 +6931,11 @@ export interface components {
          */
         UpdateSourceBody: {
             /**
+             * Media Types
+             * @description Media kinds to extract from indexed content and embed as multi-modal KB chunks. Subset of ['images', 'video']. Only kinds the source's embedder can index are honored; unsupported values are dropped. [] disables media extraction (text-only).
+             */
+            media_types?: string[] | null;
+            /**
              * Name
              * @description New name.
              */
@@ -6290,7 +7210,7 @@ export interface components {
             name: string;
             /**
              * Trigger Type
-             * @description Trigger type: dynamic_input, template_input, schedule, new_content.
+             * @description Trigger type: dynamic_input, template_input, schedule, new_content, email_received.
              * @default dynamic_input
              */
             trigger_type: string;
@@ -6310,6 +7230,40 @@ export interface components {
              * @description Display name of the policy at evaluation time. May be null when the policy has been deleted.
              */
             policy_name?: string | null;
+        };
+        /**
+         * SetEmailTriggerConfigRequest
+         * @description Alias and/or sender allowlist for an EMAIL_RECEIVED trigger.
+         *
+         *     A field omitted is left unchanged; passing ``null`` (or ``""`` for
+         *     ``alias``) clears it.
+         */
+        routers__api__agents__SetEmailTriggerConfigRequest: {
+            /**
+             * Alias
+             * @description Custom alias for the address `<alias>.<accountID>@agent.seclai.com` (alphanumeric plus '+', '.', '-'; 1–32 chars; not starting/ending with '+', '.', '-'; not UUID-shaped). Pass null/empty to clear.
+             */
+            alias?: string | null;
+            /**
+             * Allowed Senders
+             * @description Allowlist of full sender addresses and/or bare domains (a bare domain also matches sub-domains). Empty/null accepts any sender.
+             */
+            allowed_senders?: string[] | null;
+            /**
+             * Ignore Auto Generated
+             * @description When true (default for new triggers), machine-generated inbound mail (auto-replies, bulk/list mail, bounces) is dropped before a run to prevent auto-reply loops. Set false to process automated mail.
+             */
+            ignore_auto_generated?: boolean | null;
+            /**
+             * Queue On Quota
+             * @description When true (default false), inbound mail that exceeds the account's hourly email-trigger rate is parked in a QUEUED run and drained later by the catch-up sweep instead of being failed; when false, over-rate mail fails immediately.
+             */
+            queue_on_quota?: boolean | null;
+            /**
+             * Require Sender Auth
+             * @description When true (default for new triggers), the envelope sender must pass SPF or DMARC even on an open inbox (no allowlist); unauthenticated, spoofable mail is rejected. Set false to accept fully unauthenticated mail on an open inbox.
+             */
+            require_sender_auth?: boolean | null;
         };
         /** UpdateAgentRequest */
         routers__api__agents__UpdateAgentRequest: {
@@ -7190,8 +8144,30 @@ export interface components {
             family?: string | null;
             /** Family Generation */
             family_generation?: number | null;
+            /**
+             * Generation Credits Per Unit
+             * @description Per-unit credit cost for a dedicated media-generation model, in the unit named by ``generation_params.pricing_unit`` (per image / per second / per character / per output token). Multiply by the produced unit count (images, seconds, characters) for the run cost. None for token-billed (non-generation) models.
+             */
+            generation_credits_per_unit?: number | null;
+            /**
+             * Generation Params
+             * @description Media-generation descriptor (modality, pricing_unit, and modality-specific constraints). NULL for text LLMs; present for image/audio/video generation models. See schemas.generation_params.
+             */
+            generation_params?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Generation Unit Label
+             * @description Human suffix for the per-unit generation rate (e.g. ``/image``, ``/second``, ``/1k chars``, ``/1k tokens``) — single-sourced from the pricing unit so clients render cost without re-deriving the mapping. None for non-generation models. Char/token rates are shown per 1,000 (the ``/1k …`` suffix), so scale ``generation_credits_per_unit`` accordingly for those units.
+             */
+            generation_unit_label?: string | null;
             /** Id */
             id: string;
+            /**
+             * Image Generation Tool Credits Per Image
+             * @description Per-image credit cost of using the built-in image_generation tool (it runs gpt-image-1). Set only for models that actually support the tool (tool-use capable); None otherwise.
+             */
+            image_generation_tool_credits_per_image?: number | null;
             /** Input 1H Cache Write Credits Per 1000 Tokens */
             input_1h_cache_write_credits_per_1000_tokens?: number | null;
             /** Input 5M Cache Write Credits Per 1000 Tokens */
@@ -7434,6 +8410,214 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AgentDefinitionImportErrorResponse"];
+                };
+            };
+        };
+    };
+    list_agent_email_optouts_api_api_agents_agent_email_optouts_get: {
+        parameters: {
+            query?: {
+                /** @description Filter to one agent (account-wide opt-outs still apply) */
+                agent_id?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEmailOptOutListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_agent_email_optout_api_api_agents_agent_email_optouts__optout_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
+            path: {
+                optout_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_blocked_email_senders_api_api_agents_blocked_email_senders_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlockedEmailSenderListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    block_email_sender_api_api_agents_blocked_email_senders_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BlockEmailSenderRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlockedEmailSenderResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_auto_block_mode_api_api_agents_blocked_email_senders_mode_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetAutoBlockModeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlockedEmailSenderListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unblock_email_sender_api_api_agents_blocked_email_senders__blocked_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
+            path: {
+                blocked_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -7725,6 +8909,111 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_inbound_email_rejections_api_api_agents_inbound_email_rejections_get: {
+        parameters: {
+            query?: {
+                /** @description Filter to a single agent's rejections */
+                agent_id?: string | null;
+                limit?: number;
+            };
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboundEmailRejectionResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_inbound_email_status_api_api_agents_inbound_email_status_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboundEmailStatusResponse"];
+                };
+            };
+        };
+    };
+    cancel_queued_email_runs_api_api_agents_inbound_email_status_cancel_queued_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CancelQueuedRunsResponse"];
+                };
+            };
+        };
+    };
+    resume_inbound_email_api_api_agents_inbound_email_status_resume_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResumeInboundResponse"];
                 };
             };
         };
@@ -8170,6 +9459,40 @@ export interface operations {
             };
         };
     };
+    get_agent_callers_api_api_agents__agent_id__callers_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentCallerApiResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_agent_definition_api_agents__agent_id__definition_get: {
         parameters: {
             query?: never;
@@ -8229,6 +9552,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AgentDefinitionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    disable_agent_api_api_agents__agent_id__disable_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentSummaryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    enable_agent_api_api_agents__agent_id__enable_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentSummaryResponse"];
                 };
             };
             /** @description Validation Error */
@@ -8682,6 +10073,45 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EvaluationResultWithCriteriaResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_email_trigger_config_api_api_agents__agent_id__triggers__trigger_id__email_config_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
+            path: {
+                agent_id: string;
+                trigger_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["routers__api__agents__SetEmailTriggerConfigRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailTriggerConfigResponse"];
                 };
             };
             /** @description Validation Error */
@@ -9738,6 +11168,300 @@ export interface operations {
             };
         };
     };
+    docs_search_api_docs_search_get: {
+        parameters: {
+            query: {
+                /** @description Search query */
+                q: string;
+                /** @description Search strategy */
+                mode?: "keyword" | "semantic";
+                /** @description Maximum results */
+                limit?: number;
+            };
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_email_domains_api_api_email_domains_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailDomainsListResponse"];
+                };
+            };
+        };
+    };
+    add_email_domain_api_api_email_domains_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddEmailDomainRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailDomainResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    use_shared_domain_api_api_email_domains_use_shared_domain_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    remove_email_domain_api_api_email_domains__domain_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
+            path: {
+                domain_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemoveEmailDomainResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_dmarc_summary_api_api_email_domains__domain_id__dmarc_get: {
+        parameters: {
+            query?: {
+                days?: number;
+                top_sources?: number;
+            };
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
+            path: {
+                domain_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DmarcSummaryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_primary_email_domain_api_api_email_domains__domain_id__primary_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
+            path: {
+                domain_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailDomainResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    send_test_email_api_api_email_domains__domain_id__test_email_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
+            path: {
+                domain_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SendTestEmailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    verify_email_domain_api_api_email_domains__domain_id__verify_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
+            path: {
+                domain_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailDomainResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     governance_ai_generate_api_governance_ai_assistant_post: {
         parameters: {
             query?: never;
@@ -10690,6 +12414,10 @@ export interface operations {
                 supports_tool_use?: boolean | null;
                 /** @description Filter to models that support extended thinking */
                 supports_thinking?: boolean | null;
+                /** @description Filter to models that accept this input modality — a coarse kind (`image`, `audio`, `video`, `pdf`) or a full MIME. */
+                supports_input_media?: string | null;
+                /** @description Filter to models that produce this output modality — a coarse kind (`image`, `audio`, `video`) or a full MIME. Use to find image/audio/video generation models. */
+                supports_output_media?: string | null;
             };
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
@@ -10837,6 +12565,31 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_generation_tiers_api_models_generation_tiers_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
         };

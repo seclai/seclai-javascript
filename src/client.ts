@@ -19,9 +19,12 @@ import type { AuthState } from "./auth";
 import { resolveCredentialChain, resolveAuthHeaders } from "./auth";
 import type {
   AgentRunEvent,
+  AddEmailDomainInput,
   AgentAttachmentRefsApiResponse,
+  AgentCallerApiResponse,
   AgentDefinitionImportErrorResponse,
   AgentDefinitionResponse,
+  AgentEmailOptOutListResponse,
   AgentExportResponse,
   AgentImportPreviewRequest,
   AgentImportPreviewResponse,
@@ -42,6 +45,10 @@ import type {
   AiConversationHistoryResponse,
   AddCommentRequest,
   AddConversationTurnRequest,
+  BlockEmailSenderRequest,
+  BlockedEmailSenderListResponse,
+  BlockedEmailSenderResponse,
+  CancelQueuedRunsResponse,
   ChangeStatusRequest,
   CompatibleRunListResponse,
   CompactionTestResponse,
@@ -57,6 +64,10 @@ import type {
   CreateMemoryBankBody,
   CreateSolutionRequest,
   CreateSourceBody,
+  DmarcSummaryResponse,
+  EmailDomainResponse,
+  EmailDomainsListResponse,
+  EmailTriggerConfigResponse,
   EstimateExportRequest,
   EstimateExportResponse,
   EvaluationCriteriaResponse,
@@ -76,6 +87,8 @@ import type {
   GovernanceAiAssistantRequest,
   GovernanceAiAssistantResponse,
   GovernanceConversationResponse,
+  InboundEmailRejectionResponse,
+  InboundEmailStatusResponse,
   InlineTextReplaceRequest,
   InlineTextUploadRequest,
   KnowledgeBaseListResponse,
@@ -88,14 +101,21 @@ import type {
   MemoryBankAiAssistantRequest,
   MemoryBankAiAssistantResponse,
   MemoryBankLastConversationResponse,
+  MeResponse,
   MemoryBankListResponse,
   MemoryBankResponse,
   NonManualEvaluationSummaryResponse,
   OrganizationAlertPreferenceListResponse,
+  OrganizationAlertPreferenceResponse,
   PlaygroundCreateRequest,
   CreateExperimentInput,
   PromptModelResponse,
   ProviderGroupResponse,
+  RemoveEmailDomainResponse,
+  ResumeInboundResponse,
+  SendTestEmailResponse,
+  SetAutoBlockModeRequest,
+  SetEmailTriggerConfigRequest,
   SolutionConversationResponse,
   SolutionListResponse,
   SolutionResponse,
@@ -635,6 +655,24 @@ export class Seclai {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // Identity
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Get the authenticated user's identity.
+   *
+   * Returns the personal `account_id` plus every organization the user belongs
+   * to — each with its own `id`, display `name`, and `account_id`. Use it to
+   * discover the account IDs that can be passed as the client's `accountId`
+   * option (sent as the `X-Account-Id` header) to target an org context.
+   *
+   * @returns The current user's account ID and organization memberships.
+   */
+  async getMe(): Promise<MeResponse> {
+    return (await this.request("GET", "/me")) as MeResponse;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // Agents — CRUD
   // ═══════════════════════════════════════════════════════════════════════════
 
@@ -688,6 +726,52 @@ export class Seclai {
    */
   async deleteAgent(agentId: string): Promise<void> {
     await this.request("DELETE", `/agents/${agentId}`);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Agents — Enable / Disable
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Pause (disable) an agent so it stops firing from every trigger path.
+   *
+   * API runs return HTTP 409, inbound email is turned away, and scheduled /
+   * content triggers are skipped.
+   *
+   * Fails with HTTP 409 when other live agents still call this one via a
+   * `call_agent` step — use {@link getAgentCallers} to list them, and disable
+   * those first.
+   *
+   * @param agentId - Agent identifier.
+   * @returns The updated agent summary.
+   */
+  async disableAgent(agentId: string): Promise<AgentSummaryResponse> {
+    return (await this.request("POST", `/agents/${agentId}/disable`)) as AgentSummaryResponse;
+  }
+
+  /**
+   * Resume (enable) a paused agent.
+   *
+   * Clears the disable state whether the agent was paused manually or
+   * auto-paused by the inbound-email overload safeguard.
+   *
+   * @param agentId - Agent identifier.
+   * @returns The updated agent summary.
+   */
+  async enableAgent(agentId: string): Promise<AgentSummaryResponse> {
+    return (await this.request("POST", `/agents/${agentId}/enable`)) as AgentSummaryResponse;
+  }
+
+  /**
+   * List the live agents that call this agent via a `call_agent` step.
+   *
+   * These must be disabled before this agent can be paused.
+   *
+   * @param agentId - Agent identifier.
+   * @returns The calling agents.
+   */
+  async getAgentCallers(agentId: string): Promise<AgentCallerApiResponse[]> {
+    return (await this.request("GET", `/agents/${agentId}/callers`)) as AgentCallerApiResponse[];
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1434,6 +1518,168 @@ export class Seclai {
     return (await this.request("GET", "/agents/evaluation-results/non-manual-summary", {
       query: { agent_id: agentId },
     })) as NonManualEvaluationSummaryResponse;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Agent Email Triggers
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Configure an agent's `EMAIL_RECEIVED` trigger and return its computed
+   * email address(es).
+   *
+   * Sets the custom alias, the sender allowlist, and the inbound-handling flags
+   * (`ignore_auto_generated`, `require_sender_auth`, `queue_on_quota`). Omitted
+   * fields are left unchanged; passing `null` (or `""` for `alias`) clears them.
+   *
+   * @param agentId - Agent identifier.
+   * @param triggerId - Trigger identifier.
+   * @param body - The fields to set.
+   * @returns The trigger's resolved addresses and config.
+   */
+  async setEmailTriggerConfig(
+    agentId: string,
+    triggerId: string,
+    body: SetEmailTriggerConfigRequest,
+  ): Promise<EmailTriggerConfigResponse> {
+    return (await this.request("PUT", `/agents/${agentId}/triggers/${triggerId}/email-config`, {
+      json: body,
+    })) as EmailTriggerConfigResponse;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Agent Email Governance
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * List recipients who have opted out of this account's agent emails.
+   *
+   * @param opts - Optional agent filter and `limit`/`offset` pagination.
+   * @param opts.agentId - Filter to one agent (account-wide opt-outs still apply).
+   * @param opts.limit - Page size (1-200, default 50).
+   * @param opts.offset - Rows to skip (default 0).
+   * @returns The page of opt-outs plus the total count.
+   */
+  async listAgentEmailOptOuts(
+    opts: { agentId?: string; limit?: number; offset?: number } = {},
+  ): Promise<AgentEmailOptOutListResponse> {
+    return (await this.request("GET", "/agents/agent-email-optouts", {
+      query: { agent_id: opts.agentId, limit: opts.limit, offset: opts.offset },
+    })) as AgentEmailOptOutListResponse;
+  }
+
+  /**
+   * Revoke an opt-out, opting the recipient back in to agent emails.
+   *
+   * @param optoutId - Opt-out identifier.
+   */
+  async removeAgentEmailOptOut(optoutId: string): Promise<void> {
+    await this.request("DELETE", `/agents/agent-email-optouts/${optoutId}`);
+  }
+
+  /**
+   * List the account's blocked inbound email senders (newest first), plus the
+   * governance `auto_block_mode`.
+   *
+   * @param opts - Optional `limit`/`offset` pagination.
+   * @param opts.limit - Page size (1-200, default 50).
+   * @param opts.offset - Rows to skip (default 0).
+   */
+  async listBlockedEmailSenders(
+    opts: { limit?: number; offset?: number } = {},
+  ): Promise<BlockedEmailSenderListResponse> {
+    return (await this.request("GET", "/agents/blocked-email-senders", {
+      query: { limit: opts.limit, offset: opts.offset },
+    })) as BlockedEmailSenderListResponse;
+  }
+
+  /**
+   * Add a sender address or a whole domain to the account blocklist.
+   *
+   * Idempotent. `match_type` is `"address"` (default) or `"domain"`.
+   * Requires an account owner/admin.
+   *
+   * @param body - The sender or domain to block.
+   * @returns The blocked-sender entry.
+   */
+  async blockEmailSender(body: BlockEmailSenderRequest): Promise<BlockedEmailSenderResponse> {
+    return (await this.request("POST", "/agents/blocked-email-senders", {
+      json: body,
+    })) as BlockedEmailSenderResponse;
+  }
+
+  /**
+   * Remove a blocked sender by id. Requires an account owner/admin.
+   *
+   * @param blockedId - Blocked-sender identifier.
+   */
+  async unblockEmailSender(blockedId: string): Promise<void> {
+    await this.request("DELETE", `/agents/blocked-email-senders/${blockedId}`);
+  }
+
+  /**
+   * Set whether a governance BLOCK on an authenticated inbound sender
+   * auto-adds them to the blocklist.
+   *
+   * `mode` is `"disabled"`, `"input"`, or `"input_and_output"`.
+   * Requires an account owner/admin.
+   *
+   * @param body - The mode to set.
+   * @returns The updated blocked-sender list.
+   */
+  async setAutoBlockMode(body: SetAutoBlockModeRequest): Promise<BlockedEmailSenderListResponse> {
+    return (await this.request("PUT", "/agents/blocked-email-senders/mode", {
+      json: body,
+    })) as BlockedEmailSenderListResponse;
+  }
+
+  /**
+   * List recent inbound emails that were quietly discarded before running an
+   * agent (unauthorized sender, unknown alias, spam/virus, flood-shed).
+   *
+   * @param opts - Optional agent filter and result limit.
+   * @param opts.agentId - Filter to a single agent's rejections.
+   * @param opts.limit - Maximum results (1-200, default 50).
+   */
+  async listInboundEmailRejections(
+    opts: { agentId?: string; limit?: number } = {},
+  ): Promise<InboundEmailRejectionResponse[]> {
+    return (await this.request("GET", "/agents/inbound-email-rejections", {
+      query: { agent_id: opts.agentId, limit: opts.limit },
+    })) as InboundEmailRejectionResponse[];
+  }
+
+  /**
+   * Get the account's inbound-email overload status — whether the circuit
+   * breaker has paused new inbound email, and the size of the QUEUED
+   * (over-quota parked) run backlog.
+   */
+  async getInboundEmailStatus(): Promise<InboundEmailStatusResponse> {
+    return (await this.request("GET", "/agents/inbound-email-status")) as InboundEmailStatusResponse;
+  }
+
+  /**
+   * Fail all of the account's QUEUED (over-quota parked) inbound-email runs at
+   * once.
+   *
+   * A queued run consumed no quota or credits at queue time, so this merely
+   * fails them. Requires an account owner/admin.
+   *
+   * @returns The count cancelled.
+   */
+  async cancelQueuedEmailRuns(): Promise<CancelQueuedRunsResponse> {
+    return (await this.request("POST", "/agents/inbound-email-status/cancel-queued")) as CancelQueuedRunsResponse;
+  }
+
+  /**
+   * Manually lift the account-wide inbound-email pause.
+   *
+   * If the queued backlog is still above the ceiling the breaker re-arms on the
+   * next evaluation — this is a one-shot override, not a permanent disable.
+   * Requires an account owner/admin.
+   */
+  async resumeInboundEmail(): Promise<ResumeInboundResponse> {
+    return (await this.request("POST", "/agents/inbound-email-status/resume")) as ResumeInboundResponse;
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -2322,8 +2568,12 @@ export class Seclai {
     organizationId: string,
     alertType: string,
     body: UpdateOrganizationAlertPreferenceRequest,
-  ): Promise<unknown> {
-    return await this.request("PATCH", `/alerts/organization-preferences/${organizationId}/${alertType}`, { json: body });
+  ): Promise<OrganizationAlertPreferenceResponse> {
+    return (await this.request(
+      "PATCH",
+      `/alerts/organization-preferences/${organizationId}/${alertType}`,
+      { json: body },
+    )) as OrganizationAlertPreferenceResponse;
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -2378,9 +2628,23 @@ export class Seclai {
    *
    * @param opts - Optional filters.
    */
-  async listModels(opts: { provider?: string; supportsToolUse?: boolean; supportsThinking?: boolean } = {}): Promise<ProviderGroupResponse[]> {
+  async listModels(
+    opts: {
+      provider?: string;
+      supportsToolUse?: boolean;
+      supportsThinking?: boolean;
+      supportsInputMedia?: string;
+      supportsOutputMedia?: string;
+    } = {},
+  ): Promise<ProviderGroupResponse[]> {
     return (await this.request("GET", "/models", {
-      query: { provider: opts.provider, supports_tool_use: opts.supportsToolUse, supports_thinking: opts.supportsThinking },
+      query: {
+        provider: opts.provider,
+        supports_tool_use: opts.supportsToolUse,
+        supports_thinking: opts.supportsThinking,
+        supports_input_media: opts.supportsInputMedia,
+        supports_output_media: opts.supportsOutputMedia,
+      },
     })) as ProviderGroupResponse[];
   }
 
@@ -2391,6 +2655,21 @@ export class Seclai {
    */
   async getModel(modelId: string): Promise<PromptModelResponse> {
     return (await this.request("GET", `/models/${modelId}/details`)) as PromptModelResponse;
+  }
+
+  /**
+   * List the media-generation quality tiers and the model + cost each resolves to.
+   *
+   * On a `prompt_call`'s `media_generation` tool — and the dedicated
+   * `generate_*` steps via tier routing — the author/LLM picks a *tier*
+   * (fast/balanced/thorough), never a model. This maps each
+   * `(modality, tier)` to its concrete generator, raw `credits_per_unit`,
+   * `unit_label`, and a human-readable scaled `price_label`.
+   *
+   * Global routing/pricing (the same for every account); read-only.
+   */
+  async getGenerationTiers(): Promise<Record<string, unknown>> {
+    return (await this.request("GET", "/models/generation-tiers")) as Record<string, unknown>;
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -2467,6 +2746,156 @@ export class Seclai {
     return await this.request("GET", "/search", {
       query: { q: opts.query, limit: opts.limit, entity_type: opts.entityType },
     });
+  }
+
+  /**
+   * Search the Seclai documentation by content.
+   *
+   * `mode: "keyword"` matches page titles and summaries (fast, no AI cost);
+   * `mode: "semantic"` matches page body content by meaning (uses an embedding).
+   *
+   * Each result carries a `doc_slug` and an optional section `anchor` for
+   * building a `https://seclai.com/docs/<doc_slug>[#<anchor>]` link, a `score`
+   * (not comparable across modes), and — in semantic mode — a `highlight`
+   * (best matching verbatim sentence; `null` for keyword).
+   *
+   * Documentation is global, so results are not account-scoped.
+   *
+   * @param opts - Search options.
+   * @param opts.query - Search query string (required, 1-200 chars).
+   * @param opts.mode - Search strategy (default `"keyword"`).
+   * @param opts.limit - Maximum results (1-20, default 8).
+   */
+  async searchDocs(opts: { query: string; mode?: "keyword" | "semantic"; limit?: number }): Promise<Record<string, unknown>> {
+    return (await this.request("GET", "/docs-search", {
+      query: { q: opts.query, mode: opts.mode, limit: opts.limit },
+    })) as Record<string, unknown>;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Email Domains
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * List the account's vanity (`<slug>.seclai.com`) and custom
+   * (`agent.mycompany.com`) agent-email domains.
+   *
+   * Includes each domain's verification status and the DNS records the customer
+   * must publish, plus the plan capabilities (`can_add_vanity` /
+   * `can_add_custom`) and whether one of each kind already exists
+   * (`has_vanity` / `has_custom` — the per-kind limit is 1).
+   *
+   * Requires a user-bound credential; an account-only API key is refused with 403.
+   */
+  async listEmailDomains(): Promise<EmailDomainsListResponse> {
+    return (await this.request("GET", "/email-domains")) as EmailDomainsListResponse;
+  }
+
+  /**
+   * Add and provision a new agent-email domain.
+   *
+   * Pass `kind: "vanity"` with `value: "<slug>"`, or `kind: "custom"` with
+   * `value: "agent.mycompany.com"` (optionally `delegated: true` to let Seclai
+   * manage a dedicated Route53 zone). Stands up the SES identity + DNS and
+   * returns the records the customer must publish. Requires an account
+   * owner/admin.
+   *
+   * @param body - The domain to add. `delegated` defaults to `false` server-side.
+   */
+  async addEmailDomain(body: AddEmailDomainInput): Promise<EmailDomainResponse> {
+    return (await this.request("POST", "/email-domains", { json: body })) as EmailDomainResponse;
+  }
+
+  /**
+   * Remove a domain and tear down its SES identity + DNS / receipt-rule recipient.
+   *
+   * Returns a `cleanup_note` when the removed domain was Seclai-managed
+   * (delegated), reminding you to delete the registrar NS delegation record
+   * (dangling-delegation / subdomain-takeover guard). Requires an account
+   * owner/admin.
+   *
+   * @param domainId - Domain identifier.
+   */
+  async removeEmailDomain(domainId: string): Promise<RemoveEmailDomainResponse> {
+    return (await this.request("DELETE", `/email-domains/${domainId}`)) as RemoveEmailDomainResponse;
+  }
+
+  /**
+   * Run a verification check immediately ("Check now").
+   *
+   * Re-polls SES + DNS for this domain instead of waiting for the background
+   * verification sweep, and returns its updated status + DNS-record check
+   * results. Useful right after publishing the required records. Requires an
+   * account owner/admin.
+   *
+   * @param domainId - Domain identifier.
+   */
+  async verifyEmailDomain(domainId: string): Promise<EmailDomainResponse> {
+    return (await this.request("POST", `/email-domains/${domainId}/verify`)) as EmailDomainResponse;
+  }
+
+  /**
+   * Promote a verified domain to the account's primary domain.
+   *
+   * Agent email then sends FROM and receives ON this domain
+   * (`<agentID>@<domain>`, `<alias>@<domain>`) instead of the shared
+   * `agent.seclai.com`. The domain must be verified. Requires an account
+   * owner/admin.
+   *
+   * @param domainId - Domain identifier.
+   */
+  async setPrimaryEmailDomain(domainId: string): Promise<EmailDomainResponse> {
+    return (await this.request("POST", `/email-domains/${domainId}/primary`)) as EmailDomainResponse;
+  }
+
+  /**
+   * Revert to the shared `agent.seclai.com` sending/inbound domain.
+   *
+   * Clears the account's primary domain WITHOUT removing the configured
+   * domain(s) — they stay verified and can be promoted again later. Requires an
+   * account owner/admin.
+   */
+  async useSharedEmailDomain(): Promise<void> {
+    await this.request("POST", "/email-domains/use-shared-domain");
+  }
+
+  /**
+   * Send a test message FROM a verified domain (`noreply@<domain>`) TO the
+   * account owner's email.
+   *
+   * Confirms end-to-end that the domain actually sends (SES verified, DKIM/SPF
+   * aligned). Never sends to any other address, so it can't be used as an open
+   * relay. Requires an account owner/admin.
+   *
+   * @param domainId - Domain identifier.
+   */
+  async sendEmailDomainTestEmail(domainId: string): Promise<SendTestEmailResponse> {
+    return (await this.request("POST", `/email-domains/${domainId}/test-email`)) as SendTestEmailResponse;
+  }
+
+  /**
+   * Get the DMARC aggregate-report summary for a domain.
+   *
+   * Pass rate, disposition breakdown (`none`/`quarantine`/`reject`), and top
+   * failing source IPs from the DMARC `rua` reports over the last `days`
+   * (clamped by the service).
+   *
+   * Populated for domains whose DNS zone Seclai controls (vanity + delegated
+   * custom); a self-managed custom domain keeps its own DMARC reporting and
+   * returns an all-zero summary.
+   *
+   * @param domainId - Domain identifier.
+   * @param opts - Reporting window options.
+   * @param opts.days - Window length in days (default 30).
+   * @param opts.topSources - Number of top failing sources to return (default 10).
+   */
+  async getDmarcSummary(
+    domainId: string,
+    opts: { days?: number; topSources?: number } = {},
+  ): Promise<DmarcSummaryResponse> {
+    return (await this.request("GET", `/email-domains/${domainId}/dmarc`, {
+      query: { days: opts.days, top_sources: opts.topSources },
+    })) as DmarcSummaryResponse;
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
