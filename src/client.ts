@@ -440,22 +440,43 @@ export class Seclai {
     }
 
     this.baseUrl = opts.baseUrl ?? getEnv("SECLAI_API_URL") ?? SECLAI_API_URL;
+
+    // `defaultHeaders` is spread last so an explicit header wins, which means it
+    // can also carry a Seclai-Version. Validate whichever value actually reaches
+    // the wire, not just the option — otherwise the guard is one header away
+    // from being bypassed, and a client could send an unvalidated version while
+    // `apiVersion` reads as a known one.
+    const headerVersion = Object.entries(opts.defaultHeaders ?? {}).find(
+      ([k]) => k.toLowerCase() === "seclai-version",
+    )?.[1];
+    const effectiveVersion = headerVersion ?? opts.apiVersion;
     if (
-      opts.apiVersion &&
+      effectiveVersion &&
       !opts.allowUnknownApiVersion &&
-      !KNOWN_API_VERSIONS.includes(opts.apiVersion)
+      !KNOWN_API_VERSIONS.includes(effectiveVersion)
     ) {
+      const via = headerVersion ? "defaultHeaders['Seclai-Version']" : "apiVersion";
       throw new SeclaiConfigurationError(
-        `Unknown apiVersion '${opts.apiVersion}'. This release was built against ` +
-          `${KNOWN_API_VERSIONS.join(", ")}. A newer API version can change response ` +
-          `shapes, which this client would decode incorrectly rather than reject. ` +
-          `Upgrade the package, or set allowUnknownApiVersion to proceed anyway.`,
+        `Unknown API version '${effectiveVersion}' (via ${via}). This release was ` +
+          `built against ${KNOWN_API_VERSIONS.join(", ")}. A newer API version can ` +
+          `change response shapes, which this client would decode incorrectly rather ` +
+          `than reject. Upgrade the package, or set allowUnknownApiVersion to ` +
+          `proceed anyway.`,
       );
     }
-    this.defaultHeaders = {
-      ...(opts.apiVersion ? { "Seclai-Version": opts.apiVersion } : {}),
-      ...(opts.defaultHeaders ?? {}),
-    };
+
+    // Header keys are compared case-insensitively so a caller-supplied
+    // `seclai-version` replaces ours rather than producing two wire headers.
+    const merged: Record<string, string> = opts.apiVersion
+      ? { "Seclai-Version": opts.apiVersion }
+      : {};
+    for (const [key, value] of Object.entries(opts.defaultHeaders ?? {})) {
+      for (const existing of Object.keys(merged)) {
+        if (existing.toLowerCase() === key.toLowerCase()) delete merged[existing];
+      }
+      merged[key] = value;
+    }
+    this.defaultHeaders = merged;
     this.fetcher = fetcher;
 
     // Resolve credential chain (may be async for SSO profile loading)
@@ -1469,9 +1490,16 @@ export class Seclai {
     agentId: string,
     opts: { stepType?: string; stepId?: string; limit?: number; offset?: number } = {},
   ): Promise<AiConversationHistoryResponse> {
-    // `step_type` is required by the API and there was no way to send it, so
-    // every call answered 422. Optional here only to keep the signature source
-    // compatible; every call needs it.
+    // `step_type` is required by the API. It stays optional in the type so the
+    // released one-argument call still compiles, but leaving it undefined only
+    // means buildURL drops it and the server answers 422 naming the wire
+    // parameter — so fail here instead, naming the option.
+    if (!opts.stepType) {
+      throw new SeclaiConfigurationError(
+        "getAgentAiConversationHistory requires opts.stepType; the API rejects the " +
+          "request without it. Pass e.g. { stepType: \"llm\" }.",
+      );
+    }
     return (await this.request("GET", `/agents/${agentId}/ai-assistant/conversations`, {
       query: {
         step_type: opts.stepType,

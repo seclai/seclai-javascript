@@ -1777,12 +1777,23 @@ describe("Top-Level AI Assistant", () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe("Agent AI Assistant — extended", () => {
-  test("getAgentAiConversationHistory sends GET", async () => {
+  test("getAgentAiConversationHistory sends GET with the required step_type", async () => {
     const client = makeClient((req) => {
-      expect(new URL(req.url).pathname).toBe("/agents/ag_1/ai-assistant/conversations");
+      const url = new URL(req.url);
+      expect(url.pathname).toBe("/agents/ag_1/ai-assistant/conversations");
+      // Asserting only the path is what let this method ship unable to send the
+      // parameter the API requires.
+      expect(url.searchParams.get("step_type")).toBe("llm");
       return jsonResponse([]);
     });
-    await client.getAgentAiConversationHistory("ag_1");
+    await client.getAgentAiConversationHistory("ag_1", { stepType: "llm" });
+  });
+
+  test("getAgentAiConversationHistory rejects a call without stepType", async () => {
+    const client = makeClient(() => jsonResponse([]));
+    await expect(client.getAgentAiConversationHistory("ag_1")).rejects.toThrow(
+      /stepType/,
+    );
   });
 
   test("markAgentAiSuggestion sends PATCH", async () => {
@@ -2673,5 +2684,70 @@ describe("API version constants", () => {
       { apiVersion: SeclaiApiVersion.Latest },
     );
     await client.listAgents();
+  });
+});
+
+describe("API version guard cannot be bypassed via defaultHeaders", () => {
+  test("an unknown version in defaultHeaders is rejected", () => {
+    // defaultHeaders is spread last so it wins, which means it can carry a
+    // Seclai-Version. Validating only `apiVersion` left the guard one header
+    // away from being bypassed.
+    expect(
+      () =>
+        new Seclai({
+          apiKey: "k",
+          defaultHeaders: { "Seclai-Version": "2099-01-01" },
+        }),
+    ).toThrow(/2099-01-01[\s\S]*defaultHeaders/);
+  });
+
+  test("a lowercase header key is caught too", () => {
+    expect(
+      () =>
+        new Seclai({
+          apiKey: "k",
+          defaultHeaders: { "seclai-version": "2099-01-01" },
+        }),
+    ).toThrow(/2099-01-01/);
+  });
+
+  test("the escape hatch still covers the header form", async () => {
+    const client = makeClient(
+      (req) => {
+        expect(req.headers["seclai-version"]).toBe("2099-01-01");
+        return jsonResponse({ data: [] });
+      },
+      {
+        defaultHeaders: { "Seclai-Version": "2099-01-01" },
+        allowUnknownApiVersion: true,
+      },
+    );
+    await client.listAgents();
+  });
+
+  test("a caller-supplied header overrides rather than duplicating", async () => {
+    const client = makeClient(
+      (req) => {
+        // One value, not two: differing cases would otherwise emit both keys and
+        // let the server pick arbitrarily.
+        expect(req.headers["seclai-version"]).toBe("2026-07-27");
+        return jsonResponse({ data: [] });
+      },
+      {
+        apiVersion: SeclaiApiVersion.V2026_07_01,
+        defaultHeaders: { "seclai-version": SeclaiApiVersion.V2026_07_27 },
+      },
+    );
+    await client.listAgents();
+  });
+
+  test("a known version in defaultHeaders needs no escape hatch", () => {
+    expect(
+      () =>
+        new Seclai({
+          apiKey: "k",
+          defaultHeaders: { "Seclai-Version": SeclaiApiVersion.V2026_07_27 },
+        }),
+    ).not.toThrow();
   });
 });

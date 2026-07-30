@@ -22,6 +22,8 @@
 
 ### Fixed
 
+- Validate a `Seclai-Version` supplied through `defaultHeaders`, not just the `apiVersion` option. `defaultHeaders` is applied last so it wins, which left the unknown-version guard one header away from being bypassed; a differently-cased key also emitted two wire headers
+- Throw from `getAgentAiConversationHistory()` when `opts.stepType` is missing. It was optional and dropped by `buildURL`, so a call without it still 422'd — the failure this method was changed to prevent
 - Decode either wire shape in `listRunEvaluationResults()`. The endpoint answers with a bare array, which the declared envelope type could not read, so the method returned nothing; it now also reads the canonical `{data, pagination}` envelope. `listAgentEvaluationResults()` is genuinely flat and is unaffected
 - Paginate `listModelAlerts()` with the `offset` the endpoint declares instead of `page`, which it does not accept — every page after the first returned page 1
 - Send `step_type` from `getAgentAiConversationHistory()`, along with `stepId`, `limit` and `offset`. The API marks `step_type` required and the method had no way to supply it, so every call answered 422
