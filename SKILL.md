@@ -5,7 +5,43 @@ description: Write or update CHANGELOG.md in a Seclai SDK repo (seclai-python, s
 
 # Seclai changelog entries
 
+> **Vendored file — do not edit in place.** The canonical copy lives in the
+> `seclai/sdk-tools` repository at `skills/seclai-changelog/`, and is mirrored
+> into each SDK repo with `git subtree`. Edits made here are reported as drift by
+> `sdk-tools/sync.sh --check` and are overwritten on the next pull. To change it,
+> change it upstream — or, if you can't reach that repo, open an issue on this
+> one describing the fix and a maintainer will carry it across.
+
 All six Seclai SDK repos keep a root `CHANGELOG.md` in [Common Changelog](https://common-changelog.org) format. This skill covers writing a new entry and backfilling from tags.
+
+## Write against the last release, not against the branch
+
+An entry describes what changed between the **last released tag** and now.
+Anything introduced and then revised inside the same unreleased version is
+invisible to consumers and must not appear.
+
+Three of these shipped into a draft in 2026-07:
+
+- "Return `JsonElement` from `ListAlertsAsync` **as before**" — typed and then
+  untyped again within an unreleased version. Net change: nothing.
+- "Omit unset properties on `SetEmailTriggerConfigRequest`" — that class was
+  *introduced* in the same version, so its serialization is not a change from
+  anything. Fold such detail into the `Added` entry instead.
+- "`Total`/`Page`/`Limit` were always 0 **for callers who opted in**" — opting in
+  was itself new in that release, so no released version could have hit it. The
+  real defect predated it and needed describing on its own terms.
+
+Check it mechanically before publishing:
+
+```bash
+python3 .claude/skills/seclai-sdk-sync/sdksync.py surface <last-tag>
+git diff <last-tag> -- <client sources>
+```
+
+If an entry does not correspond to something in that diff, delete it. Counts age
+badly for the same reason: "adding 22 paths" was written mid-sync and was 23 by
+the time the version shipped — derive them from the tag, do not carry them
+forward.
 
 ## Format rules
 
@@ -18,7 +54,12 @@ All six Seclai SDK repos keep a root `CHANGELOG.md` in [Common Changelog](https:
 - Entry form: `- Change ([ref](url))`. Imperative present tense, self-describing — it must read correctly without its group heading. "Support CentOS", never "Support of CentOS" or "Added support".
 - Breaking changes take a `**Breaking:**` prefix and sort first within their group. Otherwise sort by importance.
 - A release may open with a one-sentence italic notice instead of, or before, its groups — used for first releases (`_Initial release._`) and no-op version bumps.
-- Version links are reference-style at the bottom: `[1.4.0]: https://github.com/seclai/<repo>/releases/tag/1.4.0` (tags carry no `v` prefix).
+- Version links are reference-style at the bottom:
+  `[1.4.0]: https://github.com/seclai/<repo>/releases/tag/1.4.0`. **Check the tag
+  format per repo** — seclai-python and seclai-javascript tag without a prefix,
+  seclai-go tags `v1.4.0` because Go module resolution requires it. The heading
+  stays bare (`## [1.5.0]`); only the link target carries the `v`. Confirm with
+  `git tag --sort=-v:refname | head -1` before writing the link block.
 - Authors are omitted — these are effectively single-contributor repos.
 
 ## Determine the version
@@ -133,7 +174,7 @@ Run the bundled checker from the repo root before declaring done:
 python3 .claude/skills/seclai-changelog/validate.py CHANGELOG.md
 ```
 
-That path holds in every SDK repo — this skill is vendored there from [`seclai/sdk-tools`](https://github.com/seclai/sdk-tools). When working inside `sdk-tools` itself, the canonical copy is `skills/seclai-changelog/validate.py`.
+That path holds in every SDK repo, since this skill is vendored into each one. When working inside `sdk-tools` itself, the canonical copy is `skills/seclai-changelog/validate.py`.
 
 It verifies heading format, descending version order, group names and ordering, `Breaking:` sorting, absence of an `Unreleased` section, and that every release has exactly one matching link definition. It exits non-zero on error, so the same invocation works as a CI gate.
 
