@@ -29,7 +29,7 @@ export interface paths {
          *     - `template_input`: triggered via API with a predefined template
          *     - `schedule`: triggered on a schedule
          *     - `new_content`: triggered when new content arrives
-         *     - `email_received`: a virtual email inbox; runs when mail arrives at the agent's address. Configure the alias/allowlist with `PUT /api/agents/{agent_id}/triggers/{trigger_id}/email-config`.
+         *     - `email_received`: a virtual email inbox; runs when mail arrives at the agent's address. Configure the alias/allowlist with `PUT /agents/{agent_id}/triggers/{trigger_id}/email-config`.
          *
          *     Templates: `blank`, `retrieval_example`, `simple_qa`, `summarizer`, `json_extractor`, `content_change_notifier`, `scheduled_report`, `webhook_pipeline`
          *
@@ -288,9 +288,15 @@ export interface paths {
         };
         /**
          * Get Non Manual Evaluation Summary
-         * @description Get account-level evaluation summary for API key clients.
+         * @description Get an evaluation summary for API key clients.
          *
          *     Returns aggregated pass/fail/flagged counts and pass rates for each evaluation mode (eval_and_retry, sample_and_flag).
+         *
+         *     The ``agent_id`` scoping parameter is part of the ``2026-07-27`` changeset
+         *     (opt in via the ``Seclai-Version`` header). Clients on the legacy baseline
+         *     always receive the account-wide rollup; ``agent_id`` is ignored for them so
+         *     the endpoint's behavior is frozen. With ``2026-07-27`` or later, the summary
+         *     is scoped to ``agent_id`` when supplied (and returns 404 if it doesn't exist).
          */
         get: operations["get_non_manual_evaluation_summary_api_agents_evaluation_results_non_manual_summary_get"];
         put?: never;
@@ -400,7 +406,7 @@ export interface paths {
         put?: never;
         /**
          * Preview an agent_definition import
-         * @description Validate an `agent_definition` payload (the same shape produced by `GET /api/agents/{agent_id}/export`) without creating or modifying any agent. On success returns a summary the client can show before commit (counts of steps, schedules, alert configs, evaluation criteria, governance policies). On failure returns the same 422 body shape used by `POST /api/agents` and `PUT /api/agents/{id}` so callers can render line/column-anchored errors.
+         * @description Validate an `agent_definition` payload (the same shape produced by `GET /agents/{agent_id}/export`) without creating or modifying any agent. On success returns a summary the client can show before commit (counts of steps, schedules, alert configs, evaluation criteria, governance policies). On failure returns the same 422 body shape used by `POST /agents` and `PUT /agents/{id}` so callers can render line/column-anchored errors.
          *
          *     Auth & scoping:
          *     - Requires `X-API-Key` header or OAuth Bearer token. No DB writes.
@@ -461,7 +467,9 @@ export interface paths {
         post?: never;
         /**
          * Cancel an agent run
-         * @description Cancel a running agent run.
+         * @description Cancel an in-flight (`processing`) or queued (`queued`) agent run.
+         *
+         *     A `queued` run is an inbound-email run parked by the per-plan rate quota that has not yet been dispatched; cancelling it consumes no quota or credits.
          *
          *     If the run is already in a terminal state (`completed` or `failed`), cancellation will be rejected.
          *
@@ -715,7 +723,7 @@ export interface paths {
          * Update agent definition
          * @description Update the agent's definition on the main branch.
          *
-         *     Uses **optimistic locking**: provide `expected_change_id` from the last `GET /api/agents/{agent_id}/definition`. Returns `409 Conflict` if the definition was modified since your last read.
+         *     Uses **optimistic locking**: provide `expected_change_id` from the last `GET /agents/{agent_id}/definition`. Returns `409 Conflict` if the definition was modified since your last read.
          *
          *     The definition contains the agent's step workflow. Step types include `prompt_call`, `retrieval`, `regex_replace`, `gate`, `retry`, `evaluate_step`, `extract_data`, `extract_content`, `add_chat_turn`, `load_chat_history`, `add_memory`, `search_memory`, `load_memory`, `streaming_result`, `send_email`, `webhook_call`, `write_aws_s3_object`, `call_agent`, `write_metadata`, `write_content_attachment`, `load_content_attachment`, `load_content`, `display_result`, `join`, `merge`, `text`, `for_each`, `if_else`, and `switch`. Non-composite step types (`display_result`, `join`, `retry`, `streaming_result`) cannot contain child steps.
          *
@@ -751,7 +759,7 @@ export interface paths {
          *
          *     Returns **409** with the blocking callers when other live agents still call this one via a `call_agent` step — disable those first.
          *
-         *     Auth & scoping: requires `X-API-Key` header or OAuth Bearer token bound to a user; the agent must belong to the key's account.
+         *     Auth & scoping: requires `X-API-Key` header or OAuth Bearer token bound to a user (the acting user is recorded); the agent must belong to the key's account.
          */
         post: operations["disable_agent_api_api_agents__agent_id__disable_post"];
         delete?: never;
@@ -773,7 +781,7 @@ export interface paths {
          * Resume (enable) a paused agent
          * @description Re-enable a paused agent (clears the disable state, whether it was paused manually or auto-paused by the inbound-email overload safeguard).
          *
-         *     Auth & scoping: requires `X-API-Key` header or OAuth Bearer token bound to a user; the agent must belong to the key's account.
+         *     Auth & scoping: requires `X-API-Key` header or OAuth Bearer token bound to a user (the acting user is recorded); the agent must belong to the key's account.
          */
         post: operations["enable_agent_api_api_agents__agent_id__enable_post"];
         delete?: never;
@@ -791,11 +799,19 @@ export interface paths {
         };
         /**
          * List Evaluation Criteria
-         * @description List all evaluation criteria configured for an agent.
+         * @description List evaluation criteria configured for an agent.
          *
-         *     Returns every criteria with its type, configuration, and a summary of
-         *     results (pass / fail counts).  Criteria can be filtered client-side by
-         *     type or enabled status.
+         *     Response shape is version-gated by the ``Seclai-Version`` header:
+         *
+         *     - **Default / legacy** (no header, or a date before ``2026-07-27``): a bare
+         *       JSON array of criteria (unpaginated — every criterion for the agent).
+         *     - **``Seclai-Version: 2026-07-27`` or later**: the canonical paginated
+         *       envelope ``{data, pagination: {page, limit, total, pages, has_next,
+         *       has_prev}}``.
+         *
+         *     Each criterion carries its type, configuration, and a summary of results
+         *     (pass / fail counts).  Criteria can be filtered client-side by type or
+         *     enabled status.
          */
         get: operations["list_evaluation_criteria_api_agents__agent_id__evaluation_criteria_get"];
         put?: never;
@@ -1046,10 +1062,18 @@ export interface paths {
         };
         /**
          * List Run Evaluation Results
-         * @description List all evaluation results recorded for a specific agent run.
+         * @description List evaluation results recorded for a specific agent run.
          *
-         *     Returns results across all evaluation criteria for the given run,
-         *     useful for getting a complete quality snapshot of a single execution.
+         *     Response shape is version-gated by the ``Seclai-Version`` header:
+         *
+         *     - **Default / legacy** (no header, or a date before ``2026-07-27``): a bare
+         *       JSON array of results (unpaginated — every result for the run).
+         *     - **``Seclai-Version: 2026-07-27`` or later**: the canonical paginated
+         *       envelope ``{data, pagination: {page, limit, total, pages, has_next,
+         *       has_prev}}``.
+         *
+         *     Results span all evaluation criteria for the given run, useful for getting a
+         *     complete quality snapshot of a single execution.
          */
         get: operations["list_run_evaluation_results_api_agents__agent_id__runs__run_id__evaluation_results_get"];
         put?: never;
@@ -3014,32 +3038,6 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
-        put?: never;
-        /**
-         * Create Source
-         * @description Create a new content source.
-         *
-         *     Source types: `rss`, `website`, `custom_index`.
-         *
-         *     For RSS and website sources, provide the URL. For custom index sources, the URL is created automatically.
-         *
-         *     For custom_index sources, you can optionally specify an `index_mode`: `fast_and_cheap` (default), `balanced`, `slow_and_thorough`, or `custom`. The legacy `file_uploads` source type is accepted as an alias for `custom_index` with `index_mode=fast_and_cheap`.
-         */
-        post: operations["create_source_api_sources_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/sources/": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
         /**
          * List sources
          * @description List content sources for your account.
@@ -3054,9 +3052,19 @@ export interface paths {
          *     - Requires `X-API-Key` header or OAuth Bearer token. Results are scoped to the caller's account.
          *     - The optional `account_id` query param is only allowed when it matches the caller's account.
          */
-        get: operations["list_sources_api_sources__get"];
+        get: operations["list_sources_api_sources_get"];
         put?: never;
-        post?: never;
+        /**
+         * Create Source
+         * @description Create a new content source.
+         *
+         *     Source types: `rss`, `website`, `custom_index`.
+         *
+         *     For RSS and website sources, provide the URL. For custom index sources, the URL is created automatically.
+         *
+         *     For custom_index sources, you can optionally specify an `index_mode`: `fast_and_cheap` (default), `balanced`, `slow_and_thorough`, or `custom`. The legacy `file_uploads` source type is accepted as an alias for `custom_index` with `index_mode=fast_and_cheap`.
+         */
+        post: operations["create_source_api_sources_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3137,7 +3145,7 @@ export interface paths {
          * Start Source Embedding Migration
          * @description Start an embedding model migration for a custom-index source.
          *
-         *     The migration runs asynchronously in the background.  Poll `GET /api/sources/{id}/embedding-migration` to track progress.
+         *     The migration runs asynchronously in the background.  Poll `GET /sources/{id}/embedding-migration` to track progress.
          *
          *     Optionally override chunking configuration (`chunk_size`, `chunk_overlap`, `chunk_language`, `chunk_separators`, `chunk_regex_separators`).  When a chunking field is omitted (null), the current source's value is preserved.
          *
@@ -3369,6 +3377,30 @@ export interface paths {
          */
         get: operations["serve_agent_run_attachment_api_v2_agent_runs__run_id__attachments__attachment_id__get"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/version": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the account's API version
+         * @description Returns the account's pinned `Seclai-Version` (null when unpinned), the version this request resolved to, and the default/latest/known versions. Pin your account with `PUT /version` or override per request with the `Seclai-Version` header.
+         */
+        get: operations["get_api_version_api_version_get"];
+        /**
+         * Pin (or clear) the account's API version
+         * @description Sets the account's sticky `Seclai-Version` to the given `YYYY-MM-DD` date, or clears it with `null`. The new pin applies to subsequent header-less requests; a `Seclai-Version` request header still overrides it. Owner/admin only. `effective_version` in the response reflects the current request, not the new pin.
+         */
+        put: operations["update_api_version_api_version_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -3729,7 +3761,7 @@ export interface components {
             output: string | null;
             /**
              * Output Content Type
-             * @description MIME type of `output` — mirrors the terminal step's `output_content_type`.  Consumers interpret `output` differently depending on this value: `application/vnd.seclai.manifest+json` is a multi-asset manifest with shape `{text, attachments: [{storage_key, mime, name, bytes}]}` — fetch each attachment via `GET /api/v2/agent-runs/{run_id}/attachments/{attachment_id}`, where `attachment_id` is the URL-safe base64 of the attachment's `storage_key` (accepts an API key or OAuth token).  `text/plain` / `text/*` are free-form text.  `application/json` is a JSON document.  Null on runs that produced no terminal output or that pre-date this column.
+             * @description MIME type of `output` — mirrors the terminal step's `output_content_type`.  Consumers interpret `output` differently depending on this value: `application/vnd.seclai.manifest+json` is a multi-asset manifest with shape `{text, attachments: [{storage_key, mime, name, bytes}]}` — fetch each attachment via `GET /v2/agent-runs/{run_id}/attachments/{attachment_id}`, where `attachment_id` is the URL-safe base64 of the attachment's `storage_key` (accepts an API key or OAuth token).  `text/plain` / `text/*` are free-form text.  `application/json` is a JSON document.  Null on runs that produced no terminal output or that pre-date this column.
              */
             output_content_type?: string | null;
             /**
@@ -4218,6 +4250,96 @@ export interface components {
             user_input: string;
         };
         /**
+         * AlertConfigListResponse
+         * @description ``GET /alerts/configs`` legacy/default shape (header-less clients).
+         *
+         *     ``Seclai-Version: 2026-07-27+`` clients receive the canonical
+         *     ``{data, pagination}`` envelope instead (the handler returns a ``JSONResponse``
+         *     that bypasses this ``response_model``); this documents the default shape.
+         */
+        AlertConfigListResponse: {
+            /** Configs */
+            configs: components["schemas"]["AlertConfigResponse"][];
+            /** Total */
+            total: number;
+        };
+        /** AlertConfigResponse */
+        AlertConfigResponse: {
+            /** Account Id */
+            account_id: string;
+            /** Agent Id */
+            agent_id: string | null;
+            /** Alert Type */
+            alert_type: string;
+            /** Cooldown Minutes */
+            cooldown_minutes: number;
+            /** Created At */
+            created_at: string | null;
+            /** Distribution Type */
+            distribution_type: string;
+            /** Enabled */
+            enabled: boolean;
+            /** Id */
+            id: string;
+            /** Last Alerted At */
+            last_alerted_at: string | null;
+            /** Recipient User Ids */
+            recipient_user_ids: string[];
+            /** Source Connection Id */
+            source_connection_id: string | null;
+            /** Threshold */
+            threshold: {
+                [key: string]: unknown;
+            } | null;
+            /** Updated At */
+            updated_at: string | null;
+        };
+        /** AlertHistoryEntryResponse */
+        AlertHistoryEntryResponse: {
+            /** Changed By Name */
+            changed_by_name: string | null;
+            /** Changed By User Id */
+            changed_by_user_id: string | null;
+            /** Created At */
+            created_at: string | null;
+            /** Id */
+            id: string;
+            /** New Status */
+            new_status: string;
+            /** Note */
+            note: string | null;
+            /** Previous Status */
+            previous_status: string | null;
+        };
+        /** ApiVersionResponse */
+        ApiVersionResponse: {
+            /**
+             * Default Version
+             * @description Baseline for an unpinned, header-less caller.
+             */
+            default_version: string;
+            /**
+             * Effective Version
+             * @description The version THIS request resolved to (header > pin > default).
+             */
+            effective_version: string;
+            /**
+             * Known Versions
+             * @description All dated versions, oldest first.
+             */
+            known_versions: string[];
+            /**
+             * Latest Version
+             * @description Newest version the server knows about.
+             */
+            latest_version: string;
+            /**
+             * Pinned Version
+             * @description The account's sticky pinned version, or null when unpinned (the account resolves to the default). Applies to header-less requests.
+             */
+            pinned_version: string | null;
+        };
+        /**
          * AppliedActionResponse
          * @description Result of a single executed governance action.
          */
@@ -4348,6 +4470,11 @@ export interface components {
              */
             title?: string;
         };
+        /** CancelExperimentResponse */
+        CancelExperimentResponse: {
+            /** Status */
+            status: string;
+        };
         /** CancelQueuedRunsResponse */
         CancelQueuedRunsResponse: {
             /** Cancelled */
@@ -4386,6 +4513,16 @@ export interface components {
              * @description 'pass' or 'fail'.
              */
             verdict: string;
+        };
+        /**
+         * CompactionScheduledResponse
+         * @description Acknowledgement that an on-demand compaction run was scheduled.
+         */
+        CompactionScheduledResponse: {
+            /** Memory Bank Id */
+            memory_bank_id: string;
+            /** Status */
+            status: string;
         };
         /**
          * CompactionTestResponseModel
@@ -4587,6 +4724,13 @@ export interface components {
             /** Score */
             score?: number | null;
             status: components["schemas"]["EvaluationStatus"];
+        };
+        /** CreateExperimentResponse */
+        CreateExperimentResponse: {
+            /** Experiment Id */
+            experiment_id: string;
+            /** Status */
+            status: string;
         };
         /**
          * CreateKnowledgeBaseBody
@@ -4869,6 +5013,21 @@ export interface components {
             type: string;
             /** Value */
             value: string;
+        };
+        /** DocsSearchResultResponse */
+        DocsSearchResultResponse: {
+            /** Anchor */
+            anchor: string | null;
+            /** Doc Slug */
+            doc_slug: string;
+            /** Highlight */
+            highlight: string | null;
+            /** Score */
+            score: number;
+            /** Snippet */
+            snippet: string | null;
+            /** Title */
+            title: string;
         };
         /** EmailDomainResponse */
         EmailDomainResponse: {
@@ -5295,6 +5454,75 @@ export interface components {
              */
             success: boolean;
         };
+        /** ExperimentDetailResponse */
+        ExperimentDetailResponse: {
+            /** Completed At */
+            completed_at: string | null;
+            /** Created At */
+            created_at: string;
+            /** Error Message */
+            error_message: string | null;
+            /** Evaluation Complexity */
+            evaluation_complexity: string;
+            /** Evaluation Mode */
+            evaluation_mode: string;
+            /** Evaluator Model Id */
+            evaluator_model_id: string | null;
+            /** Id */
+            id: string;
+            /** Include Step Output In Evaluation */
+            include_step_output_in_evaluation: boolean;
+            /** Json Template */
+            json_template: string | null;
+            /** Progress Current */
+            progress_current: number | null;
+            /** Progress Message */
+            progress_message: string | null;
+            /** Progress Total */
+            progress_total: number | null;
+            /** Prompt */
+            prompt: string;
+            /** Result Data */
+            result_data: {
+                [key: string]: unknown;
+            } | null;
+            /** Selected Model Ids */
+            selected_model_ids: string[];
+            /** Selected Step Output */
+            selected_step_output: string | null;
+            /** Started At */
+            started_at: string | null;
+            /** Status */
+            status: string;
+            /** System Prompt */
+            system_prompt: string;
+        };
+        /**
+         * ExperimentListResponse
+         * @description ``GET /models/playground/experiments`` legacy/default shape; 2026-07-27+
+         *     clients get the canonical ``{data, pagination}`` envelope.
+         */
+        ExperimentListResponse: {
+            /** Experiments */
+            experiments: components["schemas"]["ExperimentSummaryResponse"][];
+            /** Total */
+            total: number;
+        };
+        /** ExperimentSummaryResponse */
+        ExperimentSummaryResponse: {
+            /** Created At */
+            created_at: string;
+            /** Evaluation Complexity */
+            evaluation_complexity: string;
+            /** Evaluation Mode */
+            evaluation_mode: string;
+            /** Id */
+            id: string;
+            /** Selected Model Ids */
+            selected_model_ids: string[];
+            /** Status */
+            status: string;
+        };
         /**
          * ExportFormat
          * @description Supported export file formats.
@@ -5449,6 +5677,32 @@ export interface components {
              * @description Whether a valid configuration was generated.
              */
             success: boolean;
+        };
+        /**
+         * GenerationTierListResponse
+         * @description ``GET /models/generation-tiers`` legacy/default shape; 2026-07-27+ clients
+         *     get the canonical ``{data, pagination}`` envelope.
+         */
+        GenerationTierListResponse: {
+            /** Tiers */
+            tiers: components["schemas"]["GenerationTierResponse"][];
+        };
+        /** GenerationTierResponse */
+        GenerationTierResponse: {
+            /** Credits Per Unit */
+            credits_per_unit: number | null;
+            /** Modality */
+            modality: string;
+            /** Model Id */
+            model_id: string;
+            /** Model Name */
+            model_name: string;
+            /** Price Label */
+            price_label: string | null;
+            /** Tier */
+            tier: string;
+            /** Unit Label */
+            unit_label: string | null;
         };
         /**
          * GovernanceAiAcceptResponse
@@ -6038,6 +6292,15 @@ export interface components {
             modality: string;
             /** Output Credits Per 1000 Tokens */
             output_credits_per_1000_tokens?: number | null;
+        };
+        /**
+         * OkResponse
+         * @description A minimal ``{"ok": true}`` acknowledgement for state-mutating actions
+         *     that have no richer resource to return (e.g. accept/decline a suggestion).
+         */
+        OkResponse: {
+            /** Ok */
+            ok: boolean;
         };
         /** OrganizationAlertPreferenceListResponse */
         OrganizationAlertPreferenceListResponse: {
@@ -6756,6 +7019,11 @@ export interface components {
              */
             ids: string[];
         };
+        /** UnreadCountResponse */
+        UnreadCountResponse: {
+            /** Count */
+            count: number;
+        };
         /** UpdateAgentDefinitionRequest */
         UpdateAgentDefinitionRequest: {
             /**
@@ -6800,6 +7068,14 @@ export interface components {
             threshold?: {
                 [key: string]: unknown;
             } | null;
+        };
+        /** UpdateApiVersionRequest */
+        UpdateApiVersionRequest: {
+            /**
+             * Version
+             * @description A YYYY-MM-DD date to pin the account to, or null to clear the pin (revert to the default baseline).
+             */
+            version?: string | null;
         };
         /**
          * UpdateEvaluationCriteriaRequest
@@ -7049,7 +7325,7 @@ export interface components {
         routers__api__agents__AgentImportPreviewRequest: {
             /**
              * Agent Definition
-             * @description Payload in the same shape as GET /api/agents/{agent_id}/export.
+             * @description Payload in the same shape as GET /agents/{agent_id}/export.
              */
             agent_definition: {
                 [key: string]: unknown;
@@ -7400,6 +7676,88 @@ export interface components {
              */
             body: string;
         };
+        /** AlertCommentResponse */
+        routers__api__alerts__AlertCommentResponse: {
+            /** Body */
+            body: string;
+            /** Created At */
+            created_at: string | null;
+            /** Id */
+            id: string;
+            /** User Id */
+            user_id: string;
+            /** User Name */
+            user_name: string | null;
+        };
+        /** AlertDetailResponse */
+        routers__api__alerts__AlertDetailResponse: {
+            alert: components["schemas"]["routers__api__alerts__AlertResponse"];
+            /** Comments */
+            comments: components["schemas"]["routers__api__alerts__AlertCommentResponse"][];
+            /** History */
+            history: components["schemas"]["AlertHistoryEntryResponse"][];
+            /** Subscribers */
+            subscribers: components["schemas"]["routers__api__alerts__AlertSubscriberResponse"][];
+        };
+        /**
+         * AlertListResponse
+         * @description ``GET /alerts`` — always the canonical ``{data, pagination}`` envelope.
+         */
+        routers__api__alerts__AlertListResponse: {
+            /** Data */
+            data: components["schemas"]["routers__api__alerts__AlertResponse"][];
+            pagination: components["schemas"]["PaginationResponse"];
+        };
+        /** AlertResponse */
+        routers__api__alerts__AlertResponse: {
+            /** Account Id */
+            account_id: string;
+            /** Agent Id */
+            agent_id: string | null;
+            /** Agent Run Id */
+            agent_run_id: string | null;
+            /** Alert Config Id */
+            alert_config_id: string | null;
+            /** Alert Type */
+            alert_type: string;
+            /** Comment Count */
+            comment_count: number;
+            /** Created At */
+            created_at: string | null;
+            /** Description */
+            description: string | null;
+            /** Details */
+            details?: unknown;
+            /** Id */
+            id: string;
+            /** Is Subscribed */
+            is_subscribed: boolean;
+            /** Mcp Client Id */
+            mcp_client_id: string | null;
+            /** Source Connection Id */
+            source_connection_id: string | null;
+            /** Source Connection Pull Id */
+            source_connection_pull_id: string | null;
+            /** Status */
+            status: string;
+            /** Subscriber Count */
+            subscriber_count: number;
+            /** Title */
+            title: string;
+            /** Updated At */
+            updated_at: string | null;
+        };
+        /** AlertSubscriberResponse */
+        routers__api__alerts__AlertSubscriberResponse: {
+            /** Created At */
+            created_at: string | null;
+            /** Id */
+            id: string;
+            /** User Id */
+            user_id: string;
+            /** User Name */
+            user_name: string | null;
+        };
         /** OrganizationAlertPreferenceResponse */
         routers__api__alerts__OrganizationAlertPreferenceResponse: {
             /** Alert Type */
@@ -7573,6 +7931,15 @@ export interface components {
             status: string;
         };
         /**
+         * DocsSearchResponse
+         * @description Ranked results, NOT a paginated collection — the ``{results}`` shape is a
+         *     deliberate carve-out matching the MCP ``search_docs`` tool.
+         */
+        routers__api__docs_search__DocsSearchResponse: {
+            /** Results */
+            results: components["schemas"]["DocsSearchResultResponse"][];
+        };
+        /**
          * GovernanceAiAssistantRequest
          * @description Request body for the governance AI assistant.
          */
@@ -7719,6 +8086,115 @@ export interface components {
              * @description Most recent user input.
              */
             user_input?: string | null;
+        };
+        /**
+         * ModelAlertListResponse
+         * @description ``GET /models/alerts`` legacy/default shape; 2026-07-27+ clients get the
+         *     canonical ``{data, pagination}`` envelope (bypasses this ``response_model``).
+         */
+        routers__api__model_lifecycle__ModelAlertListResponse: {
+            /** Alerts */
+            alerts: components["schemas"]["routers__api__model_lifecycle__ModelAlertResponse"][];
+            /** Total */
+            total: number;
+        };
+        /** ModelAlertResponse */
+        routers__api__model_lifecycle__ModelAlertResponse: {
+            /** Account Id */
+            account_id: string;
+            /** Agent Id */
+            agent_id: string | null;
+            /** Alert Type */
+            alert_type: string;
+            /** Created At */
+            created_at: string;
+            /** Id */
+            id: string;
+            /** Message */
+            message: string;
+            /** Model Name */
+            model_name: string;
+            /** Prompt Model Id */
+            prompt_model_id: string;
+            /** Read At */
+            read_at: string | null;
+            /** Successor Model Name */
+            successor_model_name: string | null;
+        };
+        /** ModelRecommendationResponse */
+        routers__api__model_lifecycle__ModelRecommendationResponse: {
+            /** Deprecated At */
+            deprecated_at?: string | null;
+            /** Description */
+            description: string;
+            /** Family */
+            family?: string | null;
+            /** Family Generation */
+            family_generation?: number | null;
+            /** Id */
+            id: string;
+            /** Max Context Tokens */
+            max_context_tokens: number;
+            /** Max Output Tokens */
+            max_output_tokens: number;
+            /** Model Id */
+            model_id: string;
+            /** Name */
+            name: string;
+            /** Provider */
+            provider: string;
+            /** Reason */
+            reason: string;
+            /** Recommendation Type */
+            recommendation_type: string;
+            /** Released At */
+            released_at?: string | null;
+            /** Sunset At */
+            sunset_at?: string | null;
+            /** Supports Openai Arguments */
+            supports_openai_arguments: boolean;
+            /** Supports Streaming */
+            supports_streaming: boolean;
+            /** Supports Structured Output */
+            supports_structured_output: boolean;
+            /** Supports Thinking */
+            supports_thinking: boolean;
+            /** Supports Tool Use */
+            supports_tool_use: boolean;
+        };
+        /** ModelRecommendationsResponse */
+        routers__api__model_lifecycle__ModelRecommendationsResponse: {
+            /** Alternatives */
+            alternatives: components["schemas"]["routers__api__model_lifecycle__ModelRecommendationResponse"][];
+            /** Current Model Id */
+            current_model_id: string;
+            /** Current Model Name */
+            current_model_name: string;
+            /** Same Provider */
+            same_provider: components["schemas"]["routers__api__model_lifecycle__ModelRecommendationResponse"][];
+            successor?: components["schemas"]["routers__api__model_lifecycle__ModelRecommendationResponse"] | null;
+            /** Upgrades */
+            upgrades: components["schemas"]["routers__api__model_lifecycle__ModelRecommendationResponse"][];
+        };
+        /**
+         * SearchResponse
+         * @description Ranked results, NOT a paginated collection — the ``{results}`` shape is a
+         *     deliberate carve-out matching the MCP ``search_resources`` tool.
+         */
+        routers__api__search__SearchResponse: {
+            /** Results */
+            results: components["schemas"]["routers__api__search__SearchResultResponse"][];
+        };
+        /** SearchResultResponse */
+        routers__api__search__SearchResultResponse: {
+            /** Description */
+            description: string | null;
+            /** Entity Type */
+            entity_type: string;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
         };
         /**
          * AiAssistantAcceptRequest
@@ -8325,6 +8801,8 @@ export interface components {
     };
     responses: never;
     parameters: {
+        /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+        "Seclai-Version": string;
         /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
         "X-Account-Id": string;
     };
@@ -8345,6 +8823,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -8377,6 +8857,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -8425,6 +8907,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -8457,6 +8941,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 optout_id: string;
@@ -8492,6 +8978,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -8524,6 +9012,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -8560,6 +9050,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -8596,6 +9088,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 blocked_id: string;
@@ -8628,6 +9122,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 criteria_id: string;
@@ -8662,6 +9158,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 criteria_id: string;
@@ -8694,6 +9192,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 criteria_id: string;
@@ -8736,6 +9236,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 criteria_id: string;
@@ -8777,6 +9279,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 criteria_id: string;
@@ -8811,6 +9315,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 criteria_id: string;
@@ -8849,6 +9355,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 criteria_id: string;
@@ -8880,6 +9388,8 @@ export interface operations {
     get_non_manual_evaluation_summary_api_agents_evaluation_results_non_manual_summary_get: {
         parameters: {
             query?: {
+                /** @description Scope the summary to a single agent. Omit for account-wide. */
+                agent_id?: string | null;
                 days?: number;
                 start_date?: string | null;
                 end_date?: string | null;
@@ -8887,6 +9397,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -8923,6 +9435,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -8955,6 +9469,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -8978,6 +9494,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -9001,6 +9519,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -9024,6 +9544,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -9060,6 +9582,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -9099,6 +9623,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 run_id: string;
@@ -9133,6 +9659,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 run_id: string;
@@ -9167,6 +9695,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 agent_id: string;
@@ -9201,6 +9731,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 agent_id: string;
@@ -9239,6 +9771,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 agent_id: string;
@@ -9280,6 +9814,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 agent_id: string;
@@ -9314,6 +9850,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 agent_id: string;
@@ -9352,6 +9890,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 agent_id: string;
@@ -9390,6 +9930,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 agent_id: string;
@@ -9409,9 +9951,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: boolean;
-                    };
+                    "application/json": components["schemas"]["OkResponse"];
                 };
             };
             /** @description Validation Error */
@@ -9431,6 +9971,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 agent_id: string;
@@ -9465,6 +10007,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 agent_id: string;
@@ -9499,6 +10043,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 agent_id: string;
@@ -9533,6 +10079,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 agent_id: string;
@@ -9571,6 +10119,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 agent_id: string;
@@ -9605,6 +10155,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 agent_id: string;
@@ -9635,10 +10187,15 @@ export interface operations {
     };
     list_evaluation_criteria_api_agents__agent_id__evaluation_criteria_get: {
         parameters: {
-            query?: never;
+            query?: {
+                page?: number;
+                limit?: number;
+            };
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 agent_id: string;
@@ -9673,6 +10230,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 agent_id: string;
@@ -9711,6 +10270,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 agent_id: string;
@@ -9757,6 +10318,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 agent_id: string;
@@ -9798,6 +10361,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 agent_id: string;
@@ -9835,6 +10400,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 agent_id: string;
@@ -9869,6 +10436,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 agent_id: string;
@@ -9911,6 +10480,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 agent_id: string;
@@ -9945,6 +10516,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 agent_id: string;
@@ -9992,6 +10565,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 agent_id: string;
@@ -10011,7 +10586,7 @@ export interface operations {
              *     - `event: init` — `data` is an `AgentRunResponse` snapshot (includes `run_id`).
              *     - `event: done` — `data` is the final `AgentRunResponse` snapshot (includes `output`, `credits`, etc).
              *     - Other events (e.g. `status`, step events) are forwarded from the run event stream.
-             *     - On `timeout` / `error`, the payload includes `run_id` so clients can fetch status via `GET /api/agents/runs/{run_id}`.
+             *     - On `timeout` / `error`, the payload includes `run_id` so clients can fetch status via `GET /agents/runs/{run_id}`.
              */
             200: {
                 headers: {
@@ -10053,10 +10628,15 @@ export interface operations {
     };
     list_run_evaluation_results_api_agents__agent_id__runs__run_id__evaluation_results_get: {
         parameters: {
-            query?: never;
+            query?: {
+                page?: number;
+                limit?: number;
+            };
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 agent_id: string;
@@ -10092,6 +10672,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 agent_id: string;
@@ -10131,6 +10713,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 agent_id: string;
@@ -10165,6 +10749,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -10201,6 +10787,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -10237,6 +10825,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -10278,6 +10868,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -10310,6 +10902,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 conversation_id: string;
@@ -10328,9 +10922,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: boolean;
-                    };
+                    "application/json": components["schemas"]["OkResponse"];
                 };
             };
             /** @description Validation Error */
@@ -10350,6 +10942,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -10386,6 +10980,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -10422,6 +11018,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 conversation_id: string;
@@ -10460,6 +11058,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 conversation_id: string;
@@ -10507,6 +11107,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -10519,9 +11121,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["routers__api__alerts__AlertListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -10544,10 +11144,16 @@ export interface operations {
                 source_connection_id?: string | null;
                 /** @description Set to 'source' to list account-level source alert configs */
                 scope?: string | null;
+                /** @description Page number */
+                page?: number;
+                /** @description Items per page */
+                limit?: number;
             };
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -10560,9 +11166,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["AlertConfigListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -10582,6 +11186,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -10598,9 +11204,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["AlertConfigResponse"];
                 };
             };
             /** @description Validation Error */
@@ -10620,6 +11224,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 config_id: string;
@@ -10634,9 +11240,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["AlertConfigResponse"];
                 };
             };
             /** @description Validation Error */
@@ -10656,6 +11260,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 config_id: string;
@@ -10688,6 +11294,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 config_id: string;
@@ -10706,9 +11314,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["AlertConfigResponse"];
                 };
             };
             /** @description Validation Error */
@@ -10733,6 +11339,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -10765,6 +11373,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 organization_id: string;
@@ -10804,6 +11414,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 alert_id: string;
@@ -10818,9 +11430,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["routers__api__alerts__AlertDetailResponse"];
                 };
             };
             /** @description Validation Error */
@@ -10840,6 +11450,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 alert_id: string;
@@ -10858,9 +11470,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["routers__api__alerts__AlertDetailResponse"];
                 };
             };
             /** @description Validation Error */
@@ -10880,6 +11490,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 alert_id: string;
@@ -10898,9 +11510,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["routers__api__alerts__AlertDetailResponse"];
                 };
             };
             /** @description Validation Error */
@@ -10920,6 +11530,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 alert_id: string;
@@ -10934,9 +11546,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["routers__api__alerts__AlertDetailResponse"];
                 };
             };
             /** @description Validation Error */
@@ -10956,6 +11566,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 alert_id: string;
@@ -10970,9 +11582,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["routers__api__alerts__AlertDetailResponse"];
                 };
             };
             /** @description Validation Error */
@@ -10995,6 +11605,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 source_connection_content_version: string;
@@ -11029,6 +11641,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 source_connection_content_version: string;
@@ -11067,6 +11681,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 source_connection_content_version: string;
@@ -11102,6 +11718,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 source_connection_content_version: string;
@@ -11136,6 +11754,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 source_connection_content_version: string;
@@ -11181,6 +11801,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -11193,9 +11815,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["routers__api__docs_search__DocsSearchResponse"];
                 };
             };
             /** @description Validation Error */
@@ -11215,6 +11835,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -11238,6 +11860,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -11274,6 +11898,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -11295,6 +11921,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 domain_id: string;
@@ -11332,6 +11960,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 domain_id: string;
@@ -11366,6 +11996,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 domain_id: string;
@@ -11400,6 +12032,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 domain_id: string;
@@ -11434,6 +12068,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 domain_id: string;
@@ -11468,6 +12104,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -11521,6 +12159,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -11560,6 +12200,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 conversation_id: string;
@@ -11608,6 +12250,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 conversation_id: string;
@@ -11663,6 +12307,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -11695,6 +12341,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -11738,6 +12386,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 knowledge_base_id: string;
@@ -11772,6 +12422,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 knowledge_base_id: string;
@@ -11810,6 +12462,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 knowledge_base_id: string;
@@ -11842,6 +12496,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -11876,6 +12532,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -11908,6 +12566,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -11944,6 +12604,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -11992,6 +12654,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -12024,6 +12688,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 conversation_id: string;
@@ -12042,9 +12708,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: boolean;
-                    };
+                    "application/json": components["schemas"]["OkResponse"];
                 };
             };
             /** @description Validation Error */
@@ -12064,6 +12728,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -12076,9 +12742,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    }[];
+                    "application/json": unknown;
                 };
             };
         };
@@ -12089,6 +12753,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -12125,6 +12791,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 memory_bank_id: string;
@@ -12159,6 +12827,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 memory_bank_id: string;
@@ -12197,6 +12867,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 memory_bank_id: string;
@@ -12229,6 +12901,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 memory_bank_id: string;
@@ -12243,9 +12917,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: string;
-                    }[];
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -12265,6 +12937,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 memory_bank_id: string;
@@ -12279,9 +12953,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["CompactionScheduledResponse"];
                 };
             };
             /** @description Validation Error */
@@ -12301,6 +12973,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 memory_bank_id: string;
@@ -12337,6 +13011,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 memory_bank_id: string;
@@ -12373,6 +13049,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 memory_bank_id: string;
@@ -12422,6 +13100,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -12463,6 +13143,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -12475,9 +13157,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["routers__api__model_lifecycle__ModelAlertListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -12497,6 +13177,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -12518,6 +13200,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -12530,9 +13214,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["UnreadCountResponse"];
                 };
             };
         };
@@ -12543,6 +13225,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 alert_id: string;
@@ -12575,6 +13259,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -12587,9 +13273,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["GenerationTierListResponse"];
                 };
             };
         };
@@ -12611,6 +13295,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -12623,9 +13309,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["ExperimentListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -12645,6 +13329,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -12661,9 +13347,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["CreateExperimentResponse"];
                 };
             };
             /** @description Validation Error */
@@ -12683,6 +13367,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 experiment_id: string;
@@ -12697,9 +13383,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["ExperimentDetailResponse"];
                 };
             };
             /** @description Validation Error */
@@ -12719,6 +13403,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 experiment_id: string;
@@ -12751,6 +13437,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 experiment_id: string;
@@ -12765,9 +13453,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["CancelExperimentResponse"];
                 };
             };
             /** @description Validation Error */
@@ -12787,6 +13473,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 model_id: string;
@@ -12832,6 +13520,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 model_id: string;
@@ -12846,9 +13536,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["routers__api__model_lifecycle__ModelRecommendationsResponse"];
                 };
             };
             /** @description Validation Error */
@@ -12875,6 +13563,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -12887,9 +13577,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["routers__api__search__SearchResponse"];
                 };
             };
             /** @description Validation Error */
@@ -12920,6 +13608,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -12952,6 +13642,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -12988,6 +13680,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 solution_id: string;
@@ -13022,6 +13716,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 solution_id: string;
@@ -13054,6 +13750,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 solution_id: string;
@@ -13092,6 +13790,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 solution_id: string;
@@ -13130,6 +13830,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 solution_id: string;
@@ -13168,6 +13870,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 solution_id: string;
@@ -13206,6 +13910,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 solution_id: string;
@@ -13244,6 +13950,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 solution_id: string;
@@ -13282,6 +13990,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 solution_id: string;
@@ -13321,6 +14031,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 solution_id: string;
@@ -13354,6 +14066,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 solution_id: string;
@@ -13388,6 +14102,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 solution_id: string;
@@ -13426,6 +14142,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 solution_id: string;
@@ -13463,6 +14181,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 solution_id: string;
@@ -13501,6 +14221,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 solution_id: string;
@@ -13539,6 +14261,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 solution_id: string;
@@ -13577,6 +14301,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 solution_id: string;
@@ -13609,12 +14335,59 @@ export interface operations {
             };
         };
     };
+    list_sources_api_sources_get: {
+        parameters: {
+            query?: {
+                /** @description Page number */
+                page?: number;
+                /** @description Items per page */
+                limit?: number;
+                /** @description Sort field */
+                sort?: string;
+                /** @description Sort order */
+                order?: string;
+                /** @description List sources for the given account. Defaults to the caller's account. */
+                account_id?: string | null;
+            };
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["routers__api__sources__SourceListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     create_source_api_sources_post: {
         parameters: {
             query?: never;
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path?: never;
             cookie?: never;
@@ -13652,55 +14425,14 @@ export interface operations {
             };
         };
     };
-    list_sources_api_sources__get: {
-        parameters: {
-            query?: {
-                /** @description Page number */
-                page?: number;
-                /** @description Items per page */
-                limit?: number;
-                /** @description Sort field */
-                sort?: string;
-                /** @description Sort order */
-                order?: string;
-                /** @description List sources for the given account. Defaults to the caller's account. */
-                account_id?: string | null;
-            };
-            header?: {
-                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
-                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["routers__api__sources__SourceListResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     get_source_api_sources__source_connection_id__get: {
         parameters: {
             query?: never;
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 source_connection_id: string;
@@ -13735,6 +14467,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 source_connection_id: string;
@@ -13773,6 +14507,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 source_connection_id: string;
@@ -13811,6 +14547,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 source_connection_id: string;
@@ -13843,6 +14581,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 source_connection_id: string;
@@ -13877,6 +14617,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 source_connection_id: string;
@@ -13922,6 +14664,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 source_connection_id: string;
@@ -13959,6 +14703,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 source_connection_id: string;
@@ -13993,6 +14739,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 source_connection_id: string;
@@ -14031,6 +14779,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 source_connection_id: string;
@@ -14069,6 +14819,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 source_connection_id: string;
@@ -14104,6 +14856,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 source_connection_id: string;
@@ -14137,6 +14891,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 source_connection_id: string;
@@ -14172,6 +14928,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 source_connection_id: string;
@@ -14207,6 +14965,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 source_connection_id: string;
@@ -14247,6 +15007,8 @@ export interface operations {
             header?: {
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
             };
             path: {
                 run_id: string;
@@ -14269,6 +15031,69 @@ export interface operations {
                     "image/*": string;
                     "text/plain": string;
                     "video/*": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_api_version_api_version_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiVersionResponse"];
+                };
+            };
+        };
+    };
+    update_api_version_api_version_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateApiVersionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiVersionResponse"];
                 };
             };
             /** @description Validation Error */

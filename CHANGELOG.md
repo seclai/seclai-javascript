@@ -1,5 +1,36 @@
 # Changelog
 
+## [1.5.0] - 2026-07-27
+
+### Changed
+
+- Return typed results from the 20 methods that previously declared `unknown` — alerts, alert configs, model alerts and recommendations, playground experiments, search and the AI assistant acknowledgements. Narrowing `unknown` to a concrete type is source compatible, so no façade is needed here
+- Stop sending `severity` from `listAlerts()`. `GET /alerts` declares no such filter, so it never filtered, and it becomes a 422 once `apiVersion` is `2026-07-27` or later. The option is still accepted and ignored
+- Accept either wire shape from `listEvaluationCriteria()`. The endpoint is moving from a bare array to a paginated envelope, so the client now reads both and keeps returning `EvaluationCriteriaResponse[]`
+- Sync the bundled OpenAPI spec with the API fixes found while updating the SDKs: `agent_id` is now declared on the non-manual evaluation summary, and `page`/`limit` on the evaluation and alert-config listings
+- Deprecate `deleteAgentRun()`. It never deleted anything — the endpoint it calls is documented as "Cancel an agent run", and the API has no delete-a-run operation. Use `cancelAgentRun()`
+
+### Added
+
+- Add the `SeclaiApiVersion` constants and the `ApiVersion` type. An `apiVersion` this release was not built against throws at construction, since a newer version can reshape responses this client would mis-decode; set `allowUnknownApiVersion` to override
+- Add 20 response type exports covering those endpoints, including `AlertResponse`, `AlertDetailResponse`, `AlertConfigResponse`, `ModelAlertResponse`, `ExperimentDetailResponse`, `SearchResponse` and `OkResponse`
+- Add `listEvaluationCriteriaPage()` for the canonical `{data, pagination}` envelope, which the endpoint emits once `apiVersion` is `2026-07-27` or later
+- Add an `apiVersion` client option, sent as the `Seclai-Version` header, opting into dated API changes released on or before that date. Omitted by default, so upgrading the SDK alone never changes response shapes
+- Add `getApiVersion()` and `updateApiVersion()` to read the version a request resolves to and to pin or clear the account's version
+- Add the `ApiVersionResponse` type export
+- Add the `EvaluationCriteriaListResponse` type export
+
+### Fixed
+
+- Validate the merged `Seclai-Version` rather than the first match in `defaultHeaders`. The merge lets the last entry win, so two spellings of the header meant the guard could approve one value and the client send another
+- Validate a `Seclai-Version` supplied through `defaultHeaders`, not just the `apiVersion` option. `defaultHeaders` is applied last so it wins, which left the unknown-version guard one header away from being bypassed; a differently-cased key also emitted two wire headers
+- Throw from `getAgentAiConversationHistory()` when `opts.stepType` is missing. It was optional and dropped by `buildURL`, so a call without it still 422'd — the failure this method was changed to prevent
+- Decode either wire shape in `listRunEvaluationResults()`. The endpoint answers with a bare array, which the declared envelope type could not read, so the method returned nothing; it now also reads the canonical `{data, pagination}` envelope. `listAgentEvaluationResults()` is genuinely flat and is unaffected
+- Paginate `listModelAlerts()` with the `offset` the endpoint declares instead of `page`, which it does not accept — every page after the first returned page 1
+- Send `step_type` from `getAgentAiConversationHistory()`, along with `stepId`, `limit` and `offset`. The API marks `step_type` required and the method had no way to supply it, so every call answered 422
+- Request `GET /sources` rather than `GET /sources/`. The trailing-slash form is no longer declared by the API
+- Point `cancelAgentRun()` at `DELETE /agents/runs/{run_id}`. It posted to `/agents/runs/{run_id}/cancel`, a path the API has never exposed, so cancelling a run always failed
+
 ## [1.4.0] - 2026-07-25
 
 ### Changed
@@ -154,6 +185,7 @@ _Stable release. No functional changes since 0.0.1._
 
 _Initial release._
 
+[1.5.0]: https://github.com/seclai/seclai-javascript/releases/tag/1.5.0
 [1.4.0]: https://github.com/seclai/seclai-javascript/releases/tag/1.4.0
 [1.3.0]: https://github.com/seclai/seclai-javascript/releases/tag/1.3.0
 [1.2.0]: https://github.com/seclai/seclai-javascript/releases/tag/1.2.0

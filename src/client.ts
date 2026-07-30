@@ -15,6 +15,8 @@ import {
   SeclaiError,
   SeclaiStreamingError,
 } from "./errors";
+import type { ApiVersion } from "./versions";
+import { KNOWN_API_VERSIONS } from "./versions";
 import type { AuthState } from "./auth";
 import { resolveCredentialChain, resolveAuthHeaders } from "./auth";
 import type {
@@ -71,6 +73,28 @@ import type {
   EstimateExportRequest,
   EstimateExportResponse,
   EvaluationCriteriaResponse,
+  EvaluationCriteriaListResponse,
+  ApiVersionResponse,
+  AlertDetailResponse,
+  AlertCommentResponse,
+  AlertSubscriberResponse,
+  UnreadCountResponse,
+  ModelRecommendationsResponse,
+  ModelRecommendationResponse,
+  ExperimentListResponse,
+  ExperimentSummaryResponse,
+  ExperimentDetailResponse,
+  CreateExperimentResponse,
+  CancelExperimentResponse,
+  SearchResponse,
+  SearchResultResponse,
+  OkResponse,
+  AlertResponse,
+  AlertConfigResponse,
+  ModelAlertResponse,
+  AlertListResponse,
+  AlertConfigListResponse,
+  ModelAlertListResponse,
   EvaluationResultListResponse,
   EvaluationResultResponse,
   EvaluationResultSummaryResponse,
@@ -189,6 +213,31 @@ export interface SeclaiOptions {
    * Overrides the profile's `sso_account_id` when using SSO auth.
    */
   accountId?: string;
+  /**
+   * Dated API version (`YYYY-MM-DD`) sent as the `Seclai-Version` header, opting
+   * this client into backward-incompatible API changes released on or before
+   * that date.
+   *
+   * Left unset the header is omitted and the account's pinned baseline applies,
+   * so responses keep their current shapes and upgrading the SDK alone never
+   * changes the wire contract. Pin the account instead with
+   * {@link Seclai.updateApiVersion}, and read what a request resolves to with
+   * {@link Seclai.getApiVersion}.
+   *
+   * From `2026-07-27` the API rejects undeclared query parameters with a 422
+   * rather than ignoring them, and list endpoints return the canonical
+   * `{data, pagination}` envelope.
+   */
+  apiVersion?: ApiVersion;
+  /**
+   * Permit an {@link apiVersion} this release was not built against.
+   *
+   * Off by default. A newer API version can change response shapes, and this
+   * client would decode them incorrectly rather than reject them — a
+   * request-side mistake answers 422, but a reshaped response just mis-decodes,
+   * silently. Prefer upgrading the package.
+   */
+  allowUnknownApiVersion?: boolean;
 }
 
 // ─── Internal Helpers ────────────────────────────────────────────────────────
@@ -391,7 +440,47 @@ export class Seclai {
     }
 
     this.baseUrl = opts.baseUrl ?? getEnv("SECLAI_API_URL") ?? SECLAI_API_URL;
-    this.defaultHeaders = { ...(opts.defaultHeaders ?? {}) };
+
+    // Merge first, then validate what the merge produced. `defaultHeaders` is
+    // applied last so an explicit header wins, which means it can carry its own
+    // Seclai-Version — and it may carry several in differing cases. Inspecting
+    // the options instead would have to predict which one survives: picking the
+    // first match while the merge lets the last win is a guard that validates a
+    // value the client never sends.
+    //
+    // Keys are compared case-insensitively so a caller-supplied `seclai-version`
+    // replaces ours rather than adding a second wire header.
+    const merged: Record<string, string> = opts.apiVersion
+      ? { "Seclai-Version": opts.apiVersion }
+      : {};
+    let versionKey = opts.apiVersion ? "Seclai-Version" : undefined;
+    for (const [key, value] of Object.entries(opts.defaultHeaders ?? {})) {
+      for (const existing of Object.keys(merged)) {
+        if (existing.toLowerCase() === key.toLowerCase()) delete merged[existing];
+      }
+      merged[key] = value;
+      if (key.toLowerCase() === "seclai-version") versionKey = key;
+    }
+
+    const effectiveVersion = versionKey ? merged[versionKey] : undefined;
+    if (
+      effectiveVersion &&
+      !opts.allowUnknownApiVersion &&
+      !KNOWN_API_VERSIONS.includes(effectiveVersion)
+    ) {
+      const via =
+        versionKey === "Seclai-Version" && merged[versionKey] === opts.apiVersion
+          ? "apiVersion"
+          : `defaultHeaders['${versionKey}']`;
+      throw new SeclaiConfigurationError(
+        `Unknown API version '${effectiveVersion}' (via ${via}). This release was ` +
+          `built against ${KNOWN_API_VERSIONS.join(", ")}. A newer API version can ` +
+          `change response shapes, which this client would decode incorrectly rather ` +
+          `than reject. Upgrade the package, or set allowUnknownApiVersion to ` +
+          `proceed anyway.`,
+      );
+    }
+    this.defaultHeaders = merged;
     this.fetcher = fetcher;
 
     // Resolve credential chain (may be async for SSO profile loading)
@@ -673,6 +762,37 @@ export class Seclai {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // API Version
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Read the API version this request resolved to, and the versions available.
+   *
+   * Resolution order is the `Seclai-Version` header, then the account pin, then
+   * the default — so `effective_version` reflects the client's `apiVersion`
+   * option when that is set.
+   *
+   * @returns The pinned, effective, default and latest versions.
+   */
+  async getApiVersion(): Promise<ApiVersionResponse> {
+    return (await this.request("GET", "/version")) as ApiVersionResponse;
+  }
+
+  /**
+   * Pin the account to a dated API version, or clear the pin.
+   *
+   * Owner/admin only. The pin applies to later header-less requests; a
+   * `Seclai-Version` header still overrides it, so `effective_version` in the
+   * response describes this request rather than the pin just written.
+   *
+   * @param version - A `YYYY-MM-DD` date to pin to, or `null` to clear the pin.
+   * @returns The updated version state.
+   */
+  async updateApiVersion(version: string | null): Promise<ApiVersionResponse> {
+    return (await this.request("PUT", "/version", { json: { version } })) as ApiVersionResponse;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // Agents — CRUD
   // ═══════════════════════════════════════════════════════════════════════════
 
@@ -896,22 +1016,30 @@ export class Seclai {
   }
 
   /**
-   * Delete an agent run.
+   * Cancel an agent run.
+   *
+   * @deprecated This never deleted anything — the endpoint it calls is documented
+   * as "Cancel an agent run", and the API has no delete-a-run operation. It also
+   * discards the returned run state. Use {@link cancelAgentRun} instead.
    *
    * @param runId - Run identifier.
    */
   async deleteAgentRun(runId: string): Promise<void> {
-    await this.request("DELETE", `/agents/runs/${runId}`);
+    await this.cancelAgentRun(runId);
   }
 
   /**
    * Cancel a running agent run.
    *
+   * Cancellation is `DELETE` on the run resource — the API exposes no
+   * `POST .../cancel` route, and no operation that deletes a run. Rejected when
+   * the run has already reached a terminal state.
+   *
    * @param runId - Run identifier.
    * @returns Updated run (with cancelled status).
    */
   async cancelAgentRun(runId: string): Promise<AgentRunResponse> {
-    return (await this.request("POST", `/agents/runs/${runId}/cancel`)) as AgentRunResponse;
+    return (await this.request("DELETE", `/agents/runs/${runId}`)) as AgentRunResponse;
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1247,9 +1375,14 @@ export class Seclai {
     runId: string,
     opts: ListOptions = {},
   ): Promise<EvaluationResultWithCriteriaListResponse> {
-    return (await this.request("GET", `/agents/${agentId}/runs/${runId}/evaluation-results`, {
+    // Either wire shape: the endpoint returns a bare array by default and an
+    // envelope once the caller opts in with apiVersion 2026-07-27 or later.
+    const res = (await this.request("GET", `/agents/${agentId}/runs/${runId}/evaluation-results`, {
       query: { page: opts.page, limit: opts.limit },
-    })) as EvaluationResultWithCriteriaListResponse;
+    })) as EvaluationResultWithCriteriaListResponse | EvaluationResultWithCriteriaListResponse["data"];
+    return Array.isArray(res)
+      ? ({ data: res } as EvaluationResultWithCriteriaListResponse)
+      : res;
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1357,8 +1490,28 @@ export class Seclai {
    * @param agentId - Agent identifier.
    * @returns Conversation history.
    */
-  async getAgentAiConversationHistory(agentId: string): Promise<AiConversationHistoryResponse> {
-    return (await this.request("GET", `/agents/${agentId}/ai-assistant/conversations`)) as AiConversationHistoryResponse;
+  async getAgentAiConversationHistory(
+    agentId: string,
+    opts: { stepType?: string; stepId?: string; limit?: number; offset?: number } = {},
+  ): Promise<AiConversationHistoryResponse> {
+    // `step_type` is required by the API. It stays optional in the type so the
+    // released one-argument call still compiles, but leaving it undefined only
+    // means buildURL drops it and the server answers 422 naming the wire
+    // parameter — so fail here instead, naming the option.
+    if (!opts.stepType) {
+      throw new SeclaiConfigurationError(
+        "getAgentAiConversationHistory requires opts.stepType; the API rejects the " +
+          "request without it. Pass e.g. { stepType: \"llm\" }.",
+      );
+    }
+    return (await this.request("GET", `/agents/${agentId}/ai-assistant/conversations`, {
+      query: {
+        step_type: opts.stepType,
+        step_id: opts.stepId,
+        limit: opts.limit,
+        offset: opts.offset,
+      },
+    })) as AiConversationHistoryResponse;
   }
 
   /**
@@ -1383,9 +1536,29 @@ export class Seclai {
    * @param opts - Pagination options.
    */
   async listEvaluationCriteria(agentId: string, opts: ListOptions = {}): Promise<EvaluationCriteriaResponse[]> {
-    return (await this.request("GET", `/agents/${agentId}/evaluation-criteria`, {
+    return (await this.listEvaluationCriteriaPage(agentId, opts)).data ?? [];
+  }
+
+  /**
+   * List evaluation criteria for an agent, with pagination metadata.
+   *
+   * Accepts either wire shape. The endpoint answered with a bare array before
+   * 2026-07 and with a paginated envelope after, so a client that decodes only
+   * one breaks the day the other ships. `total`, `page` and `limit` are absent
+   * when the endpoint answers with a bare array.
+   *
+   * @param agentId - Agent identifier.
+   * @param opts - Pagination options.
+   * @returns The criteria under `data`, plus the page metadata when present.
+   */
+  async listEvaluationCriteriaPage(
+    agentId: string,
+    opts: ListOptions = {},
+  ): Promise<EvaluationCriteriaListResponse> {
+    const res = (await this.request("GET", `/agents/${agentId}/evaluation-criteria`, {
       query: { page: opts.page, limit: opts.limit },
-    })) as EvaluationCriteriaResponse[];
+    })) as EvaluationCriteriaResponse[] | EvaluationCriteriaListResponse;
+    return Array.isArray(res) ? { data: res } : res;
   }
 
   /**
@@ -1884,8 +2057,8 @@ export class Seclai {
    * @param conversationId - Conversation identifier.
    * @param body - Accept request payload.
    */
-  async acceptMemoryBankAiSuggestion(conversationId: string, body: MemoryBankAcceptRequest): Promise<unknown> {
-    return await this.request("PATCH", `/memory_banks/ai-assistant/${conversationId}`, { json: body });
+  async acceptMemoryBankAiSuggestion(conversationId: string, body: MemoryBankAcceptRequest): Promise<OkResponse> {
+    return (await this.request("PATCH", `/memory_banks/ai-assistant/${conversationId}`, { json: body })) as OkResponse;
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1901,7 +2074,7 @@ export class Seclai {
   async listSources(
     opts: SortableListOptions & { accountId?: string } = {},
   ): Promise<SourceListResponse> {
-    return (await this.request("GET", "/sources/", {
+    return (await this.request("GET", "/sources", {
       query: {
         page: opts.page,
         limit: opts.limit,
@@ -2440,10 +2613,14 @@ export class Seclai {
    * @param opts - Pagination and filter options.
    * @returns Paginated list of alerts.
    */
-  async listAlerts(opts: ListOptions & { status?: string; severity?: string } = {}): Promise<unknown> {
-    return await this.request("GET", "/alerts", {
-      query: { page: opts.page, limit: opts.limit, status: opts.status, severity: opts.severity },
-    });
+  async listAlerts(opts: ListOptions & { status?: string; severity?: string } = {}): Promise<AlertListResponse> {
+    // `severity` is deliberately not forwarded: GET /alerts declares no such
+    // filter, so it never filtered anything, and sending it is a 422 once
+    // `apiVersion` is 2026-07-27 or later. Accepted and dropped so existing
+    // call sites keep working.
+    return (await this.request("GET", "/alerts", {
+      query: { page: opts.page, limit: opts.limit, status: opts.status },
+    })) as AlertListResponse;
   }
 
   /**
@@ -2452,8 +2629,8 @@ export class Seclai {
    * @param alertId - Alert identifier.
    * @returns Alert details.
    */
-  async getAlert(alertId: string): Promise<unknown> {
-    return await this.request("GET", `/alerts/${alertId}`);
+  async getAlert(alertId: string): Promise<AlertDetailResponse> {
+    return (await this.request("GET", `/alerts/${alertId}`)) as AlertDetailResponse;
   }
 
   /**
@@ -2462,8 +2639,8 @@ export class Seclai {
    * @param alertId - Alert identifier.
    * @param body - Status change request.
    */
-  async changeAlertStatus(alertId: string, body: ChangeStatusRequest): Promise<unknown> {
-    return await this.request("POST", `/alerts/${alertId}/status`, { json: body });
+  async changeAlertStatus(alertId: string, body: ChangeStatusRequest): Promise<AlertDetailResponse> {
+    return (await this.request("POST", `/alerts/${alertId}/status`, { json: body })) as AlertDetailResponse;
   }
 
   /**
@@ -2472,8 +2649,8 @@ export class Seclai {
    * @param alertId - Alert identifier.
    * @param body - Comment payload.
    */
-  async addAlertComment(alertId: string, body: AddCommentRequest): Promise<unknown> {
-    return await this.request("POST", `/alerts/${alertId}/comments`, { json: body });
+  async addAlertComment(alertId: string, body: AddCommentRequest): Promise<AlertDetailResponse> {
+    return (await this.request("POST", `/alerts/${alertId}/comments`, { json: body })) as AlertDetailResponse;
   }
 
   /**
@@ -2481,8 +2658,8 @@ export class Seclai {
    *
    * @param alertId - Alert identifier.
    */
-  async subscribeToAlert(alertId: string): Promise<unknown> {
-    return await this.request("POST", `/alerts/${alertId}/subscribe`);
+  async subscribeToAlert(alertId: string): Promise<AlertDetailResponse> {
+    return (await this.request("POST", `/alerts/${alertId}/subscribe`)) as AlertDetailResponse;
   }
 
   /**
@@ -2490,8 +2667,8 @@ export class Seclai {
    *
    * @param alertId - Alert identifier.
    */
-  async unsubscribeFromAlert(alertId: string): Promise<unknown> {
-    return await this.request("POST", `/alerts/${alertId}/unsubscribe`);
+  async unsubscribeFromAlert(alertId: string): Promise<AlertDetailResponse> {
+    return (await this.request("POST", `/alerts/${alertId}/unsubscribe`)) as AlertDetailResponse;
   }
 
   // ─── Alert Configs ─────────────────────────────────────────────────────────
@@ -2502,10 +2679,16 @@ export class Seclai {
    * @param opts - Pagination options.
    * @returns Paginated list of alert configs.
    */
-  async listAlertConfigs(opts: ListOptions = {}): Promise<unknown> {
-    return await this.request("GET", "/alerts/configs", {
+  /**
+   * The configurations arrive under `configs` alongside `total` by default.
+   * Once the caller opts in with `apiVersion` 2026-07-27 or later the endpoint
+   * returns the canonical `{data, pagination}` envelope instead, so the
+   * top-level key changes.
+   */
+  async listAlertConfigs(opts: ListOptions = {}): Promise<AlertConfigListResponse> {
+    return (await this.request("GET", "/alerts/configs", {
       query: { page: opts.page, limit: opts.limit },
-    });
+    })) as AlertConfigListResponse;
   }
 
   /**
@@ -2514,8 +2697,8 @@ export class Seclai {
    * @param body - Alert config definition.
    * @returns Created alert config.
    */
-  async createAlertConfig(body: CreateAlertConfigRequest): Promise<unknown> {
-    return await this.request("POST", "/alerts/configs", { json: body });
+  async createAlertConfig(body: CreateAlertConfigRequest): Promise<AlertConfigResponse> {
+    return (await this.request("POST", "/alerts/configs", { json: body })) as AlertConfigResponse;
   }
 
   /**
@@ -2524,8 +2707,8 @@ export class Seclai {
    * @param configId - Alert config identifier.
    * @returns Alert config details.
    */
-  async getAlertConfig(configId: string): Promise<unknown> {
-    return await this.request("GET", `/alerts/configs/${configId}`);
+  async getAlertConfig(configId: string): Promise<AlertConfigResponse> {
+    return (await this.request("GET", `/alerts/configs/${configId}`)) as AlertConfigResponse;
   }
 
   /**
@@ -2535,8 +2718,8 @@ export class Seclai {
    * @param body - Fields to update.
    * @returns Updated alert config.
    */
-  async updateAlertConfig(configId: string, body: UpdateAlertConfigRequest): Promise<unknown> {
-    return await this.request("PATCH", `/alerts/configs/${configId}`, { json: body });
+  async updateAlertConfig(configId: string, body: UpdateAlertConfigRequest): Promise<AlertConfigResponse> {
+    return (await this.request("PATCH", `/alerts/configs/${configId}`, { json: body })) as AlertConfigResponse;
   }
 
   /**
@@ -2585,10 +2768,14 @@ export class Seclai {
    *
    * @param opts - Pagination options.
    */
-  async listModelAlerts(opts: ListOptions = {}): Promise<unknown> {
-    return await this.request("GET", "/models/alerts", {
-      query: { page: opts.page, limit: opts.limit },
-    });
+  async listModelAlerts(opts: ListOptions = {}): Promise<ModelAlertListResponse> {
+    // The endpoint declares limit/offset, not page, so `page` was ignored and
+    // every page after the first returned page 1.
+    const limit = opts.limit ?? 50;
+    const offset = opts.page && opts.page > 1 ? (opts.page - 1) * limit : undefined;
+    return (await this.request("GET", "/models/alerts", {
+      query: { offset, limit: opts.limit },
+    })) as ModelAlertListResponse;
   }
 
   /**
@@ -2601,8 +2788,8 @@ export class Seclai {
   /**
    * Get unread model alert count.
    */
-  async getUnreadModelAlertCount(): Promise<unknown> {
-    return await this.request("GET", "/models/alerts/unread-count");
+  async getUnreadModelAlertCount(): Promise<UnreadCountResponse> {
+    return (await this.request("GET", "/models/alerts/unread-count")) as UnreadCountResponse;
   }
 
   /**
@@ -2619,8 +2806,8 @@ export class Seclai {
    *
    * @param modelId - Model identifier.
    */
-  async getModelRecommendations(modelId: string): Promise<unknown> {
-    return await this.request("GET", `/models/${modelId}/recommendations`);
+  async getModelRecommendations(modelId: string): Promise<ModelRecommendationsResponse> {
+    return (await this.request("GET", `/models/${modelId}/recommendations`)) as ModelRecommendationsResponse;
   }
 
   /**
@@ -2681,10 +2868,10 @@ export class Seclai {
    *
    * @param opts - Optional filters and pagination.
    */
-  async listExperiments(opts: { days?: number; startDate?: string; endDate?: string; limit?: number; offset?: number } = {}): Promise<unknown> {
-    return await this.request("GET", "/models/playground/experiments", {
+  async listExperiments(opts: { days?: number; startDate?: string; endDate?: string; limit?: number; offset?: number } = {}): Promise<ExperimentListResponse> {
+    return (await this.request("GET", "/models/playground/experiments", {
       query: { days: opts.days, start_date: opts.startDate, end_date: opts.endDate, limit: opts.limit, offset: opts.offset },
-    });
+    })) as ExperimentListResponse;
   }
 
   /**
@@ -2692,8 +2879,8 @@ export class Seclai {
    *
    * @param body - Experiment configuration.
    */
-  async createExperiment(body: CreateExperimentInput): Promise<unknown> {
-    return await this.request("POST", "/models/playground/experiments", { json: body });
+  async createExperiment(body: CreateExperimentInput): Promise<CreateExperimentResponse> {
+    return (await this.request("POST", "/models/playground/experiments", { json: body })) as CreateExperimentResponse;
   }
 
   /**
@@ -2701,8 +2888,8 @@ export class Seclai {
    *
    * @param experimentId - Experiment identifier.
    */
-  async getExperiment(experimentId: string): Promise<unknown> {
-    return await this.request("GET", `/models/playground/experiments/${experimentId}`);
+  async getExperiment(experimentId: string): Promise<ExperimentDetailResponse> {
+    return (await this.request("GET", `/models/playground/experiments/${experimentId}`)) as ExperimentDetailResponse;
   }
 
   /**
@@ -2710,8 +2897,8 @@ export class Seclai {
    *
    * @param experimentId - Experiment identifier.
    */
-  async cancelExperiment(experimentId: string): Promise<unknown> {
-    return await this.request("POST", `/models/playground/experiments/${experimentId}/cancel`);
+  async cancelExperiment(experimentId: string): Promise<CancelExperimentResponse> {
+    return (await this.request("POST", `/models/playground/experiments/${experimentId}/cancel`)) as CancelExperimentResponse;
   }
 
   /**
@@ -2742,10 +2929,10 @@ export class Seclai {
    * @param opts.entityType - Optional entity type filter (e.g. "agent", "knowledge_base").
    * @returns Search results.
    */
-  async search(opts: { query: string; limit?: number; entityType?: string }): Promise<unknown> {
-    return await this.request("GET", "/search", {
+  async search(opts: { query: string; limit?: number; entityType?: string }): Promise<SearchResponse> {
+    return (await this.request("GET", "/search", {
       query: { q: opts.query, limit: opts.limit, entity_type: opts.entityType },
-    });
+    })) as SearchResponse;
   }
 
   /**
@@ -2980,8 +3167,8 @@ export class Seclai {
    * @param conversationId - Conversation identifier.
    * @param body - Acceptance payload for the memory bank suggestion.
    */
-  async acceptAiMemoryBankSuggestion(conversationId: string, body: MemoryBankAcceptRequest): Promise<unknown> {
-    return await this.request("PATCH", `/ai-assistant/memory-bank/${conversationId}`, { json: body });
+  async acceptAiMemoryBankSuggestion(conversationId: string, body: MemoryBankAcceptRequest): Promise<OkResponse> {
+    return (await this.request("PATCH", `/ai-assistant/memory-bank/${conversationId}`, { json: body })) as OkResponse;
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
