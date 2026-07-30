@@ -208,6 +208,104 @@ export type AgentEvaluationTier = components["schemas"]["AgentEvaluationTier"];
 /** Evaluation criteria configuration for an agent. */
 export type EvaluationCriteriaResponse = components["schemas"]["EvaluationCriteriaResponse"];
 
+/** A page of alerts. Always the canonical `{data, pagination}` envelope. */
+export type AlertListResponse = components["schemas"]["routers__api__alerts__AlertListResponse"];
+
+/** A single alert. */
+export type AlertResponse = components["schemas"]["routers__api__alerts__AlertResponse"];
+
+/** A single alert configuration. */
+export type AlertConfigResponse = components["schemas"]["AlertConfigResponse"];
+
+/**
+ * A page of alert configurations.
+ *
+ * The top-level key is version-gated: `configs` alongside `total` by default,
+ * the canonical `{data, pagination}` envelope once `apiVersion` is `2026-07-27`
+ * or later. Both are declared optional so either shape type-checks.
+ */
+export type AlertConfigListResponse = {
+  configs?: AlertConfigResponse[];
+  data?: AlertConfigResponse[];
+  pagination?: PaginationResponse;
+  total?: number;
+};
+
+/** A single model lifecycle alert. */
+export type ModelAlertResponse = components["schemas"]["routers__api__model_lifecycle__ModelAlertResponse"];
+
+/**
+ * A page of model lifecycle alerts.
+ *
+ * The top-level key is version-gated: `alerts` alongside `total` by default, the
+ * canonical `{data, pagination}` envelope once `apiVersion` is `2026-07-27` or
+ * later. Both are declared optional so either shape type-checks.
+ */
+export type ModelAlertListResponse = {
+  alerts?: ModelAlertResponse[];
+  data?: ModelAlertResponse[];
+  pagination?: PaginationResponse;
+  total?: number;
+};
+
+/** A single alert with its comments, subscribers and history. */
+export type AlertDetailResponse = components["schemas"]["routers__api__alerts__AlertDetailResponse"];
+
+/** A comment on an alert. */
+export type AlertCommentResponse = components["schemas"]["routers__api__alerts__AlertCommentResponse"];
+
+/** A subscriber to an alert. */
+export type AlertSubscriberResponse = components["schemas"]["routers__api__alerts__AlertSubscriberResponse"];
+
+/** A count of unread items. */
+export type UnreadCountResponse = components["schemas"]["UnreadCountResponse"];
+
+/** Successor recommendations for a model. */
+export type ModelRecommendationsResponse = components["schemas"]["routers__api__model_lifecycle__ModelRecommendationsResponse"];
+
+/** A single successor recommendation. */
+export type ModelRecommendationResponse = components["schemas"]["routers__api__model_lifecycle__ModelRecommendationResponse"];
+
+/** A page of model playground experiments. */
+export type ExperimentListResponse = components["schemas"]["ExperimentListResponse"];
+
+/** A model playground experiment in a listing. */
+export type ExperimentSummaryResponse = components["schemas"]["ExperimentSummaryResponse"];
+
+/** A model playground experiment with its results. */
+export type ExperimentDetailResponse = components["schemas"]["ExperimentDetailResponse"];
+
+/** Acknowledgement of a created experiment. */
+export type CreateExperimentResponse = components["schemas"]["CreateExperimentResponse"];
+
+/** Acknowledgement of a cancelled experiment. */
+export type CancelExperimentResponse = components["schemas"]["CancelExperimentResponse"];
+
+/** A ranked set of search results. Deliberately not paginated. */
+export type SearchResponse = components["schemas"]["routers__api__search__SearchResponse"];
+
+/** A single search hit. */
+export type SearchResultResponse = components["schemas"]["routers__api__search__SearchResultResponse"];
+
+/** A simple acknowledgement. */
+export type OkResponse = components["schemas"]["OkResponse"];
+
+/** The API version a request resolved to, and the versions available. */
+export type ApiVersionResponse = components["schemas"]["ApiVersionResponse"];
+
+/**
+ * A page of evaluation criteria.
+ *
+ * Not a generated type: the endpoint returns a bare array by default, and only
+ * emits the canonical `{data, pagination}` envelope once the caller opts in with
+ * `apiVersion: "2026-07-27"` or later. `pagination` is therefore absent unless
+ * opted in.
+ */
+export type EvaluationCriteriaListResponse = {
+  data: EvaluationCriteriaResponse[];
+  pagination?: PaginationResponse;
+};
+
 /** Request body for creating evaluation criteria. */
 export type CreateEvaluationCriteriaRequest = components["schemas"]["CreateEvaluationCriteriaRequest"];
 
@@ -230,7 +328,28 @@ export type EvaluationResultSummaryResponse = components["schemas"]["EvaluationR
 export type EvaluationResultWithCriteriaResponse = components["schemas"]["EvaluationResultWithCriteriaResponse"];
 
 /** Paginated list of evaluation results with criteria. */
-export type EvaluationResultWithCriteriaListResponse = components["schemas"]["EvaluationResultWithCriteriaListResponse"];
+/**
+ * A page of evaluation results with criteria context.
+ *
+ * Not a generated type: two endpoints share this shape and populate different
+ * halves of it.
+ *
+ * - `GET /agents/{id}/evaluation-results` is always paginated and fills `total`,
+ *   `page` and `limit`.
+ * - `GET /agents/{id}/runs/{runId}/evaluation-results` is version-gated: a bare
+ *   array by default, and the canonical `{data, pagination}` envelope once
+ *   `apiVersion` is `2026-07-27` or later — in which case the metadata is on
+ *   `pagination` and the flat fields are absent.
+ */
+export type EvaluationResultWithCriteriaListResponse = Omit<
+  components["schemas"]["EvaluationResultWithCriteriaListResponse"],
+  "total" | "page" | "limit"
+> & {
+  pagination?: PaginationResponse;
+  total?: number;
+  page?: number;
+  limit?: number;
+};
 
 /** Summary of an evaluation run. */
 export type EvaluationRunSummaryResponse = components["schemas"]["EvaluationRunSummaryResponse"];

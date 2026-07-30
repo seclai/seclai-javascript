@@ -108,6 +108,54 @@ https://seclai.github.io/seclai-javascript/latest/
 
 Release history is in [`CHANGELOG.md`](CHANGELOG.md).
 
+## API versioning
+
+The API dates its backward-incompatible changes. Nothing changes for you until
+you opt in, either per client or by pinning the account:
+
+```ts
+const client = new Seclai({
+  apiKey: "...",
+  apiVersion: SeclaiApiVersion.V2026_07_27, // sent as the Seclai-Version header
+});
+
+const state = await client.getApiVersion();      // what this request resolved to
+await client.updateApiVersion(SeclaiApiVersion.V2026_07_27); // pin the whole account
+```
+
+Leave `apiVersion` unset and the header is omitted, so the account's pinned
+baseline applies and responses keep their current shapes. Upgrading this package
+alone never changes the wire contract.
+
+Known versions are on `SeclaiApiVersion` (`V2026_07_01`, `V2026_07_27`, plus
+`Default` and `Latest`), imported from `@seclai/sdk`. A version this release was
+**not** built against throws at construction: a newer version can reshape
+responses, and this client would decode them incorrectly rather than reject them.
+Upgrade the package to adopt a new version, or set `allowUnknownApiVersion` if
+you have to move first and accept that risk.
+
+The guard only covers the header. An account pinned server-side can still be
+newer than this release — `getApiVersion()` reports the `effective_version` the
+request resolved to, and comparing it against `SeclaiApiVersion.Latest` is how
+you detect the gap.
+
+**What `2026-07-27` changes.** Undeclared query parameters become a 422 instead
+of being ignored, and list endpoints move to the canonical `{data, pagination}`
+envelope. The affected methods read both shapes, so they keep working either way
+— but the metadata moves:
+
+| Method | Before | From 2026-07-27 |
+| --- | --- | --- |
+| `listEvaluationCriteriaPage()` | bare array | `data` + `pagination` |
+| `listRunEvaluationResults()` | bare array | `data` + `pagination` |
+| `listAlertConfigs()` | `configs` + `total` | `data` + `pagination` |
+| `listModelAlerts()` | `alerts` + `total` | `data` + `pagination` |
+
+Prefer `pagination` over the flat `total`/`page`/`limit` properties, and read the
+last two with `res.data ?? res.configs` / `res.data ?? res.alerts`. The legacy
+keys will be deprecated and then removed once the canonical envelope is the
+default.
+
 ## Resources
 
 ### Identity
@@ -302,7 +350,10 @@ await client.markAgentAiSuggestion("agent_id", "conversation_id", { accepted: tr
 ### Agent evaluations
 
 ```ts
-const criteria = await client.listEvaluationCriteria("agent_id");
+const criteria = await client.listEvaluationCriteria("agent_id", { page: 1, limit: 50 });
+// page/limit only take effect with apiVersion "2026-07-27" or later; the legacy
+// response is unpaginated. listEvaluationCriteriaPage() returns the same items
+// plus a `pagination` object when opted in.
 const created = await client.createEvaluationCriteria("agent_id", { name: "Accuracy", ... });
 const detail = await client.getEvaluationCriteria("criteria_id");
 await client.updateEvaluationCriteria("criteria_id", { ... });
@@ -569,6 +620,7 @@ Send and receive agent email on your own domain instead of the shared
 `agent.seclai.com`. These endpoints require a user-bound credential (an
 account-only API key is refused with 403) and, for mutations, an account owner/admin.
 
+<!-- sdksync:check -->
 ```ts
 // Current domains, their DNS records, and what your plan allows
 const { domains, can_add_custom, has_custom } = await client.listEmailDomains();

@@ -13,6 +13,9 @@
  * @see {@link Seclai} for the main client class.
  * @packageDocumentation
  */
+export { SeclaiApiVersion } from "./versions";
+export type { ApiVersion } from "./versions";
+
 export {
   Seclai,
   SECLAI_API_URL,
@@ -136,6 +139,28 @@ export type {
   // Agent Evaluations
   AgentEvaluationTier,
   EvaluationCriteriaResponse,
+  EvaluationCriteriaListResponse,
+  ApiVersionResponse,
+  AlertDetailResponse,
+  AlertCommentResponse,
+  AlertSubscriberResponse,
+  UnreadCountResponse,
+  ModelRecommendationsResponse,
+  ModelRecommendationResponse,
+  ExperimentListResponse,
+  ExperimentSummaryResponse,
+  ExperimentDetailResponse,
+  CreateExperimentResponse,
+  CancelExperimentResponse,
+  SearchResponse,
+  SearchResultResponse,
+  OkResponse,
+  AlertListResponse,
+  AlertResponse,
+  AlertConfigListResponse,
+  AlertConfigResponse,
+  ModelAlertListResponse,
+  ModelAlertResponse,
   CreateEvaluationCriteriaRequest,
   UpdateEvaluationCriteriaRequest,
   EvaluationResultResponse,

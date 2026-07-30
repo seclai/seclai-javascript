@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 
 import {
@@ -7,6 +8,7 @@ import {
   SeclaiConfigurationError,
   SeclaiError,
   SeclaiStreamingError,
+  SeclaiApiVersion,
 } from "../src/index";
 import { parseIni, isTokenValid } from "../src/auth";
 
@@ -80,8 +82,16 @@ function makeSseResponse(
   });
 }
 
-function makeClient(handler: (req: RecordedRequest) => Response | Promise<Response>) {
-  return new Seclai({ apiKey: "test-key", baseUrl: "https://test.invalid", fetch: makeFetch(handler) });
+function makeClient(
+  handler: (req: RecordedRequest) => Response | Promise<Response>,
+  extra: Partial<ConstructorParameters<typeof Seclai>[0]> = {},
+) {
+  return new Seclai({
+    apiKey: "test-key",
+    baseUrl: "https://test.invalid",
+    fetch: makeFetch(handler),
+    ...extra,
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -353,22 +363,26 @@ describe("Agent Runs", () => {
     await client.getAgentRun("run_1", { includeStepOutputs: true });
   });
 
-  test("deleteAgentRun sends DELETE /agents/runs/:id", async () => {
+  test("deleteAgentRun is a deprecated alias that cancels", async () => {
     const client = makeClient((req) => {
       expect(req.method).toBe("DELETE");
       expect(new URL(req.url).pathname).toBe("/agents/runs/run_1");
-      return new Response(null, { status: 204 });
+      return jsonResponse({ id: "run_1", status: "cancelled" });
     });
     await client.deleteAgentRun("run_1");
   });
 
-  test("cancelAgentRun sends POST /agents/runs/:id/cancel", async () => {
+  test("cancelAgentRun sends DELETE /agents/runs/:id", async () => {
+    // Cancellation is DELETE on the run resource. This test asserted
+    // POST /agents/runs/:id/cancel, a path the API has never had, so it
+    // confirmed a 404-ing method rather than catching it.
     const client = makeClient((req) => {
-      expect(req.method).toBe("POST");
-      expect(new URL(req.url).pathname).toBe("/agents/runs/run_1/cancel");
+      expect(req.method).toBe("DELETE");
+      expect(new URL(req.url).pathname).toBe("/agents/runs/run_1");
       return jsonResponse({ id: "run_1", status: "cancelled" });
     });
-    await client.cancelAgentRun("run_1");
+    const run = await client.cancelAgentRun("run_1");
+    expect((run as { status: string }).status).toBe("cancelled");
   });
 });
 
@@ -567,10 +581,10 @@ describe("Memory Banks", () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe("Sources", () => {
-  test("listSources sends GET /sources/ with query params", async () => {
+  test("listSources sends GET /sources with query params", async () => {
     const client = makeClient((req) => {
       const u = new URL(req.url);
-      expect(u.pathname).toBe("/sources/");
+      expect(u.pathname).toBe("/sources");
       expect(u.searchParams.get("page")).toBe("2");
       expect(u.searchParams.get("order")).toBe("asc");
       expect(u.searchParams.get("account_id")).toBe("acc_1");
@@ -1068,11 +1082,52 @@ describe("Agent AI Assistant", () => {
 
 describe("Agent Evaluations", () => {
   test("listEvaluationCriteria sends GET /agents/:id/evaluation-criteria", async () => {
+    // Asserting only the path let the 2026-07 change through: the endpoint
+    // began returning a paginated envelope instead of a bare list, and this
+    // test discarded the body, so it stayed green while callers broke.
     const client = makeClient((req) => {
-      expect(new URL(req.url).pathname).toBe("/agents/ag_1/evaluation-criteria");
-      return jsonResponse({ items: [] });
+      const url = new URL(req.url);
+      expect(url.pathname).toBe("/agents/ag_1/evaluation-criteria");
+      expect(url.searchParams.get("page")).toBe("2");
+      expect(url.searchParams.get("limit")).toBe("25");
+      return jsonResponse({
+        data: [{ id: "ec1" }],
+        pagination: { page: 2, limit: 25, total: 7, pages: 1, has_next: false, has_prev: true },
+      });
     });
-    await client.listEvaluationCriteria("ag_1");
+    const result = await client.listEvaluationCriteria("ag_1", { page: 2, limit: 25 });
+    expect(result).toEqual([{ id: "ec1" }]);
+  });
+
+  test("listEvaluationCriteria unwraps the canonical envelope", async () => {
+    const client = makeClient(() =>
+      jsonResponse({
+        data: [{ id: "ec1" }],
+        pagination: { page: 1, limit: 50, total: 1, pages: 1, has_next: false, has_prev: false },
+      }),
+    );
+    expect(await client.listEvaluationCriteria("ag_1")).toEqual([{ id: "ec1" }]);
+  });
+
+  test("listEvaluationCriteria accepts a bare array too", async () => {
+    // Both shapes are live realities: the envelope is merged on main but not
+    // yet deployed, so decoding only one breaks the day the other ships.
+    const client = makeClient(() => jsonResponse([{ id: "ec1" }]));
+    expect(await client.listEvaluationCriteria("ag_1")).toEqual([{ id: "ec1" }]);
+  });
+
+  test("listEvaluationCriteriaPage exposes pagination metadata", async () => {
+    // The canonical {data, pagination} envelope, which the endpoint only emits
+    // once the caller opts in with apiVersion 2026-07-27 or later.
+    const client = makeClient(() =>
+      jsonResponse({
+        data: [{ id: "ec1" }],
+        pagination: { page: 2, limit: 25, total: 7, pages: 1, has_next: false, has_prev: true },
+      }),
+    );
+    const page = await client.listEvaluationCriteriaPage("ag_1", { page: 2, limit: 25 });
+    expect(page.data).toEqual([{ id: "ec1" }]);
+    expect(page.pagination?.total).toBe(7);
   });
 
   test("createEvaluationCriteria sends POST", async () => {
@@ -2329,5 +2384,294 @@ describe("Token Validation", () => {
     expect(isTokenValid({
       accessToken: "t", expiresAt: almostExpired, clientId: "c", region: "r", cognitoDomain: "d",
     })).toBe(false);
+  });
+});
+
+
+describe("API version", () => {
+  test("Seclai-Version header is omitted unless opted in", async () => {
+    // The point of the option: upgrading the SDK must not silently move an
+    // account onto a newer API version and change response shapes.
+    const client = makeClient((req) => {
+      expect(req.headers["seclai-version"]).toBeUndefined();
+      return jsonResponse({ data: [] });
+    });
+    await client.listAgents();
+  });
+
+  test("Seclai-Version header is sent when set", async () => {
+    const client = makeClient(
+      (req) => {
+        expect(req.headers["seclai-version"]).toBe("2026-07-27");
+        return jsonResponse({ data: [] });
+      },
+      { apiVersion: "2026-07-27" },
+    );
+    await client.listAgents();
+  });
+
+  test("getApiVersion sends GET /version", async () => {
+    const client = makeClient((req) => {
+      expect(req.method).toBe("GET");
+      expect(new URL(req.url).pathname).toBe("/version");
+      return jsonResponse({
+        pinned_version: null,
+        effective_version: "2026-01-01",
+        default_version: "2026-01-01",
+        latest_version: "2026-07-27",
+        known_versions: ["2026-01-01", "2026-07-27"],
+      });
+    });
+    const res = await client.getApiVersion();
+    expect(res.latest_version).toBe("2026-07-27");
+  });
+
+  test("updateApiVersion sends explicit null to clear the pin", async () => {
+    // null is the documented way to clear the pin, so it must reach the wire.
+    let body: unknown;
+    const client = makeClient((req) => {
+      expect(req.method).toBe("PUT");
+      expect(new URL(req.url).pathname).toBe("/version");
+      body = JSON.parse(req.bodyText!);
+      return jsonResponse({ pinned_version: null });
+    });
+    await client.updateApiVersion(null);
+    expect(body).toEqual({ version: null });
+  });
+});
+
+
+describe("Undeclared and required query params", () => {
+  test("listAlerts does not send severity", async () => {
+    // GET /alerts declares no severity filter: it never filtered anything, and
+    // sending it is a 422 once apiVersion is 2026-07-27 or later.
+    const client = makeClient((req) => {
+      expect(new URL(req.url).searchParams.has("severity")).toBe(false);
+      return jsonResponse({ data: [] });
+    });
+    await client.listAlerts({ severity: "high" });
+  });
+
+  test("listModelAlerts translates page to offset", async () => {
+    // /models/alerts declares limit/offset, not page, so page 2 used to return
+    // page 1.
+    const client = makeClient((req) => {
+      const q = new URL(req.url).searchParams;
+      expect(q.get("offset")).toBe("50");
+      expect(q.get("limit")).toBe("25");
+      expect(q.has("page")).toBe(false);
+      return jsonResponse({ data: [] });
+    });
+    await client.listModelAlerts({ page: 3, limit: 25 });
+  });
+
+  test("getAgentAiConversationHistory sends step_type", async () => {
+    // step_type is required by the API and the method had no way to send it,
+    // so every call answered 422.
+    const client = makeClient((req) => {
+      expect(new URL(req.url).searchParams.get("step_type")).toBe("llm");
+      return jsonResponse({ turns: [] });
+    });
+    await client.getAgentAiConversationHistory("ag_1", { stepType: "llm" });
+  });
+});
+
+
+describe("Version-gated evaluation result shapes", () => {
+  test("listRunEvaluationResults reads the canonical pagination", async () => {
+    // The run-level endpoint is version-gated to {data, pagination}. Reading
+    // only the flat total/page/limit reported undefined for opted-in callers.
+    const client = makeClient(
+      () =>
+        jsonResponse({
+          data: [],
+          pagination: { page: 2, limit: 25, total: 7, pages: 1, has_next: false, has_prev: true },
+        }),
+      { apiVersion: "2026-07-27" },
+    );
+    const res = await client.listRunEvaluationResults("ag_1", "r_1", { page: 2, limit: 25 });
+    expect(res.pagination?.total).toBe(7);
+  });
+
+  test("listAgentEvaluationResults still reads the flat shape", async () => {
+    // The agent-level endpoint is not version-gated, so the shared type must
+    // keep serving both.
+    const client = makeClient(() => jsonResponse({ data: [], total: 7, page: 2, limit: 25 }));
+    const res = await client.listAgentEvaluationResults("ag_1", { page: 2, limit: 25 });
+    expect(res.total).toBe(7);
+    expect(res.pagination).toBeUndefined();
+  });
+});
+
+
+describe("Typed alert list shapes", () => {
+  test("listAlerts decodes the typed envelope", async () => {
+    const client = makeClient(() =>
+      jsonResponse({
+        data: [{ id: "al1", title: "Disk full", status: "triggered" }],
+        pagination: { page: 1, limit: 20, total: 1, pages: 1, has_next: false, has_prev: false },
+      }),
+    );
+    const res = await client.listAlerts();
+    expect(res.data[0].id).toBe("al1");
+    expect(res.pagination.total).toBe(1);
+  });
+
+  test("listAlertConfigs reads either top-level key", async () => {
+    // `configs` by default, `data` once opted in.
+    const legacy = makeClient(() => jsonResponse({ configs: [{ id: "c1" }], total: 1 }));
+    const a = await legacy.listAlertConfigs();
+    expect(a.configs?.[0].id).toBe("c1");
+
+    const canonical = makeClient(() =>
+      jsonResponse({
+        data: [{ id: "c1" }],
+        pagination: { page: 1, limit: 20, total: 1, pages: 1, has_next: false, has_prev: false },
+      }),
+    );
+    const b = await canonical.listAlertConfigs();
+    expect(b.data?.[0].id).toBe("c1");
+    expect(b.pagination?.total).toBe(1);
+  });
+
+  test("listModelAlerts reads either top-level key", async () => {
+    const legacy = makeClient(() => jsonResponse({ alerts: [{ id: "m1" }], total: 1 }));
+    const a = await legacy.listModelAlerts();
+    expect(a.alerts?.[0].id).toBe("m1");
+
+    const canonical = makeClient(() =>
+      jsonResponse({
+        data: [{ id: "m1" }],
+        pagination: { page: 1, limit: 20, total: 1, pages: 1, has_next: false, has_prev: false },
+      }),
+    );
+    const b = await canonical.listModelAlerts();
+    expect(b.data?.[0].id).toBe("m1");
+  });
+});
+
+describe("Typed returns", () => {
+  test("search returns the typed envelope", async () => {
+    const client = makeClient(() =>
+      jsonResponse({ results: [{ entity_type: "agent", name: "Support" }] }),
+    );
+    const res = await client.search({ query: "support" });
+    // Deliberately not paginated — the spec carves this shape out to match the
+    // MCP search_resources tool.
+    expect(res.results[0].name).toBe("Support");
+  });
+
+  test("getAlert returns the typed detail", async () => {
+    const client = makeClient(() =>
+      jsonResponse({ alert: { id: "al1", title: "Disk full" }, comments: [], subscribers: [] }),
+    );
+    const res = await client.getAlert("al1");
+    expect(res.alert.title).toBe("Disk full");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Retyped methods — runtime smoke
+//
+// The 20 methods below had their return types narrowed from `unknown` by a bulk
+// edit. A TypeScript `as` cast is unchecked, so neither the compiler nor the
+// type tests can prove the body still issues the right request and hands back a
+// parsed object. This table calls each one against a mock and asserts both.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("Retyped methods issue the right request and parse the body", () => {
+  const BODY = { id: "x1", alert: { id: "x1" }, results: [], data: [], ok: true };
+
+  const cases: Array<[string, string, string, (c: Seclai) => Promise<unknown>]> = [
+    ["getAlert", "GET", "/alerts/a1", (c) => c.getAlert("a1")],
+    ["changeAlertStatus", "POST", "/alerts/a1/status", (c) => c.changeAlertStatus("a1", { status: "resolved" })],
+    ["addAlertComment", "POST", "/alerts/a1/comments", (c) => c.addAlertComment("a1", { comment: "hi" })],
+    ["subscribeToAlert", "POST", "/alerts/a1/subscribe", (c) => c.subscribeToAlert("a1")],
+    ["unsubscribeFromAlert", "POST", "/alerts/a1/unsubscribe", (c) => c.unsubscribeFromAlert("a1")],
+    ["listAlerts", "GET", "/alerts", (c) => c.listAlerts()],
+    ["listAlertConfigs", "GET", "/alerts/configs", (c) => c.listAlertConfigs()],
+    ["createAlertConfig", "POST", "/alerts/configs", (c) => c.createAlertConfig({ alert_type: "x" } as never)],
+    ["getAlertConfig", "GET", "/alerts/configs/c1", (c) => c.getAlertConfig("c1")],
+    ["updateAlertConfig", "PATCH", "/alerts/configs/c1", (c) => c.updateAlertConfig("c1", {} as never)],
+    ["listModelAlerts", "GET", "/models/alerts", (c) => c.listModelAlerts()],
+    ["getUnreadModelAlertCount", "GET", "/models/alerts/unread-count", (c) => c.getUnreadModelAlertCount()],
+    ["getModelRecommendations", "GET", "/models/m1/recommendations", (c) => c.getModelRecommendations("m1")],
+    ["listExperiments", "GET", "/models/playground/experiments", (c) => c.listExperiments()],
+    ["createExperiment", "POST", "/models/playground/experiments", (c) => c.createExperiment({} as never)],
+    ["getExperiment", "GET", "/models/playground/experiments/e1", (c) => c.getExperiment("e1")],
+    ["cancelExperiment", "POST", "/models/playground/experiments/e1/cancel", (c) => c.cancelExperiment("e1")],
+    ["search", "GET", "/search", (c) => c.search({ query: "q" })],
+    ["acceptAiMemoryBankSuggestion", "PATCH", "/ai-assistant/memory-bank/cv1", (c) => c.acceptAiMemoryBankSuggestion("cv1", {} as never)],
+    ["acceptMemoryBankAiSuggestion", "PATCH", "/memory_banks/ai-assistant/cv1", (c) => c.acceptMemoryBankAiSuggestion("cv1", {} as never)],
+  ];
+
+  test.each(cases)("%s sends %s %s and returns a parsed object", async (_name, verb, path, call) => {
+    let seen: { method: string; pathname: string } | undefined;
+    const client = makeClient((req) => {
+      seen = { method: req.method, pathname: new URL(req.url).pathname };
+      return jsonResponse(BODY);
+    });
+    const res = await call(client);
+    expect(seen).toEqual({ method: verb, pathname: path });
+    // A parsed object, not a Response and not a raw string.
+    expect(typeof res).toBe("object");
+    expect(res).not.toBeNull();
+    expect(res).toHaveProperty("id", "x1");
+  });
+});
+
+describe("API version constants", () => {
+  test("constants track the spec's x-seclai-versions block", async () => {
+    const spec = JSON.parse(
+      readFileSync(new URL("../openapi/seclai.openapi.json", import.meta.url), "utf8"),
+    );
+    const v = spec["x-seclai-versions"];
+    expect(SeclaiApiVersion.Default).toBe(v.default);
+    expect(SeclaiApiVersion.Latest).toBe(v.latest);
+    const known = Object.entries(SeclaiApiVersion)
+      .filter(([k]) => k.startsWith("V"))
+      .map(([, val]) => val);
+    expect(known).toEqual(v.known);
+  });
+
+  test("a constant reaches the wire", async () => {
+    const client = makeClient(
+      (req) => {
+        expect(req.headers["seclai-version"]).toBe("2026-07-27");
+        return jsonResponse({ data: [] });
+      },
+      { apiVersion: SeclaiApiVersion.Latest },
+    );
+    await client.listAgents();
+  });
+
+  test("an unknown version is rejected", () => {
+    // A newer server version can reshape responses, and this client would
+    // mis-decode them silently rather than error. Fail closed at construction.
+    expect(() => new Seclai({ apiKey: "k", apiVersion: "2099-01-01" })).toThrow(
+      /2099-01-01[\s\S]*allowUnknownApiVersion/,
+    );
+  });
+
+  test("an unknown version is allowed when asked", async () => {
+    const client = makeClient(
+      (req) => {
+        expect(req.headers["seclai-version"]).toBe("2099-01-01");
+        return jsonResponse({ data: [] });
+      },
+      { apiVersion: "2099-01-01", allowUnknownApiVersion: true },
+    );
+    await client.listAgents();
+  });
+
+  test("a known version needs no escape hatch", async () => {
+    const client = makeClient(
+      (req) => {
+        expect(req.headers["seclai-version"]).toBe(SeclaiApiVersion.Latest);
+        return jsonResponse({ data: [] });
+      },
+      { apiVersion: SeclaiApiVersion.Latest },
+    );
+    await client.listAgents();
   });
 });
