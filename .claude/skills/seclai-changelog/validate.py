@@ -70,10 +70,14 @@ def main():
         if m:
             close_group()
             g = m.group(1)
-            in_group, group_entries = g, []
             if cur is None:
+                # Stay outside the group. Entering it would let close_group()
+                # later report against a release that never started, emitting a
+                # confusing "None: ..." on top of the real error below.
+                in_group, group_entries = None, []
                 errors.append(f"line {n}: '### {g}' before any release heading")
                 continue
+            in_group, group_entries = g, []
             if g not in GROUPS:
                 errors.append(f"{cur}: unknown group '{g}' (allowed: {', '.join(GROUPS)})")
                 continue
