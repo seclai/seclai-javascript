@@ -441,21 +441,37 @@ export class Seclai {
 
     this.baseUrl = opts.baseUrl ?? getEnv("SECLAI_API_URL") ?? SECLAI_API_URL;
 
-    // `defaultHeaders` is spread last so an explicit header wins, which means it
-    // can also carry a Seclai-Version. Validate whichever value actually reaches
-    // the wire, not just the option — otherwise the guard is one header away
-    // from being bypassed, and a client could send an unvalidated version while
-    // `apiVersion` reads as a known one.
-    const headerVersion = Object.entries(opts.defaultHeaders ?? {}).find(
-      ([k]) => k.toLowerCase() === "seclai-version",
-    )?.[1];
-    const effectiveVersion = headerVersion ?? opts.apiVersion;
+    // Merge first, then validate what the merge produced. `defaultHeaders` is
+    // applied last so an explicit header wins, which means it can carry its own
+    // Seclai-Version — and it may carry several in differing cases. Inspecting
+    // the options instead would have to predict which one survives: picking the
+    // first match while the merge lets the last win is a guard that validates a
+    // value the client never sends.
+    //
+    // Keys are compared case-insensitively so a caller-supplied `seclai-version`
+    // replaces ours rather than adding a second wire header.
+    const merged: Record<string, string> = opts.apiVersion
+      ? { "Seclai-Version": opts.apiVersion }
+      : {};
+    let versionKey = opts.apiVersion ? "Seclai-Version" : undefined;
+    for (const [key, value] of Object.entries(opts.defaultHeaders ?? {})) {
+      for (const existing of Object.keys(merged)) {
+        if (existing.toLowerCase() === key.toLowerCase()) delete merged[existing];
+      }
+      merged[key] = value;
+      if (key.toLowerCase() === "seclai-version") versionKey = key;
+    }
+
+    const effectiveVersion = versionKey ? merged[versionKey] : undefined;
     if (
       effectiveVersion &&
       !opts.allowUnknownApiVersion &&
       !KNOWN_API_VERSIONS.includes(effectiveVersion)
     ) {
-      const via = headerVersion ? "defaultHeaders['Seclai-Version']" : "apiVersion";
+      const via =
+        versionKey === "Seclai-Version" && merged[versionKey] === opts.apiVersion
+          ? "apiVersion"
+          : `defaultHeaders['${versionKey}']`;
       throw new SeclaiConfigurationError(
         `Unknown API version '${effectiveVersion}' (via ${via}). This release was ` +
           `built against ${KNOWN_API_VERSIONS.join(", ")}. A newer API version can ` +
@@ -463,18 +479,6 @@ export class Seclai {
           `than reject. Upgrade the package, or set allowUnknownApiVersion to ` +
           `proceed anyway.`,
       );
-    }
-
-    // Header keys are compared case-insensitively so a caller-supplied
-    // `seclai-version` replaces ours rather than producing two wire headers.
-    const merged: Record<string, string> = opts.apiVersion
-      ? { "Seclai-Version": opts.apiVersion }
-      : {};
-    for (const [key, value] of Object.entries(opts.defaultHeaders ?? {})) {
-      for (const existing of Object.keys(merged)) {
-        if (existing.toLowerCase() === key.toLowerCase()) delete merged[existing];
-      }
-      merged[key] = value;
     }
     this.defaultHeaders = merged;
     this.fetcher = fetcher;

@@ -2751,3 +2751,44 @@ describe("API version guard cannot be bypassed via defaultHeaders", () => {
     ).not.toThrow();
   });
 });
+
+describe("API version guard validates what the merge produces", () => {
+  test("a second, differently-cased header cannot slip past the guard", () => {
+    // The merge lets the LAST entry win. Validating the first match would
+    // approve "2026-07-27" and then send "2099-01-01".
+    expect(
+      () =>
+        new Seclai({
+          apiKey: "k",
+          defaultHeaders: {
+            "Seclai-Version": SeclaiApiVersion.V2026_07_27,
+            "seclai-version": "2099-01-01",
+          },
+        }),
+    ).toThrow(/2099-01-01/);
+  });
+
+  test("and the value it approves is the one that reaches the wire", async () => {
+    let seen: string[] = [];
+    const client = makeClient(
+      (req) => {
+        seen = [req.headers["seclai-version"] ?? ""];
+        return jsonResponse({ data: [] });
+      },
+      {
+        defaultHeaders: {
+          "Seclai-Version": SeclaiApiVersion.V2026_07_01,
+          "seclai-version": SeclaiApiVersion.V2026_07_27,
+        },
+      },
+    );
+    await client.listAgents();
+    expect(seen).toEqual([SeclaiApiVersion.V2026_07_27]);
+  });
+
+  test("the option is still named as the source when it is the culprit", () => {
+    expect(() => new Seclai({ apiKey: "k", apiVersion: "2099-01-01" })).toThrow(
+      /via apiVersion/,
+    );
+  });
+});

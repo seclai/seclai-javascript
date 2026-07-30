@@ -22,6 +22,7 @@
 
 ### Fixed
 
+- Validate the merged `Seclai-Version` rather than the first match in `defaultHeaders`. The merge lets the last entry win, so two spellings of the header meant the guard could approve one value and the client send another
 - Validate a `Seclai-Version` supplied through `defaultHeaders`, not just the `apiVersion` option. `defaultHeaders` is applied last so it wins, which left the unknown-version guard one header away from being bypassed; a differently-cased key also emitted two wire headers
 - Throw from `getAgentAiConversationHistory()` when `opts.stepType` is missing. It was optional and dropped by `buildURL`, so a call without it still 422'd — the failure this method was changed to prevent
 - Decode either wire shape in `listRunEvaluationResults()`. The endpoint answers with a bare array, which the declared envelope type could not read, so the method returned nothing; it now also reads the canonical `{data, pagination}` envelope. `listAgentEvaluationResults()` is genuinely flat and is unaffected
