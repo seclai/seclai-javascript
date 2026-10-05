@@ -13,6 +13,7 @@
  * @see {@link Seclai} for the main client class.
  * @packageDocumentation
  */
+export type { PaginatedPage } from "./client";
 export { SeclaiApiVersion } from "./versions";
 export type { ApiVersion } from "./versions";
 

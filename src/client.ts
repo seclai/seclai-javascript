@@ -277,6 +277,16 @@ function buildURL(baseUrl: string, path: string, query?: Record<string, unknown>
   return url;
 }
 
+/**
+ * One page as a fetcher handed to {@link Seclai.paginate} may return it: a list
+ * method's `{data, pagination}` envelope, a bare array, or `{items, pagination}`
+ * with a `total_pages` count.
+ */
+export type PaginatedPage<T> =
+  | T[]
+  | { data?: T[] | null; pagination?: { pages?: number; has_next?: boolean } | null }
+  | { items: T[]; pagination?: { page: number; total_pages: number } };
+
 /** The items of a list that is a bare array by default and `{data, pagination}` from 2026-07-27. */
 function listItems<T>(res: unknown): T[] {
   if (Array.isArray(res)) return res as T[];
@@ -421,7 +431,7 @@ function inferMimeType(fileName: string | undefined): string | undefined {
  * const client = new Seclai({ apiKey: "sk-..." });
  *
  * // List agents
- * const { items } = await client.listAgents();
+ * const { data: agents } = await client.listAgents();
  *
  * // Run an agent
  * const run = await client.runAgent("agent-id", { input: "Hello!" });
@@ -2194,8 +2204,9 @@ export class Seclai {
    * @param sourceId - Source connection identifier.
    * @param opts - Pagination, sorting, and filters. Pass the `content_version_id`
    *   values the upload methods return as `contentVersionIds` to poll a batch of
-   *   uploads in one request. An empty `contentVersionIds` matches nothing, so
-   *   it returns an empty page without sending a request.
+   *   uploads in one request, at most 500 ids per request. An empty
+   *   `contentVersionIds` matches nothing, so it returns an empty page without
+   *   sending a request.
    * @returns The items under `data` with `pagination`, on every API version.
    */
   async listSourceContents(
@@ -3380,40 +3391,56 @@ export class Seclai {
   /**
    * Auto-paginate through a list endpoint.
    *
-   * Yields individual items from each page, automatically fetching the next page
-   * until all items have been returned.
+   * Yields individual items from each page, fetching the next page until the
+   * response reports there is none. A fetcher that answers with a bare array has
+   * no further pages, so its items are yielded once.
    *
    * @param fetchPage - A function that fetches a single page given `{ page, limit }`.
    * @param opts - Page size (default: 50).
+   * @throws {@link SeclaiError} When a page carries its items under neither `data` nor `items`.
    *
    * @example
    * ```ts
    * for await (const agent of client.paginate(
    *   (opts) => client.listAgents(opts),
    * )) {
-   *   console.log(agent);
+   *   console.log(agent.name);
    * }
    * ```
    */
   async *paginate<T>(
-    fetchPage: (opts: { page: number; limit: number }) => Promise<{ items: T[]; pagination?: { page: number; total_pages: number } }>,
+    fetchPage: (opts: { page: number; limit: number }) => Promise<PaginatedPage<T>>,
     opts?: { limit?: number },
   ): AsyncGenerator<T, void, undefined> {
     const limit = opts?.limit ?? 50;
     let page = 1;
 
     while (true) {
-      const result = await fetchPage({ page, limit });
-      for (const item of result.items) {
-        yield item;
+      const result = (await fetchPage({ page, limit })) as unknown;
+      if (Array.isArray(result)) {
+        yield* result as T[];
+        return;
       }
+      const body = (result ?? {}) as {
+        data?: T[] | null;
+        items?: T[] | null;
+        pagination?: { pages?: number; total_pages?: number; has_next?: boolean } | null;
+      };
+      const items = "data" in body ? body.data ?? [] : body.items;
+      if (!Array.isArray(items)) {
+        throw new SeclaiError(
+          "paginate() could not find the page's items: expected an array, or an object with a `data` or `items` array.",
+        );
+      }
+      yield* items;
 
-      if (
-        !result.pagination ||
-        result.items.length < limit ||
-        page >= result.pagination.total_pages
-      ) {
-        break;
+      const pagination = body.pagination;
+      if (!pagination || items.length === 0) return;
+      if (typeof pagination.has_next === "boolean") {
+        if (!pagination.has_next) return;
+      } else {
+        const pages = pagination.pages ?? pagination.total_pages;
+        if (items.length < limit || pages === undefined || page >= pages) return;
       }
       page++;
     }

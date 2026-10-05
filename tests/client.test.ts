@@ -1212,9 +1212,99 @@ describe("Search", () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe("Pagination Helper", () => {
-  test("paginate yields items across multiple pages", async () => {
+  const pageOf = (page: number, pages: number, limit: number, total: number) => ({
+    page,
+    limit,
+    total,
+    pages,
+    has_next: page < pages,
+    has_prev: page > 1,
+  });
+
+  // Two full-envelope pages, as the server sends them, then nothing more.
+  function twoPageClient(path: string, seen: string[]) {
+    return makeClient((req) => {
+      const url = new URL(req.url);
+      expect(url.pathname).toBe(path);
+      seen.push(url.search);
+      const page = Number(url.searchParams.get("page"));
+      return jsonResponse({
+        data: page === 1 ? [{ id: "a" }, { id: "b" }] : [{ id: "c" }],
+        pagination: pageOf(page, 2, 2, 3),
+      });
+    });
+  }
+
+  test("paginate walks listSources and stops after the last page", async () => {
+    const seen: string[] = [];
+    const client = twoPageClient("/sources", seen);
+    const ids: string[] = [];
+    for await (const source of client.paginate((opts) => client.listSources(opts), { limit: 2 })) {
+      ids.push(source.id);
+    }
+    expect(ids).toEqual(["a", "b", "c"]);
+    expect(seen).toEqual(["?page=1&limit=2", "?page=2&limit=2"]);
+  });
+
+  test("paginate walks listAgents and stops after the last page", async () => {
+    const seen: string[] = [];
+    const client = twoPageClient("/agents", seen);
+    const ids: string[] = [];
+    for await (const agent of client.paginate((opts) => client.listAgents(opts), { limit: 2 })) {
+      ids.push(agent.id);
+    }
+    expect(ids).toEqual(["a", "b", "c"]);
+    expect(seen).toEqual(["?page=1&limit=2", "?page=2&limit=2"]);
+  });
+
+  test("paginate makes one request for a single full page", async () => {
+    let requests = 0;
+    const client = makeClient(() => {
+      requests += 1;
+      return jsonResponse({ data: [{ id: "a" }, { id: "b" }], pagination: pageOf(1, 1, 2, 2) });
+    });
+    const ids: string[] = [];
+    for await (const source of client.paginate((opts) => client.listSources(opts), { limit: 2 })) {
+      ids.push(source.id);
+    }
+    expect(ids).toEqual(["a", "b"]);
+    expect(requests).toBe(1);
+  });
+
+  test("paginate follows pages when has_next is absent", async () => {
+    const client = makeClient(() => jsonResponse({}));
+    let fetched = 0;
+    const items: string[] = [];
+    for await (const item of client.paginate(
+      async ({ page }) => {
+        fetched += 1;
+        return { data: page === 1 ? ["a", "b"] : ["c"], pagination: { pages: 2 } };
+      },
+      { limit: 2 },
+    )) {
+      items.push(item);
+    }
+    expect(items).toEqual(["a", "b", "c"]);
+    expect(fetched).toBe(2);
+  });
+
+  test("paginate yields a bare array once", async () => {
+    let requests = 0;
+    const client = makeClient(() => {
+      requests += 1;
+      return jsonResponse([{ id: "p1" }, { id: "p2" }]);
+    });
+    const ids: string[] = [];
+    for await (const drive of client.paginate(() => client.listCloudDrives(), { limit: 2 })) {
+      ids.push(drive.id);
+    }
+    expect(ids).toEqual(["p1", "p2"]);
+    expect(requests).toBe(1);
+  });
+
+  test("paginate still accepts a custom fetcher's items and total_pages", async () => {
     let pagesFetched = 0;
-    const client = makeClient(() => jsonResponse({})); // unused in this test
+    const client = makeClient(() => jsonResponse({}));
 
     const allItems: string[] = [];
     for await (const item of client.paginate(
@@ -1234,17 +1324,26 @@ describe("Pagination Helper", () => {
     expect(pagesFetched).toBe(2);
   });
 
-  test("paginate stops on single page", async () => {
+  test("paginate treats a null data as an empty page", async () => {
     const client = makeClient(() => jsonResponse({}));
+    const items: unknown[] = [];
+    for await (const item of client.paginate(async () => ({ data: null }))) items.push(item);
+    expect(items).toEqual([]);
+  });
 
-    const allItems: string[] = [];
-    for await (const item of client.paginate(
-      async () => ({ items: ["x"], pagination: { page: 1, total_pages: 1 } }),
-    )) {
-      allItems.push(item);
-    }
-
-    expect(allItems).toEqual(["x"]);
+  test("paginate throws SeclaiError on a page with no items key", async () => {
+    const client = makeClient(() => jsonResponse({ configs: [{ id: "c1" }], total: 1 }));
+    const run = async () => {
+      // The legacy `configs` shape is not one paginate() reads; the cast stands
+      // in for a caller whose fetcher is typed more loosely than it behaves.
+      for await (const _ of client.paginate<unknown>(
+        async (opts) => (await client.listAlertConfigs(opts)) as { data?: unknown[] },
+      )) {
+        void _;
+      }
+    };
+    await expect(run()).rejects.toThrow(SeclaiError);
+    await expect(run()).rejects.not.toThrow(TypeError);
   });
 });
 

@@ -730,8 +730,9 @@ await client.submitAiFeedback({ ... });
 
 ## Pagination helper
 
-Automatically iterate through all pages:
+Automatically iterate through all pages of a list method:
 
+<!-- sdksync:check -->
 ```ts
 for await (const source of client.paginate(
   (opts) => client.listSources(opts),
