@@ -362,7 +362,7 @@ export interface paths {
         put?: never;
         /**
          * Cancel all queued inbound-email runs
-         * @description Fail all of the account's QUEUED (over-quota parked) inbound-email runs at once. A queued run consumed no quota or credits at queue time, so this merely fails them. Returns the count cancelled.
+         * @description Fail all of the account's QUEUED (over-quota parked) inbound-email runs at once. A queued run has consumed no quota, so this merely fails them. Returns the count cancelled.
          *
          *     Auth & scoping: requires `X-API-Key` header or OAuth Bearer token for an account owner/admin; scoped to the key's account.
          */
@@ -407,6 +407,8 @@ export interface paths {
         /**
          * Preview an agent_definition import
          * @description Validate an `agent_definition` payload (the same shape produced by `GET /agents/{agent_id}/export`) without creating or modifying any agent. On success returns a summary the client can show before commit (counts of steps, schedules, alert configs, evaluation criteria, governance policies). On failure returns the same 422 body shape used by `POST /agents` and `PUT /agents/{id}` so callers can render line/column-anchored errors.
+         *
+         *     Coverage: everything decidable from the payload itself — schema, step ids, nesting depth, text lengths, attachment references, prompt-tool declarations, step-graph cycles, racing step references, and `for_each` aggregation. Rules that depend on account state (email recipients, memory-bank types, cloud-drive connections, the agent's own trigger) can only run at save time, so `POST /agents` may still reject a payload this endpoint accepts.
          *
          *     Auth & scoping:
          *     - Requires `X-API-Key` header or OAuth Bearer token. No DB writes.
@@ -469,7 +471,7 @@ export interface paths {
          * Cancel an agent run
          * @description Cancel an in-flight (`processing`) or queued (`queued`) agent run.
          *
-         *     A `queued` run is an inbound-email run parked by the per-plan rate quota that has not yet been dispatched; cancelling it consumes no quota or credits.
+         *     A `queued` run is an inbound-email run parked by the per-plan rate quota that has not yet been dispatched; it has consumed no quota.
          *
          *     If the run is already in a terminal state (`completed` or `failed`), cancellation will be rejected.
          *
@@ -706,7 +708,7 @@ export interface paths {
          *     - `write_content_attachment`: Write a file-backed attachment to content (optionally indexed for retrieval; content-triggered agents only. Fields: `attachment_key`, `content`, `content_type`, `indexed`)
          *     - `load_content_attachment`: Load a previously written attachment (content-triggered agents only. Fields: `attachment_key`)
          *     - `load_content`: Load the full text body of a source document (typically used with content-triggered agents; can also load by explicit `content_version_id`. Fields: `content_version_id` optional)
-         *     - `streaming_result`: Stream LLM tokens in real-time via SSE (must be a direct child of `prompt_call`; requires `dynamic_input` or `template_input` trigger; `priority: true` enables real-time streaming)
+         *     - `streaming_result`: Stream LLM tokens in real-time via SSE (must be a direct child of `prompt_call`; requires `dynamic_input` or `template_input` trigger; `priority: true` enables real-time streaming). To stream **and** return a schema-validated payload, add a sibling branch `extract_content` (`expected_format: "json"` + `json_schema`) → `display_result` under the same `prompt_call` — a `display_result` takes precedence over the stream regardless of which finishes first, so its validated output becomes the run's result while the tokens act as a progress channel
          *     - `display_result`: Show output to the user
          *     - `join`: Merge parallel branches
          *     - `merge`: Combine multiple inputs into a single templated output
@@ -843,8 +845,8 @@ export interface paths {
          * @description Run an ephemeral evaluation against provided step output without persisting results.
          *
          *     Use this to interactively test evaluation prompts and expectation
-         *     configurations while editing criteria.  No credits are consumed because
-         *     the result is not recorded.
+         *     configurations while editing criteria.  The evaluation is a billed LLM
+         *     call; only its result goes unrecorded.
          */
         post: operations["test_draft_evaluation_api_agents__agent_id__evaluation_criteria_test_draft_post"];
         delete?: never;
@@ -912,7 +914,7 @@ export interface paths {
          *     The response contains the full definition, trigger configuration with schedules, alert configs, evaluation criteria, agent-scoped governance policies, and a resolved dependency manifest that maps every referenced external entity UUID to its human-readable name.
          *
          *     Response shape:
-         *     - `export_version`: schema version (currently `"2"`)
+         *     - `export_version`: schema version (currently `"5"`)
          *     - `exported_at`: ISO-8601 timestamp
          *     - `agent`: name, description, schema_version, definition, timestamps
          *     - `trigger`: trigger type, input template, schedules
@@ -996,7 +998,7 @@ export interface paths {
          *
          *     Key fields:
          *     - `input`: text input for agents with a `dynamic_input` trigger.
-         *     - `input_upload_id`: alternatively, reference a file previously uploaded via `POST /agents/{agent_id}/upload-input` (mutually exclusive with `input`).
+         *     - `input_upload_id` / `input_upload_ids`: reference one or more files previously uploaded via `POST /agents/{agent_id}/upload-input`. Send them **with** `input` to pair prompt text with the files (the text leads, each file's extracted text follows); only the two upload fields are mutually exclusive with each other.
          *     - `priority`: set true for latency-sensitive, user-facing work. For agents with a `streaming_result` step, set `priority=true` to enable real-time token streaming; otherwise the run still proceeds, but without live token streaming.
          *     - `metadata`: a JSON object that becomes available to agent steps for string substitution.
          *
@@ -1037,11 +1039,12 @@ export interface paths {
          *
          *     Input options (for `dynamic_input` triggers):
          *     - `input`: text input passed directly.
-         *     - `input_upload_id`: reference a file uploaded via `POST /agents/{agent_id}/upload-input` (mutually exclusive with `input`).
+         *     - `input_upload_id` / `input_upload_ids`: reference one or more files uploaded via `POST /agents/{agent_id}/upload-input`. Combine either with `input` to send prompt text alongside the files; only the two upload fields are mutually exclusive with each other.
          *
          *     Client guidance:
          *     - Keep the connection open and handle keepalive comments.
          *     - On `timeout` or `error`, the payload includes `run_id` so clients can resume by polling `GET /agents/runs/{run_id}`.
+         *     - `stream_token` events carry the model's raw output. When the agent pairs `streaming_result` with a sibling `extract_content`/`display_result` branch, that branch's `display_result` takes precedence over the stream, so the `done` snapshot's `output` is the validated payload and the tokens are a progress channel — render tokens live, but read the result from `done`. Check `done.status` first: the streamed text is already the run's output when the stream ends, so a run that FAILED its validation step still carries that raw text in `output`.
          *
          *     Auth & scoping:
          *     - Requires `X-API-Key` header or OAuth Bearer token. All resources are scoped to the caller's account.
@@ -1580,7 +1583,7 @@ export interface paths {
         put?: never;
         /**
          * Subscribe to alert
-         * @description Subscribe the current user to an alert. Subscribed users receive email notifications when the alert status changes or new comments are added.
+         * @description Subscribe the current user to an alert. Subscribed users receive email notifications when the alert status changes or new comments are added, for as long as they remain an owner or administrator of the account.
          *
          *     Auth & scoping:
          *     - Requires `X-API-Key` header or OAuth Bearer token.
@@ -1609,6 +1612,152 @@ export interface paths {
          *     - Requires `X-API-Key` header or OAuth Bearer token.
          */
         post: operations["unsubscribe_from_alert_api_alerts__alert_id__unsubscribe_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cloud-drives": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the account's cloud-drive connections
+         * @description List the account's cloud-drive connections. Use a connection's `id` as `cloud_drive_connection_id` when creating a `cloud_drive` content source or binding a file-change agent trigger. `realtime_updates` reports whether changes arrive within seconds or on the scheduled backstop sweep.
+         *
+         *     Requires an API key or OAuth token scoped to the account. Cloud-drive secrets are never returned.
+         */
+        get: operations["list_cloud_drives_api_api_cloud_drives_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cloud-drives/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List configured cloud-drive providers
+         * @description List the cloud-drive providers whose OAuth app is configured on this deployment (e.g. Dropbox, Google Drive), with the permissions each requests. A provider missing from this list cannot be connected here.
+         *
+         *     Requires an API key or OAuth token scoped to the account. Cloud-drive secrets are never returned.
+         */
+        get: operations["list_cloud_drive_providers_api_api_cloud_drives_providers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cloud-drives/{connection_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a cloud-drive connection
+         * @description Fetch a single cloud-drive connection by id.
+         *
+         *     Requires an API key or OAuth token scoped to the account. Cloud-drive secrets are never returned.
+         */
+        get: operations["get_cloud_drive_api_api_cloud_drives__connection_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a cloud-drive connection
+         * @description Soft-delete a connection and clear its tokens. Refused with **409** while anything still depends on it — a live agent trigger, or a `cloud_drive` content source ingesting into a knowledge base. `GET /{connection_id}/agents` shows which agents reference it, but does NOT list content sources, so treat the 409 as the authoritative check rather than a clean /agents response.
+         *
+         *     Requires an API key or OAuth token scoped to the account. Cloud-drive secrets are never returned.
+         */
+        delete: operations["delete_cloud_drive_api_api_cloud_drives__connection_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update a cloud-drive connection
+         * @description Rename a connection and/or change the folder it watches. Changing the folder resets the sync cursor, so existing files in the new folder are not replayed as triggers.
+         *
+         *     Requires an API key or OAuth token scoped to the account. Cloud-drive secrets are never returned.
+         */
+        patch: operations["update_cloud_drive_api_api_cloud_drives__connection_id__patch"];
+        trace?: never;
+    };
+    "/cloud-drives/{connection_id}/agents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List agents using a cloud-drive connection
+         * @description Agents that reference this connection — via a cloud-drive step, a `prompt_call` cloud-drive tool, or a file-change trigger. Check this before disconnecting or deleting a connection.
+         *
+         *     Requires an API key or OAuth token scoped to the account. Cloud-drive secrets are never returned.
+         */
+        get: operations["get_agents_using_cloud_drive_api_api_cloud_drives__connection_id__agents_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cloud-drives/{connection_id}/disconnect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Disconnect a cloud-drive connection
+         * @description Revoke and clear the stored tokens and stop change notifications, keeping the connection row so it can be reconnected from the app. Agents bound to it stop firing until it is reconnected.
+         *
+         *     Requires an API key or OAuth token scoped to the account. Cloud-drive secrets are never returned.
+         */
+        post: operations["disconnect_cloud_drive_api_api_cloud_drives__connection_id__disconnect_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cloud-drives/{connection_id}/rejections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List files this connection did not process
+         * @description Recent files the connection deliberately skipped, newest first, with the reason: `too_large` (above the size cap), `download_failed` (the provider would not serve the bytes), or `flood` (the per-sync or per-account run cap was hit, so remaining changes were dropped).
+         *
+         *     This is the answer to "why didn't my agent run for that file?" — a skipped file fires no trigger and appears nowhere else.
+         *
+         *     Requires an API key or OAuth token scoped to the account. Cloud-drive secrets are never returned.
+         */
+        get: operations["list_cloud_drive_rejections_api_api_cloud_drives__connection_id__rejections_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1654,8 +1803,10 @@ export interface paths {
          *     - `text/xml`
          *
          *     Notes:
+         *     - A key bound to a user must belong to an owner or administrator of the account; a viewer's key is refused with 403 `permission_denied`. Account-scoped keys carry no user and are unaffected.
          *     - Use this endpoint for small text payloads; larger files should use `/upload`.
          *     - `title` is merged into `metadata.title` when not already present.
+         *     - The replacement is indexed in the background. This `SourceConnectionContentVersion` ID keeps working, and reads return the previous content until indexing finishes; poll `list_source_content_status` to follow it. The returned `content_version_id` is the new version.
          */
         put: operations["replace_content_with_inline_text_api_contents__source_connection_content_version__put"];
         post?: never;
@@ -1667,6 +1818,7 @@ export interface paths {
          *
          *     Auth & scoping:
          *     - Requires `X-API-Key` header or OAuth Bearer token. You can only delete content belonging to your account.
+         *     - A key bound to a user must belong to an owner or administrator of the account; a viewer's key is refused with 403 `permission_denied`. Account-scoped keys carry no user and are unaffected.
          */
         delete: operations["delete_content_api_contents__source_connection_content_version__delete"];
         options?: never;
@@ -1714,7 +1866,7 @@ export interface paths {
          *
          *     This behaves like a source file upload, but it targets an existing content version ID. This is useful when you want to correct or update an uploaded document while keeping references stable.
          *
-         *     **Maximum file size:** 209715200 bytes.
+         *     **Maximum file size:** 209715200 bytes, except `image/svg+xml` at 5242880 bytes (SVG is sanitized before it is stored).
          *
          *     **Supported MIME types:**
          *     - `application/epub+zip`
@@ -1751,6 +1903,8 @@ export interface paths {
          *     - `video/x-msvideo`
          *
          *     Notes:
+         *     - A key bound to a user must belong to an owner or administrator of the account; a viewer's key is refused with 403 `permission_denied`. Account-scoped keys carry no user and are unaffected.
+         *     - The replacement is indexed in the background. This `SourceConnectionContentVersion` ID keeps working, and reads return the previous content until indexing finishes; poll `list_source_content_status` to follow it. The returned `content_version_id` is the new version.
          *     - If the uploaded file's content type is `application/octet-stream`, the server attempts to infer the type from the file extension.
          *     - Use `metadata` to attach an arbitrary JSON object of metadata (for example `metadata={"category":"docs"}`).
          *     - `title` is a convenience field and is merged into the metadata as `metadata.title` (it does not override an existing `metadata.title`).
@@ -1825,7 +1979,7 @@ export interface paths {
         put?: never;
         /**
          * Revert to the shared agent.seclai.com sending domain
-         * @description Clear the account's primary domain so agent email reverts to the shared `agent.seclai.com` sending/inbound scheme, WITHOUT removing the configured domain(s) — they stay verified and can be promoted again later. Owner/admin only.
+         * @description Clear the account's primary domain so agent email reverts to the shared `agent.seclai.com` sending domain, WITHOUT removing the configured domain(s) — they stay verified and can be promoted again later. Owner/admin only.
          *
          *     Auth & scoping: requires an `X-API-Key` header or OAuth Bearer token bound to a **user** (an account-only key is refused with 403); the domain is scoped to the key's account.
          */
@@ -1890,8 +2044,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Make a verified domain the account's primary sending/inbound domain
-         * @description Promote a verified domain to the account's primary domain — agent email then sends FROM and receives ON this domain (`<agentID>@<domain>`, `<alias>@<domain>`) instead of the shared `agent.seclai.com`. The domain must be verified. Owner/admin only.
+         * Make a verified domain the account's primary sending domain
+         * @description Promote a verified domain to the account's primary domain — agent email then sends FROM this domain and shows its addresses on it (`<agentID>@<domain>`, `<alias>@<domain>`) instead of the shared `agent.seclai.com`; addresses keep resolving on the account's other verified domains and the shared form. The domain must be verified. Owner/admin only.
          *
          *     Auth & scoping: requires an `X-API-Key` header or OAuth Bearer token bound to a **user** (an account-only key is refused with 403); the domain is scoped to the key's account.
          */
@@ -2326,7 +2480,7 @@ export interface paths {
          * Compact Memory Bank
          * @description Trigger an on-demand compaction run for a memory bank.
          *
-         *     The bank must have at least one compaction threshold configured (max_age_days, max_turns, or max_size_tokens). Compaction runs asynchronously — the response confirms scheduling, not completion.
+         *     The bank must have at least one compaction threshold configured (max_turns or max_size_tokens). Age no longer triggers compaction — use retention_days to remove entries by age. Compaction runs asynchronously — the response confirms scheduling, not completion.
          */
         post: operations["compact_memory_bank_api_memory_banks__memory_bank_id__compact_post"];
         delete?: never;
@@ -2406,9 +2560,11 @@ export interface paths {
         };
         /**
          * List Models
-         * @description List all enabled LLM models with full details.
+         * @description List the enabled LLM models with full details.
          *
          *     Returns models grouped by provider, including capabilities, credit pricing, tool support, variant tiers, and lifecycle status.
+         *
+         *     A model whose credit rate has not been published yet is omitted, so you are never offered a model that cannot be billed and therefore cannot be run. Such a model may appear later without any other change.
          *
          *     Optional query parameters:
          *     - `provider`: filter by provider (e.g. 'anthropic', 'openai')
@@ -2525,6 +2681,38 @@ export interface paths {
         patch: operations["mark_read_api_models_alerts__alert_id__read_patch"];
         trace?: never;
     };
+    "/models/embedders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Embedding Models
+         * @description List the embedding models a source can be created with.
+         *
+         *     Each entry carries the `model_type` to pass as `embedding_model` when creating a source, the `dimensions` it supports, and — most importantly for multi-modal indexing — `supported_input_media`: the modalities that embedder can actually index. A source only honours a `media_types` entry its embedder lists here; unsupported kinds are dropped at save time with an `embedder_warning`, so check this before choosing an embedder for a knowledge base of images or video.
+         *
+         *     Text-only embedders report `supported_input_media` as null. Pricing is reported as `credits` (per ~1,000 English words of text) plus `per_modality_rates` for the non-text modalities a multi-modal embedder bills differently.
+         *
+         *     An embedder whose credit rate has not been published yet is omitted, so you are never offered one that cannot be billed.
+         *
+         *     Optional query parameters:
+         *     - `supports_input_media`: keep only embedders that can index this modality (`text`/`image`/`video`/`audio` or a full MIME)
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key` header or OAuth Bearer token. The catalog is global reference data, identical for every account.
+         */
+        get: operations["list_embedding_models_api_models_embedders_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/models/generation-tiers": {
         parameters: {
             query?: never;
@@ -2564,7 +2752,7 @@ export interface paths {
          *     Returns a paginated, time-filtered list of experiments ordered by creation date descending.
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key` header or OAuth Bearer token. Experiments are scoped to the caller's account.
+         *     - Requires `X-API-Key` header or OAuth Bearer token. Experiments are scoped to the caller's account and, when the credential is bound to a user, to that user.
          */
         get: operations["list_experiments_api_models_playground_experiments_get"];
         put?: never;
@@ -2576,6 +2764,7 @@ export interface paths {
          *
          *     Auth & scoping:
          *     - Requires `X-API-Key` header or OAuth Bearer token.
+         *     - When the credential is bound to a user, the experiment belongs to that user; only that user or an account-scoped key can cancel or delete it.
          */
         post: operations["create_experiment_api_models_playground_experiments_post"];
         delete?: never;
@@ -2598,7 +2787,7 @@ export interface paths {
          *     Returns the full experiment payload including prompt, model outputs, and evaluation results (if available).
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key` header or OAuth Bearer token. The experiment must belong to the caller's account.
+         *     - Requires `X-API-Key` header or OAuth Bearer token. The experiment must belong to the caller's account and, when the credential is bound to a user, to that user; otherwise 404.
          */
         get: operations["get_experiment_api_models_playground_experiments__experiment_id__get"];
         put?: never;
@@ -2610,7 +2799,7 @@ export interface paths {
          *     Removes the experiment from list/detail views while preserving audit history.
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key` header or OAuth access token. The experiment must belong to the caller's account.
+         *     - Requires `X-API-Key` header or OAuth access token. The experiment must belong to the caller's account and, when the credential is bound to a user, to that user; otherwise 404.
          */
         delete: operations["delete_experiment_endpoint_api_models_playground_experiments__experiment_id__delete"];
         options?: never;
@@ -2634,9 +2823,36 @@ export interface paths {
          *     Signals running model calls to abort and marks the experiment as canceled.
          *
          *     Auth & scoping:
-         *     - Requires `X-API-Key` header or OAuth Bearer token. The experiment must belong to the caller's account.
+         *     - Requires `X-API-Key` header or OAuth Bearer token. The experiment must belong to the caller's account and, when the credential is bound to a user, to that user; otherwise 404.
          */
         post: operations["cancel_experiment_endpoint_api_models_playground_experiments__experiment_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/models/rerankers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Reranker Models
+         * @description List the reranker models a knowledge base can be created with.
+         *
+         *     A reranker re-scores the top results of a vector search for relevance. Each entry carries the `model_type` to pass as `reranker_model` on a knowledge base, its `credits_per_action`, and whether it is the platform default (`is_default`, used when you omit `reranker_model`).
+         *
+         *     To disable reranking, send `"none"` or an empty string as `reranker_model` rather than a value from this list. Reranking scores text, so a knowledge base whose sources all embed media natively — whose chunks carry no text — defaults to no reranker.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key` header or OAuth Bearer token. The catalog is global reference data, identical for every account.
+         */
+        get: operations["list_reranker_models_api_models_rerankers_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3110,8 +3326,16 @@ export interface paths {
          *     - `text/xml`
          *
          *     Notes:
+         *     - A key bound to a user must belong to an owner or administrator of the account; a viewer's key is refused with 403 `permission_denied`. Account-scoped keys carry no user and are unaffected.
          *     - Use this endpoint for small text payloads; larger files should use `/upload`.
          *     - `title` is merged into `metadata.title` when not already present.
+         *
+         *     Tracking indexing progress:
+         *     - **Which id you get back depends on `status`, and they are not interchangeable:**
+         *       - `uploaded` — a new item. `content_version_id` is set and `source_connection_content_version_id` is `null`. Indexing continues in the background after this call returns.
+         *       - `duplicate` — this exact file is already on the source, so nothing was created and nothing is being indexed. `content_version_id` is `null` and `source_connection_content_version_id` is the existing, already-indexed item: pass it straight to `GET /contents/{id}`. There is nothing to poll.
+         *     - For an `uploaded` item, poll `GET /sources/{id}/contents/{content_version_id}` with the returned `content_version_id`, or `GET /sources/{id}/contents?content_version_id=…&content_version_id=…` for a whole batch, to follow each item through to `completed` or `failed`.
+         *     - On those status endpoints `source_connection_content_version_id` stays `null` until the item finishes indexing; that is the id `GET /contents/{id}` takes.
          */
         post: operations["upload_inline_text_to_source_api_sources__source_connection_id__post"];
         /**
@@ -3121,6 +3345,66 @@ export interface paths {
          *     System-managed sources (such as agent history or conversation memory) cannot be deleted through this endpoint.
          */
         delete: operations["delete_source_api_sources__source_connection_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sources/{source_connection_id}/contents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List content items and their indexing status
+         * @description List every content item this source has attempted to index, with the status of each.
+         *
+         *     Unlike the source's `content_count`, which only counts finished items, this listing includes items that are still processing and items that failed — so a bulk upload can report per-item progress and point at the specific items that did not make it.
+         *
+         *     Correlating with an upload:
+         *     - Each item is keyed by `content_version_id`, which is what the upload endpoints return. Pass those ids as repeated `content_version_id` query parameters to poll exactly the items you uploaded.
+         *     - `source_connection_content_version_id` is `null` until an item finishes indexing; once set, it is the id `GET /contents/{id}` takes.
+         *     - `content_status` reaches `completed` on success and `failed` on error, with the reason in `error`. The intermediate values are `pending`, `fetching`, `transcribing`, `scanning`, and `indexing`.
+         *
+         *     Parameters:
+         *     - Pagination: `page` and `limit`.
+         *     - Sorting: `sort` (created_at/title/status) and `order` (asc/desc). `created_at` sorts on when the item was uploaded or pulled.
+         *     - Filtering: `status` and repeatable `content_version_id`.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key` header or OAuth Bearer token. You can only list content for sources belonging to your account.
+         */
+        get: operations["list_source_contents_api_sources__source_connection_id__contents_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sources/{source_connection_id}/contents/{content_version_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get one content item's indexing status
+         * @description Get the indexing status of a single content item, addressed by the `content_version_id` the upload endpoints return.
+         *
+         *     Use this to follow one uploaded file through indexing. To follow many at once, use `GET /sources/{id}/contents` with repeated `content_version_id` parameters instead of polling this endpoint per item.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key` header or OAuth Bearer token. You can only access content belonging to your account.
+         */
+        get: operations["get_source_content_status_endpoint_api_sources__source_connection_id__contents__content_version_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -3174,7 +3458,7 @@ export interface paths {
          * Cancel Source Embedding Migration
          * @description Cancel an active embedding migration for a custom-index source.
          *
-         *     Only pending, running, or switching migrations can be cancelled.
+         *     Only pending and running migrations can be cancelled. A migration that has reached the switching phase is committing its switch-over in a single transaction, so there is no half-applied state to back out of and cancel is refused.
          */
         post: operations["cancel_source_embedding_migration_api_sources__source_connection_id__embedding_migration_cancel_post"];
         delete?: never;
@@ -3198,7 +3482,7 @@ export interface paths {
         put?: never;
         /**
          * Create export
-         * @description Start an asynchronous export job. Poll GET .../exports/{export_id} until status becomes completed, then use /download to retrieve the file.
+         * @description Start an asynchronous export job. Poll GET .../exports/{export_id} until status becomes completed, then use /download to retrieve the file.  On an organization account, a key bound to a user must belong to an owner or administrator; a viewer's key is refused with 403 `permission_denied`. Personal accounts and account-scoped keys are unaffected.
          */
         post: operations["create_source_export_api_sources__source_connection_id__exports_post"];
         delete?: never;
@@ -3243,7 +3527,7 @@ export interface paths {
         post?: never;
         /**
          * Delete export
-         * @description Delete an export job and remove the associated file from S3.  This is a soft-delete: the database record is retained for audit purposes but the backing file is permanently removed.
+         * @description Delete an export job and remove the associated file from S3.  This is a soft-delete: the database record is retained for audit purposes but the backing file is permanently removed.  On an organization account, a key bound to a user must belong to an owner or administrator; a viewer's key is refused with 403 `permission_denied`. Personal accounts and account-scoped keys are unaffected.
          */
         delete: operations["delete_source_export_api_sources__source_connection_id__exports__export_id__delete"];
         options?: never;
@@ -3262,7 +3546,7 @@ export interface paths {
         put?: never;
         /**
          * Cancel export
-         * @description Cancel a pending or running export.  The background task will stop at the next chunk boundary.  Completed, failed, expired, or already-cancelled exports cannot be cancelled.
+         * @description Cancel a pending or running export.  The background task will stop at the next chunk boundary.  Completed, failed, expired, or already-cancelled exports cannot be cancelled.  On an organization account, a key bound to a user must belong to an owner or administrator; a viewer's key is refused with 403 `permission_denied`. Personal accounts and account-scoped keys are unaffected.
          */
         post: operations["cancel_source_export_api_sources__source_connection_id__exports__export_id__cancel_post"];
         delete?: never;
@@ -3304,7 +3588,7 @@ export interface paths {
          * Upload a file to a content source
          * @description Upload a file to a content source.
          *
-         *     **Maximum file size:** 209715200 bytes.
+         *     **Maximum file size:** 209715200 bytes, except `image/svg+xml` at 5242880 bytes (SVG is sanitized before it is stored).
          *
          *     **Supported MIME types:**
          *     - `application/epub+zip`
@@ -3341,6 +3625,7 @@ export interface paths {
          *     - `video/x-msvideo`
          *
          *     Notes:
+         *     - A key bound to a user must belong to an owner or administrator of the account; a viewer's key is refused with 403 `permission_denied`. Account-scoped keys carry no user and are unaffected.
          *     - If the uploaded file's content type is `application/octet-stream`, the server attempts to infer the type from the file extension.
          *     - Use `metadata` to attach an arbitrary JSON object of metadata (for example `metadata={"author":"Ada","category":"docs"}`).
          *     - `title` is a convenience field and is merged into the metadata as `metadata.title` (it does not override an existing `metadata.title`).
@@ -3348,6 +3633,13 @@ export interface paths {
          *
          *     Response:
          *     - `status` is `uploaded` for a new upload, or `duplicate` when the same file already exists for this source.
+         *
+         *     Tracking indexing progress:
+         *     - **Which id you get back depends on `status`, and they are not interchangeable:**
+         *       - `uploaded` — a new item. `content_version_id` is set and `source_connection_content_version_id` is `null`. Indexing continues in the background after this call returns.
+         *       - `duplicate` — this exact file is already on the source, so nothing was created and nothing is being indexed. `content_version_id` is `null` and `source_connection_content_version_id` is the existing, already-indexed item: pass it straight to `GET /contents/{id}`. There is nothing to poll.
+         *     - For an `uploaded` item, poll `GET /sources/{id}/contents/{content_version_id}` with the returned `content_version_id`, or `GET /sources/{id}/contents?content_version_id=…&content_version_id=…` for a whole batch, to follow each item through to `completed` or `failed`.
+         *     - On those status endpoints `source_connection_content_version_id` stays `null` until the item finishes indexing; that is the id `GET /contents/{id}` takes.
          */
         post: operations["upload_file_to_source_api_sources__source_connection_id__upload_post"];
         delete?: never;
@@ -3365,11 +3657,11 @@ export interface paths {
         };
         /**
          * Download an agent-run attachment
-         * @description Streams the bytes of an attachment emitted by a step in the given agent run.  ``attachment_id`` is the URL-safe-base64-encoded ``storage_key`` (use the encoder shared by webhook + email payload builders).
+         * @description Streams the bytes of an attachment emitted by a step in the given agent run.  ``attachment_id`` is the ``id`` of an entry in the run's or a step's ``attachments``, or the URL-safe-base64-encoded storage key, which webhook and email links carry.
          *
          *     Auth & scoping:
          *     - Requires `X-API-Key` header or OAuth Bearer token.
-         *     - The calling account must own ``run_id``; lookup failures (missing run, cross-account run, soft-deleted agent, unreferenced storage_key) all collapse to a single 404 to prevent cross-tenant existence enumeration.
+         *     - The calling account must own ``run_id``; lookup failures (missing run, cross-account run, soft-deleted agent, a run whose trace was purged, a file not in the run) all collapse to a single 404 to prevent cross-tenant existence enumeration.
          *
          *     MIME handling:
          *     - Inline-safe MIMEs (image/*, audio/*, video/*, application/pdf, text/plain, application/vnd.seclai.manifest+json) are served with their declared type.
@@ -3609,7 +3901,7 @@ export interface components {
             }[] | null;
             /**
              * Export Version
-             * @description Schema version of the export format (currently "2").
+             * @description Schema version of the export format (currently "5").
              */
             export_version: string;
             /**
@@ -3662,6 +3954,38 @@ export interface components {
             /** @description Status of the agent run attempt. */
             status: components["schemas"]["PendingProcessingCompletedFailedStatus"];
         };
+        /**
+         * AgentRunFileResponse
+         * @description A file in a run's or a step's output.
+         */
+        AgentRunFileResponse: {
+            /**
+             * Bytes
+             * @description Size of the file in bytes, when known.
+             */
+            bytes: number | null;
+            /**
+             * Download Url
+             * @description `GET` URL that streams the file; accepts an API key or OAuth token.
+             */
+            download_url: string;
+            /**
+             * Id
+             * Format: uuid
+             * @description File identifier, used to download it.
+             */
+            id: string;
+            /**
+             * Mime
+             * @description MIME type of the file.
+             */
+            mime: string;
+            /**
+             * Name
+             * @description The file's name in this run, as sent to email recipients and webhooks and matched by `{{attachments[...]}}` selectors.
+             */
+            name: string | null;
+        };
         /** AgentRunRequest */
         AgentRunRequest: {
             /**
@@ -3671,7 +3995,7 @@ export interface components {
             input?: string | null;
             /**
              * Input Upload Id
-             * @description ID of a previously uploaded file (via POST /{agent_id}/upload-input) to use as the run input for dynamic-input triggers. Mutually exclusive with the 'input' field. Use ``input_upload_ids`` to attach multiple files.
+             * @description ID of a previously uploaded file (via POST /{agent_id}/upload-input) to use as the run input for dynamic-input triggers. Mutually exclusive with ``input_upload_ids`` — use that field to attach multiple files. May be combined with ``input``: the prompt text leads and the file's extracted text follows under a ``# {filename}`` heading.
              *
              *     **Attachment visibility:** a step only sees the upload when its template references the input — via ``{{input}}`` / ``{{agent.input}}`` / ``{{step.<id>.input|output}}`` (implicit, all attachments) or the ``{{attachments[…]}}`` family (explicit narrowing — e.g. ``{{attachments[0]}}``, ``{{attachments[*.pdf]}}``).
              *
@@ -3680,7 +4004,7 @@ export interface components {
             input_upload_id?: string | null;
             /**
              * Input Upload Ids
-             * @description IDs of multiple previously uploaded files. Each upload's extracted text is concatenated under a heading; each upload's binary is surfaced as a separate ``MediaAttachment`` so multi-modal prompt steps reason over all files at once. Steps narrow visibility via ``{{attachments[…]}}`` selectors (by index, filename, or fnmatch glob). The batch must satisfy every selector the agent declares — exact names, indexed references (length must exceed the highest index), and glob patterns (each pattern needs at least one match). Mismatches return HTTP 400 with the unmet requirements listed.  Mutually exclusive with ``input`` and ``input_upload_id`` — pass exactly one of the three. Max 20 uploads per run.
+             * @description IDs of multiple previously uploaded files. Each upload's extracted text is concatenated under a heading; each upload's binary is surfaced as a separate ``MediaAttachment`` so multi-modal prompt steps reason over all files at once. Steps narrow visibility via ``{{attachments[…]}}`` selectors (by index, filename, or fnmatch glob). The batch must satisfy every selector the agent declares — exact names, indexed references (length must exceed the highest index), and glob patterns (each pattern needs at least one match). Mismatches return HTTP 400 with the unmet requirements listed.  Mutually exclusive with ``input_upload_id`` (two spellings of the same batch), but may be combined with ``input`` — the prompt text leads and the per-file sections follow, so "a photo plus a sentence about it" needs no synthetic text upload. Max 20 uploads per run.
              */
             input_upload_ids?: string[] | null;
             /**
@@ -3705,6 +4029,11 @@ export interface components {
         /** AgentRunResponse */
         AgentRunResponse: {
             /**
+             * Attachments
+             * @description Files in the run's output, in order. Empty for runs that produced none, for runs made before files were listed here, and once the run's trace is purged.
+             */
+            attachments?: components["schemas"]["AgentRunFileResponse"][];
+            /**
              * Attempts
              * @description List of attempts made for this agent run.
              */
@@ -3716,7 +4045,7 @@ export interface components {
             blocked_policies?: components["schemas"]["routers__api__agents__GovernancePolicyRefResponse"][];
             /**
              * Credits
-             * @description Credits consumed by the agent run, if applicable.
+             * @description Credits consumed by the agent run, if applicable. Can still rise briefly after the run ends, while governance screening finishes.
              */
             credits: number | null;
             /**
@@ -3756,12 +4085,12 @@ export interface components {
             input_scan_status?: string | null;
             /**
              * Output
-             * @description Output produced by the agent run.
+             * @description The run's output text; its files are in `attachments`.  Below `Seclai-Version: 2026-09-30` an output that has files is instead the manifest JSON `{schema, text, attachments: [{storage_key, mime, name, label, bytes}]}`; `bytes` is absent on runs made before that version shipped.
              */
             output: string | null;
             /**
              * Output Content Type
-             * @description MIME type of `output` — mirrors the terminal step's `output_content_type`.  Consumers interpret `output` differently depending on this value: `application/vnd.seclai.manifest+json` is a multi-asset manifest with shape `{text, attachments: [{storage_key, mime, name, bytes}]}` — fetch each attachment via `GET /v2/agent-runs/{run_id}/attachments/{attachment_id}`, where `attachment_id` is the URL-safe base64 of the attachment's `storage_key` (accepts an API key or OAuth token).  `text/plain` / `text/*` are free-form text.  `application/json` is a JSON document.  Null on runs that produced no terminal output or that pre-date this column.
+             * @description MIME type of `output` — mirrors the terminal step's `output_content_type`.  `text/plain` / `text/*` are free-form text and `application/json` is a JSON document.  Below `Seclai-Version: 2026-09-30` an output that has files reads `application/vnd.seclai.manifest+json` (see `output`); the same files are in `attachments` on every version, each with a `download_url`.  Null on runs that produced no terminal output or that pre-date this column.
              */
             output_content_type?: string | null;
             /**
@@ -3787,6 +4116,11 @@ export interface components {
              */
             steps?: components["schemas"]["AgentRunStepResponse"][] | null;
             /**
+             * Trace Purged At
+             * @description When this run's trace content was deleted under the account's agent-trace retention window.  Non-null means `input`, `output` and every step's and tool call's I/O are null **by design** and will never be available again — the run aged out, it did not fail.  Branch on this rather than on a null `output`: a run that genuinely produced nothing looks identical.  Status, timing and credits remain accurate.
+             */
+            trace_purged_at?: string | null;
+            /**
              * Wait Ms
              * @description Cumulative milliseconds the run was parked on standard-mode wait steps.  Subtracted from active duration in run-detail and duration-stats responses, exactly like hitl_wait_ms.  Priority waits block inline and are not counted here.
              */
@@ -3800,8 +4134,13 @@ export interface components {
              */
             agent_step_id: string;
             /**
+             * Attachments
+             * @description Files in this step's output, in order. Empty for steps that produced none, for steps run before files were listed here, and once the run's trace is purged.
+             */
+            attachments?: components["schemas"]["AgentRunFileResponse"][];
+            /**
              * Credits Used
-             * @description Credits consumed by the step attempt, if applicable.
+             * @description Credits consumed by this step across every attempt it made. Some charges made outside any step, such as governance screening of the run's input, count toward the run's total but no step's. The timestamps above and the tool calls below describe the latest attempt only.
              */
             credits_used: number;
             /**
@@ -3816,12 +4155,12 @@ export interface components {
             ended_at: string | null;
             /**
              * Input
-             * @description Input provided to the step, if any.
+             * @description Input text provided to the step, if any.  Below `Seclai-Version: 2026-09-30`, the manifest JSON when the step that produced it output files and is not a `for_each`.
              */
             input: string | null;
             /**
              * Output
-             * @description Output produced by the step, if any.
+             * @description Output text produced by the step, if any; its files are in `attachments`.  Below `Seclai-Version: 2026-09-30`, the manifest JSON when the step output files and is not a `for_each`.
              */
             output: string | null;
             /**
@@ -3846,6 +4185,11 @@ export interface components {
              * @description LLM tool calls made during this step (prompt_call steps only), ordered by execution. Empty for steps that invoked no tools.
              */
             tool_calls?: components["schemas"]["AgentRunToolCallResponse"][];
+            /**
+             * Warnings
+             * @description Authoring problems the step ran into, whether or not it then failed, such as a file name selector that matched none of its source's files.
+             */
+            warnings?: string[] | null;
         };
         /** AgentRunStreamRequest */
         AgentRunStreamRequest: {
@@ -3856,12 +4200,12 @@ export interface components {
             input?: string | null;
             /**
              * Input Upload Id
-             * @description ID of a previously uploaded file (via POST /{agent_id}/upload-input) to use as the run input for dynamic-input triggers. Mutually exclusive with the 'input' field. Use ``input_upload_ids`` to attach multiple files. Subject to the same per-batch attachment-selector validation as the non-streaming endpoint.
+             * @description ID of a previously uploaded file (via POST /{agent_id}/upload-input) to use as the run input for dynamic-input triggers. Mutually exclusive with ``input_upload_ids`` — use that field to attach multiple files. May be combined with ``input``. Subject to the same per-batch attachment-selector validation as the non-streaming endpoint.
              */
             input_upload_id?: string | null;
             /**
              * Input Upload Ids
-             * @description IDs of multiple previously uploaded files. See the non-streaming endpoint for full semantics, including per-batch selector validation (exact names, indexed references, and glob patterns must all be satisfied or the run is rejected with HTTP 400). Max 20.
+             * @description IDs of multiple previously uploaded files. See the non-streaming endpoint for full semantics, including per-batch selector validation (exact names, indexed references, and glob patterns must all be satisfied or the run is rejected with HTTP 400) and combining the batch with ``input`` prompt text. Max 20.
              */
             input_upload_ids?: string[] | null;
             /**
@@ -3931,7 +4275,7 @@ export interface components {
             round_index: number;
             /**
              * Sequence
-             * @description 0-based ordinal of this call within its step run.
+             * @description 0-based ordinal of this call within one attempt of the step, so it repeats across a retried step's attempts. This list holds the latest attempt only.
              * @default 0
              */
             sequence: number;
@@ -4108,6 +4452,34 @@ export interface components {
              * @description Number of matches returned.
              */
             total: number;
+        };
+        /** AgentUsingCloudDriveResponseModel */
+        AgentUsingCloudDriveResponseModel: {
+            /**
+             * Agent Id
+             * @description Agent identifier.
+             */
+            agent_id: string;
+            /**
+             * Agent Name
+             * @description Agent name.
+             */
+            agent_name: string;
+            /**
+             * Trigger Types
+             * @description File-change trigger types bound to this drive.
+             */
+            trigger_types: string[];
+            /**
+             * Via Prompt Tool
+             * @description Uses a prompt_call cloud-drive tool.
+             */
+            via_prompt_tool: boolean;
+            /**
+             * Via Step
+             * @description Uses a list/read/write cloud-drive step.
+             */
+            via_step: boolean;
         };
         /**
          * AiAssistantAcceptResponse
@@ -4493,6 +4865,215 @@ export interface components {
              */
             status: string;
         };
+        /** CloudDriveAccessLevelResponseModel */
+        CloudDriveAccessLevelResponseModel: {
+            /**
+             * Default
+             * @description Whether connecting without a choice uses it.
+             */
+            default: boolean;
+            /**
+             * Description
+             * @description What agents can do at this level.
+             */
+            description: string;
+            /**
+             * Key
+             * @description Level identifier, e.g. `read_write`/`read_only`.
+             */
+            key: string;
+            /**
+             * Label
+             * @description Short human-readable name.
+             */
+            label: string;
+        };
+        /** CloudDriveProviderResponseModel */
+        CloudDriveProviderResponseModel: {
+            /**
+             * Access Levels
+             * @description Mutually-exclusive permission bundles offered when connecting. Connecting happens in the app, so this is informational here — it explains what a connection's `access_level` can be.
+             */
+            access_levels: components["schemas"]["CloudDriveAccessLevelResponseModel"][];
+            /**
+             * Display Name
+             * @description Human-readable provider name.
+             */
+            display_name: string;
+            /**
+             * Key
+             * @description Provider key used as `provider` on a connection.
+             */
+            key: string;
+            /**
+             * Scopes
+             * @description OAuth permissions this provider can request.
+             */
+            scopes: components["schemas"]["CloudDriveScopeResponseModel"][];
+        };
+        /**
+         * CloudDriveRejectionResponseModel
+         * @description One file the connection deliberately did not process.
+         */
+        CloudDriveRejectionResponseModel: {
+            /**
+             * Created At
+             * @description When the file was skipped.
+             */
+            created_at: string;
+            /**
+             * Detail
+             * @description Extra context, e.g. the cap that was hit.
+             */
+            detail?: string | null;
+            /**
+             * File Id
+             * @description The provider's file id, when the file was known.
+             */
+            file_id?: string | null;
+            /**
+             * File Path
+             * @description Path of the skipped file, when known.
+             */
+            file_path?: string | null;
+            /**
+             * Id
+             * @description Rejection identifier.
+             */
+            id: string;
+            /**
+             * Reason
+             * @description `too_large`, `download_failed`, or `flood`.
+             */
+            reason: string;
+        };
+        /**
+         * CloudDriveResponseModel
+         * @description A cloud-drive connection, without any secret material.
+         */
+        CloudDriveResponseModel: {
+            /**
+             * Access Level
+             * @description The permission bundle the granted scopes correspond to — `read_write` or `read_only`. Null when the grant matches no level the provider currently offers; treat that as unknown rather than assuming write access.
+             */
+            access_level?: string | null;
+            /**
+             * Connected
+             * @description True when the connection is usable.
+             */
+            connected: boolean;
+            /**
+             * Created At
+             * @description When the connection was created.
+             */
+            created_at: string;
+            /**
+             * Drive Id
+             * @description Opaque id of the shared drive the folder resolves to, or null for the user's own drive. Stable across renames — compare on this rather than on the name in `folder_path`.
+             */
+            drive_id?: string | null;
+            /**
+             * Drive Name
+             * @description Display name the shared drive last resolved to. Presentation only; never match on it.
+             */
+            drive_name?: string | null;
+            /**
+             * Drive Name Stale
+             * @description True when `drive_name` could not be re-confirmed (the drive was deleted, access was lost, or the provider was unreachable). The last known name is still reported — treat it as possibly out of date rather than current.
+             */
+            drive_name_stale: boolean;
+            /**
+             * External Account Id
+             * @description The provider's own opaque account identifier (never an email).
+             */
+            external_account_id?: string | null;
+            /**
+             * Folder Path
+             * @description Watched folder; empty string means the drive root. A folder on a shared drive is written `/Shared drives/<drive name>/<folder>`.
+             */
+            folder_path: string;
+            /**
+             * Id
+             * @description Connection identifier.
+             */
+            id: string;
+            /**
+             * Last Error
+             * @description Most recent sync or authorization error, if any.
+             */
+            last_error?: string | null;
+            /**
+             * Last Synced At
+             * @description When the connection last synced successfully.
+             */
+            last_synced_at?: string | null;
+            /**
+             * Name
+             * @description Human-readable name.
+             */
+            name?: string | null;
+            /**
+             * Oauth Scopes
+             * @description Space-separated OAuth scopes granted to this connection.
+             */
+            oauth_scopes?: string | null;
+            /**
+             * Provider
+             * @description Provider key, e.g. `dropbox` or `google_drive`.
+             */
+            provider: string;
+            /**
+             * Realtime Updates
+             * @description True when changes arrive via the provider's push notifications. False means the drive still syncs, but only on the scheduled backstop sweep rather than within seconds of a change.
+             */
+            realtime_updates: boolean;
+            /**
+             * Status
+             * @description One of `active`, `pending_auth`, `error`, `disconnected`.
+             */
+            status: string;
+            /**
+             * Updated At
+             * @description When the connection was last modified.
+             */
+            updated_at: string;
+        };
+        /** CloudDriveScopeResponseModel */
+        CloudDriveScopeResponseModel: {
+            /**
+             * Description
+             * @description What the scope allows.
+             */
+            description: string;
+            /**
+             * Key
+             * @description The OAuth scope string sent to the provider.
+             */
+            key: string;
+            /**
+             * Label
+             * @description Short human-readable name.
+             */
+            label: string;
+            /**
+             * Recommended
+             * @description Whether this scope is requested by default on connect.
+             */
+            recommended: boolean;
+        };
+        /** CloudDriveUpdateRequest */
+        CloudDriveUpdateRequest: {
+            /**
+             * Folder Path
+             * @description New watched folder; empty means the whole drive. A folder on a shared drive is written `/Shared drives/<drive name>/<folder>`. Changing it resets the sync cursor, so files already in the new folder are NOT replayed as triggers — only subsequent changes fire, matching connect-time behaviour. Rejected when the new folder would make an agent that writes there re-trigger itself.
+             */
+            folder_path?: string | null;
+            /**
+             * Name
+             * @description New display name for the connection.
+             */
+            name?: string | null;
+        };
         /**
          * CompactionEvaluationModel
          * @description Structured LLM-as-judge evaluation result.
@@ -4603,6 +5184,14 @@ export interface components {
             batch_size: number;
             /** Id */
             id: string;
+            /** Media Name */
+            media_name?: string | null;
+            /** Page Number */
+            page_number?: number | null;
+            /** Source Mime */
+            source_mime?: string | null;
+            /** Source Url */
+            source_url?: string | null;
             /** Text */
             text: string;
             /** Text End */
@@ -4626,10 +5215,9 @@ export interface components {
             alert_type: string;
             /**
              * Cooldown Minutes
-             * @description Cooldown period in minutes
-             * @default 60
+             * @description Cooldown period in minutes. Omit to use the per-alert-type default (1440 for credit alerts, 60 otherwise).
              */
-            cooldown_minutes: number;
+            cooldown_minutes?: number | null;
             /**
              * Distribution Type
              * @description Distribution type (owner, owner_admins, selected_members)
@@ -4739,17 +5327,17 @@ export interface components {
         CreateKnowledgeBaseBody: {
             /**
              * Default Score Threshold
-             * @description Default minimum rerank score threshold.
+             * @description Prefilled into Minimum Rerank Score on a new retrieval step in the editor. Not applied at retrieval time — the step's own value is used.
              */
             default_score_threshold?: number | null;
             /**
              * Default Top K
-             * @description Default results after reranking.
+             * @description Prefilled into Top K on a new retrieval step in the editor. Not applied at retrieval time.
              */
             default_top_k?: number | null;
             /**
              * Default Top N
-             * @description Default number of results.
+             * @description Prefilled into Top N on a new retrieval step in the editor. Not applied at retrieval time — the step's own value is used.
              */
             default_top_n?: number | null;
             /**
@@ -4764,7 +5352,7 @@ export interface components {
             name: string;
             /**
              * Reranker Model
-             * @description Reranker model to use (null for no reranking).
+             * @description Reranker model to use — a `model_type` from `GET /models/rerankers`. Pass "none" to disable reranking (not a value from that list). Omit it for a default chosen from the sources ("none" when every source embeds media natively, whose chunks carry no text for a reranker to score). "" is accepted as a synonym for "none".
              */
             reranker_model?: string | null;
             /**
@@ -4810,7 +5398,7 @@ export interface components {
             embedding_model?: string | null;
             /**
              * Max Age Days
-             * @description Max entry age in days before compaction. Checked inline after each write and by the hourly background sweep.
+             * @description DEPRECATED and no longer applied. Age used to trigger compaction, which duplicated retention_days — both removed the same entries at the same age. Age now belongs solely to retention_days, which deletes; compaction triggers on max_size_tokens and max_turns. Rejected with 400 for clients sending Seclai-Version 2026-08-03 or later; accepted and stored but inert for older clients.
              */
             max_age_days?: number | null;
             /**
@@ -4836,10 +5424,15 @@ export interface components {
             name: string;
             /**
              * Retention Days
-             * @description Content source retention in days.
-             * @default 30
+             * @description Retention in days — when entries are deleted outright, text and embeddings. This is the only age-based control; compaction triggers on max_size_tokens and max_turns. For clients sending Seclai-Version 2026-08-03 or later, omitting the field resolves per bank type: 90 days for a conversation bank, indefinite for a general bank. Older clients keep the previous default of 30 days for a conversation bank — unless a longer max_age_days was sent, which wins, since the window is never lowered beneath the only age the caller expressed — while a general bank keeps entries indefinitely. Send an explicit value (or null for indefinite) to be unambiguous on every version.
              */
-            retention_days: number | null;
+            retention_days?: number | null;
+            /**
+             * Strip Quoted Reply Chains
+             * @description Conversation banks only. When true, a conversation turn written to this bank has the quoted reply chain an email client prepends to a reply dropped from it. Only inbound (user) turns are affected, and only words in a run of at least ~40 matching a recent turn word for word are dropped (line wrapping and punctuation at a word's edge are ignored). A word the sender changed is kept, including a one-character change inside a link, address or amount, unless the change is only to that edge punctuation.
+             * @default false
+             */
+            strip_quoted_reply_chains: boolean;
             /**
              * Type
              * @description Bank type. 'conversation' for chat-turn data with conversation_key + speaker; 'general' for flat entries with optional group_key.
@@ -4891,14 +5484,14 @@ export interface components {
             dimensions?: number | null;
             /**
              * Embedding Model
-             * @description Embedding model override.
+             * @description Embedding model override — a `model_type` from `GET /models/embedders`, which also reports each embedder's `supported_input_media`. Defaults to the platform embedder (`default_model_type` on that endpoint) when omitted. Indexing images or video requires an embedder that lists that modality.
              */
             embedding_model?: string | null;
             /** @description Index mode for custom_index sources: fast_and_cheap (default), balanced, slow_and_thorough, or custom. */
             index_mode?: components["schemas"]["SourceIndexMode"] | null;
             /**
              * Media Types
-             * @description Media kinds to extract from indexed content and embed as multi-modal KB chunks. Subset of ['images', 'video']. Only kinds the source's embedder can index are honored; unsupported values are dropped. Omit / [] for text-only.
+             * @description Media kinds to extract from indexed content and embed as multi-modal KB chunks. Subset of ['images', 'video']. Only kinds the source's embedder can index are honored (see `supported_input_media` on GET /models/embedders); unsupported values are dropped. Omit / [] for text-only.
              */
             media_types?: string[] | null;
             /**
@@ -5029,6 +5622,27 @@ export interface components {
             /** Title */
             title: string;
         };
+        /**
+         * EffortOptionsResponse
+         * @description The reasoning-effort values a model accepts.
+         */
+        EffortOptionsResponse: {
+            /**
+             * Default
+             * @description The vendor's default level, when known.
+             */
+            default?: string | null;
+            /**
+             * Kind
+             * @description `levels` today: `values` lists them.
+             */
+            kind: string;
+            /**
+             * Values
+             * @description Accepted values, weakest first.
+             */
+            values?: string[];
+        };
         /** EmailDomainResponse */
         EmailDomainResponse: {
             /**
@@ -5141,6 +5755,163 @@ export interface components {
             trigger_id: string;
             /** Trigger Type */
             trigger_type: string;
+        };
+        /**
+         * EmbeddingModalityRateResponse
+         * @description Per-modality rate for a multi-modal embedder.
+         *
+         *     The default ``credits`` field on :class:`EmbeddingModelResponse` is the
+         *     text rate (credits per ~1k English words).  Embedders that index image or
+         *     video chunks natively charge those modalities at a different rate and unit
+         *     — e.g. Cohere Embed v4 prices images per record; Nova 2 Multimodal prices
+         *     video per second.  Surfacing the modality and unit lets a caller render an
+         *     honest cost breakdown alongside the text rate.
+         */
+        EmbeddingModalityRateResponse: {
+            /**
+             * Credits
+             * @description Rate value in the unit below
+             */
+            credits: number;
+            /**
+             * Modality
+             * @description Modality kind, e.g. image / video
+             */
+            modality: string;
+            /**
+             * Unit
+             * @description Billing unit for this rate (credit_per_record / credit_per_second / credit_per_1000_tokens).
+             */
+            unit: string;
+        };
+        /**
+         * EmbeddingModelListResponse
+         * @description Legacy (header-less) response shape for the embedder catalog.
+         */
+        EmbeddingModelListResponse: {
+            /**
+             * Default Dimension
+             * @description Dimensions used with the default embedding model
+             */
+            default_dimension?: number | null;
+            /**
+             * Default Model Type
+             * @description Embedding model used when a source does not override it
+             */
+            default_model_type?: string | null;
+            /**
+             * File Processing Credits Per Mb
+             * @description Credits per MB for file processing at ingest
+             */
+            file_processing_credits_per_mb: number;
+            /**
+             * Models
+             * @description Available embedding models
+             */
+            models: components["schemas"]["EmbeddingModelResponse"][];
+            /**
+             * Storage Credits
+             * @description Monthly storage credits per dimension count
+             */
+            storage_credits: components["schemas"]["EmbeddingStorageCreditsResponse"][];
+        };
+        /**
+         * EmbeddingModelResponse
+         * @description Information about an embedding model.
+         */
+        EmbeddingModelResponse: {
+            /**
+             * Credits
+             * @description Estimated credits per 1,000 English words
+             */
+            credits: number;
+            /**
+             * Description
+             * @description Model description
+             */
+            description?: string | null;
+            /**
+             * Dimensions
+             * @description Dimensions options
+             */
+            dimensions: number[];
+            /**
+             * Is New
+             * @description Whether the model is newly released
+             * @default false
+             */
+            is_new: boolean;
+            /**
+             * Max Input Tokens
+             * @description Max input tokens per request
+             */
+            max_input_tokens?: number | null;
+            /**
+             * Model Id
+             * @description Model identifier
+             */
+            model_id: string;
+            /**
+             * Model Type
+             * @description Full model type identifier (enum value).  This is the value to send as embedding_model when creating a source.
+             */
+            model_type: string;
+            /**
+             * Mteb Retrieval Score
+             * @description MTEB retrieval score
+             */
+            mteb_retrieval_score?: number | null;
+            /**
+             * Name
+             * @description Human-readable model name
+             */
+            name?: string | null;
+            /**
+             * Per Modality Rates
+             * @description Non-text rates the vendor charges for this embedder (image, video, audio).  Empty for text-only embedders.
+             */
+            per_modality_rates?: components["schemas"]["EmbeddingModalityRateResponse"][];
+            /**
+             * Provider
+             * @description Model provider identifier
+             */
+            provider?: string | null;
+            /**
+             * Speed
+             * @description Model processing speed
+             */
+            speed?: string | null;
+            /**
+             * Supported Input Media
+             * @description Modalities the embedder accepts on input (short kinds like text / image / video, or full MIMEs).  null means text-only.  A source only honours a media_types entry its embedder lists here.
+             */
+            supported_input_media?: string[] | null;
+            /**
+             * Supported Languages
+             * @description Supported languages
+             */
+            supported_languages?: string[] | null;
+            /**
+             * Url
+             * @description Model documentation URL
+             */
+            url?: string | null;
+        };
+        /**
+         * EmbeddingStorageCreditsResponse
+         * @description Monthly storage credits per stored record at a dimension count.
+         */
+        EmbeddingStorageCreditsResponse: {
+            /**
+             * Credits
+             * @description Credits per record per month
+             */
+            credits: number;
+            /**
+             * Dimensions
+             * @description Number of embedding dimensions
+             */
+            dimensions: number;
         };
         /**
          * EvaluationCriteriaResponse
@@ -5460,6 +6231,13 @@ export interface components {
             completed_at: string | null;
             /** Created At */
             created_at: string;
+            /**
+             * Effort
+             * @description The reasoning effort each model was run at, by model ID.
+             */
+            effort?: {
+                [key: string]: string;
+            };
             /** Error Message */
             error_message: string | null;
             /** Evaluation Complexity */
@@ -5989,17 +6767,17 @@ export interface components {
             created_at: string;
             /**
              * Default Score Threshold
-             * @description Default minimum rerank score.
+             * @description Editor default for a new retrieval step's Minimum Rerank Score.
              */
             default_score_threshold?: number | null;
             /**
              * Default Top K
-             * @description Default results after reranking.
+             * @description Editor default for a new retrieval step's Top K.
              */
             default_top_k?: number | null;
             /**
              * Default Top N
-             * @description Default number of results to return.
+             * @description Editor default for a new retrieval step's Top N.
              */
             default_top_n?: number | null;
             /**
@@ -6124,7 +6902,7 @@ export interface components {
             description?: string | null;
             /**
              * Max Age Days
-             * @description Max age in days.
+             * @description Always null. Age-based compaction is retired — the assistant never suggests it. Kept so an SDK generated before the change still validates this response.
              */
             max_age_days?: number | null;
             /**
@@ -6231,7 +7009,7 @@ export interface components {
             id: string;
             /**
              * Max Age Days
-             * @description Max entry age in days before compaction. Checked both inline after each write and by the hourly background sweep.
+             * @description DEPRECATED and no longer applied. Age now belongs solely to retention_days, which deletes; compaction triggers on max_size_tokens and max_turns. Always null for clients sending Seclai-Version 2026-08-03 or later; older clients keep reading whatever value was stored.
              */
             max_age_days?: number | null;
             /**
@@ -6264,6 +7042,12 @@ export interface components {
              * @description Linked content source ID (null if not yet provisioned).
              */
             source_connection_id?: string | null;
+            /**
+             * Strip Quoted Reply Chains
+             * @description Conversation banks only. When true, a conversation turn written to this bank has the quoted reply chain an email client prepends to a reply dropped from it. Only inbound (user) turns are affected, and only words in a run of at least ~40 matching a recent turn word for word are dropped (line wrapping and punctuation at a word's edge are ignored). A word the sender changed is kept, including a one-character change inside a link, address or amount, unless the change is only to that edge punctuation.
+             * @default false
+             */
+            strip_quoted_reply_chains: boolean;
             /**
              * Type
              * @description Bank type: conversation (chat-turn with speaker) or general (flat entries).
@@ -6352,6 +7136,13 @@ export interface components {
          * @description Create a model playground experiment via the public API.
          */
         PlaygroundCreateRequest: {
+            /**
+             * Effort
+             * @description Reasoning effort per model id, each one of that model's `effort_options` values. Not combinable with `json_template`.
+             */
+            effort?: {
+                [key: string]: string;
+            } | null;
             /**
              * Evaluation Complexity
              * @description simple, medium, or complex
@@ -6506,6 +7297,84 @@ export interface components {
              */
             removed: boolean;
         };
+        /**
+         * RerankerModelListResponse
+         * @description Legacy (header-less) response shape for the reranker catalog.
+         */
+        RerankerModelListResponse: {
+            /**
+             * Default Model Type
+             * @description Reranker used when a knowledge base does not choose one
+             */
+            default_model_type: string;
+            /**
+             * Models
+             * @description Available reranker models
+             */
+            models: components["schemas"]["RerankerModelResponse"][];
+            /**
+             * Search Processing Credits
+             * @description Credits charged for processing a search request
+             */
+            search_processing_credits: number;
+        };
+        /**
+         * RerankerModelResponse
+         * @description Information about a reranker model.
+         */
+        RerankerModelResponse: {
+            /**
+             * Credits Per Action
+             * @description Credits charged per rerank action
+             */
+            credits_per_action: number;
+            /**
+             * Description
+             * @description Model description
+             */
+            description?: string | null;
+            /**
+             * Is Default
+             * @description Whether this is the platform default reranker
+             */
+            is_default: boolean;
+            /**
+             * Is New
+             * @description Whether the model is newly released
+             * @default false
+             */
+            is_new: boolean;
+            /**
+             * Max Input Tokens
+             * @description Max input tokens per request
+             */
+            max_input_tokens?: number | null;
+            /**
+             * Model Type
+             * @description Full model type identifier.  This is the value to send as reranker_model on a knowledge base; send "none" or an empty string to disable reranking.
+             */
+            model_type: string;
+            /**
+             * Name
+             * @description Human-readable model name
+             */
+            name: string;
+            /**
+             * Provider
+             * @description Model provider identifier
+             */
+            provider?: string | null;
+            /**
+             * Supported Languages
+             * @description Supported languages
+             */
+            supported_languages?: string[] | null;
+            /**
+             * Url
+             * @description Model documentation URL
+             */
+            url?: string | null;
+        };
         /** ResumeInboundResponse */
         ResumeInboundResponse: {
             /** Resumed */
@@ -6518,6 +7387,14 @@ export interface components {
              * @default true
              */
             sent: boolean;
+        };
+        /** ServiceUnavailableError */
+        ServiceUnavailableError: {
+            error: {
+                /** @enum {string} */
+                code: "database_unavailable" | "vector_store_unavailable";
+                message: string;
+            };
         };
         /**
          * SetAutoBlockModeRequest
@@ -6619,6 +7496,108 @@ export interface components {
              * @description Source URL.
              */
             url: string;
+        };
+        /**
+         * SourceContentStatusListResponse
+         * @description Response model for a paginated per-item indexing status list.
+         */
+        SourceContentStatusListResponse: {
+            /** Data */
+            data: components["schemas"]["SourceContentStatusResponse"][];
+            pagination: components["schemas"]["PaginationResponse"];
+        };
+        /**
+         * SourceContentStatusResponse
+         * @description Response model for one content item's indexing status.
+         */
+        SourceContentStatusResponse: {
+            /**
+             * Awaiting Reindex
+             * @description True when the item is linked and reports completed but its content is not yet embedded under the index the source connection currently uses, because it still sits under the index that connection used before an embedding migration switched it. Anything ingested while a migration ran can land in this state. Semantic and content search will not match it until it is re-embedded; a title keyword match can still return it, so the item may appear in results while its body is unsearchable. It clears on its own — a reconciliation pass re-embeds the item under the current index, typically within minutes of the migration finishing, and a daily sweep retries whatever is still outstanding, so a large backlog can take more than one sweep to drain. The re-embedding is not charged to your account: nothing you did caused it, so Seclai absorbs the cost. Never true for an item that is simply still indexing; content_status covers that.
+             * @default false
+             */
+            awaiting_reindex: boolean;
+            /**
+             * Content Status
+             * @description Indexing status: pending, fetching, transcribing, scanning, indexing, completed, or failed.
+             */
+            content_status: string;
+            /**
+             * Content Token Count
+             * @description Extracted token count.
+             */
+            content_token_count: number | null;
+            /**
+             * Content Type
+             * @description Content type group: text, audio, video, image, or document.
+             */
+            content_type: string;
+            /**
+             * Content Url
+             * @description Internal URL identifying the item. Uploaded files use a `file-upload://` URL.
+             */
+            content_url: string | null;
+            /**
+             * Content Version Id
+             * @description ID of the content version. This is the `content_version_id` returned by the upload endpoints, so it is what you match an upload against.
+             */
+            content_version_id: string;
+            /**
+             * Content Word Count
+             * @description Extracted word count.
+             */
+            content_word_count: number | null;
+            /**
+             * Error
+             * @description Why the item failed, when `content_status` is `failed`.
+             */
+            error: string | null;
+            /**
+             * Extracted Media Capped
+             * @description True when extraction stopped with media still unread, so the item references more media than was indexed and media search will not match anything past the cut. Two causes: a web page that ran out of the budget for fetching remote assets, or a container that could not be read to the end (a truncated or hostile archive). An uploaded document that reads cleanly is never capped, however much media it holds — there is no limit on that.
+             * @default false
+             */
+            extracted_media_capped: boolean;
+            /**
+             * Extracted Media Count
+             * @description Number of embedded images / videos extracted from inside this item and indexed as their own chunks. There is no limit on this — a document contributes as many as it holds. Null when there is no media record for the item: the extraction pass has not run, does not apply to this container, or found nothing. Treat null as 'unknown', never as zero.
+             */
+            extracted_media_count?: number | null;
+            /**
+             * Extracted Media Limit
+             * @description The bound that was reached, when extracted_media_capped is true and the stop was a bound — a number of fetch attempts, or a number of seconds. Null when extraction was not capped, or when it stopped because the container could not be read rather than because a bound fired.
+             */
+            extracted_media_limit?: number | null;
+            /**
+             * Indexed At
+             * @description Timestamp when the item finished indexing and became retrievable. `null` until then.
+             */
+            indexed_at: string | null;
+            /**
+             * Mime Type
+             * @description MIME type the item was ingested as, when known.
+             */
+            mime_type: string | null;
+            /**
+             * Published At
+             * @description Publication timestamp of the item, when known.
+             */
+            published_at: string | null;
+            /**
+             * Pulled At
+             * @description Timestamp when the item was uploaded or pulled.
+             */
+            pulled_at: string;
+            /**
+             * Source Connection Content Version Id
+             * @description ID to pass to `GET /contents/{id}`. `null` until the item has finished indexing — an item that is still processing, or that failed, has no retrievable content and keeps this `null`.
+             */
+            source_connection_content_version_id: string | null;
+            /**
+             * Title
+             * @description Title of the content item.
+             */
+            title: string | null;
         };
         /**
          * SourceEmbeddingMigrationResponse
@@ -6921,7 +7900,7 @@ export interface components {
             target_dimensions: number;
             /**
              * Target Embedding Model
-             * @description Target embedding model enum
+             * @description Target embedding model — a `model_type` from `GET /models/embedders`, which also reports the `dimensions` each embedder supports and the modalities it can index.
              */
             target_embedding_model: string;
         };
@@ -7107,17 +8086,17 @@ export interface components {
         UpdateKnowledgeBaseBody: {
             /**
              * Default Score Threshold
-             * @description Default score threshold (-1 to clear).
+             * @description Prefilled into Minimum Rerank Score on a new retrieval step (-1 to clear).
              */
             default_score_threshold?: number | null;
             /**
              * Default Top K
-             * @description Default reranked results (0 to clear).
+             * @description Prefilled into Top K on a new retrieval step (0 to clear).
              */
             default_top_k?: number | null;
             /**
              * Default Top N
-             * @description Default results (0 to clear).
+             * @description Prefilled into Top N on a new retrieval step (0 to clear).
              */
             default_top_n?: number | null;
             /**
@@ -7132,7 +8111,7 @@ export interface components {
             name?: string | null;
             /**
              * Reranker Model
-             * @description Reranker model (empty string for no reranking).
+             * @description New reranker model — a `model_type` from `GET /models/rerankers`. Pass "none" to turn reranking off (not a value from that list). Omitting the field (or sending null) leaves the current reranker in place — it does NOT turn it off. "" is accepted as a synonym for "none", but prefer "none": an empty string does not survive every client's serialization.
              */
             reranker_model?: string | null;
             /**
@@ -7161,7 +8140,7 @@ export interface components {
             description?: string | null;
             /**
              * Max Age Days
-             * @description Max entry age in days before compaction. Checked inline after each write and by the hourly background sweep. Send 0 to disable.
+             * @description DEPRECATED and no longer applied. Age now belongs solely to retention_days, which deletes; compaction triggers on max_size_tokens and max_turns. Rejected with 400 for clients sending Seclai-Version 2026-08-03 or later, except 0, which clears a value stored earlier. Accepted and stored but inert for older clients.
              */
             max_age_days?: number | null;
             /**
@@ -7184,6 +8163,11 @@ export interface components {
              * @description Content source retention in days. Send 0 to clear (indefinite).
              */
             retention_days?: number | null;
+            /**
+             * Strip Quoted Reply Chains
+             * @description Conversation banks only. When true, a conversation turn written to this bank has the quoted reply chain an email client prepends to a reply dropped from it. Only inbound (user) turns are affected, and only words in a run of at least ~40 matching a recent turn word for word are dropped (line wrapping and punctuation at a word's edge are ignored). A word the sender changed is kept, including a one-character change inside a link, address or amount, unless the change is only to that edge punctuation.
+             */
+            strip_quoted_reply_chains?: boolean | null;
         };
         /**
          * UpdateSolutionRequest
@@ -7208,7 +8192,7 @@ export interface components {
         UpdateSourceBody: {
             /**
              * Media Types
-             * @description Media kinds to extract from indexed content and embed as multi-modal KB chunks. Subset of ['images', 'video']. Only kinds the source's embedder can index are honored; unsupported values are dropped. [] disables media extraction (text-only).
+             * @description Media kinds to extract from indexed content and embed as multi-modal KB chunks. Subset of ['images', 'video']. Only kinds the source's embedder can index are honored (see `supported_input_media` on GET /models/embedders); unsupported values are dropped. [] disables media extraction (text-only).
              */
             media_types?: string[] | null;
             /**
@@ -7223,10 +8207,9 @@ export interface components {
             polling?: string | null;
             /**
              * Retention Days
-             * @description New retention period in days (null for unlimited).
-             * @default -1
+             * @description New retention period in days — content older than this is deleted permanently. Send null to clear the window: content is then kept indefinitely. Omit the field to leave it unchanged.
              */
-            retention_days: number | null;
+            retention_days?: number | null;
         };
         /** UploadAgentInputApiResponse */
         UploadAgentInputApiResponse: {
@@ -7295,15 +8278,32 @@ export interface components {
             default: boolean;
             /** Description */
             description?: string | null;
-            /** Input 1H Cache Write Credits Per 1000 Tokens */
+            /**
+             * Input 1H Cache Write Credits Per 1000 Tokens
+             * @description Credits per 1,000 input tokens written to a 1-hour prompt cache.
+             */
             input_1h_cache_write_credits_per_1000_tokens?: number | null;
-            /** Input 5M Cache Write Credits Per 1000 Tokens */
+            /**
+             * Input 30M Cache Write Credits Per 1000 Tokens
+             * @description Credits per 1,000 input tokens written to a 30-minute prompt cache.
+             */
+            input_30m_cache_write_credits_per_1000_tokens?: number | null;
+            /**
+             * Input 5M Cache Write Credits Per 1000 Tokens
+             * @description Credits per 1,000 input tokens written to a 5-minute prompt cache.
+             */
             input_5m_cache_write_credits_per_1000_tokens?: number | null;
-            /** Input Cache Hit Credits Per 1000 Tokens */
+            /**
+             * Input Cache Hit Credits Per 1000 Tokens
+             * @description Credits per 1,000 input tokens read from a prompt cache.
+             */
             input_cache_hit_credits_per_1000_tokens?: number | null;
             /** Input Credits Per 1000 Tokens */
             input_credits_per_1000_tokens?: number | null;
-            /** Long Context Input Cache Hit Credits Per 1000 Tokens */
+            /**
+             * Long Context Input Cache Hit Credits Per 1000 Tokens
+             * @description Credits per 1,000 input tokens read from a prompt cache, on a call whose input exceeds `long_context_threshold` tokens.
+             */
             long_context_input_cache_hit_credits_per_1000_tokens?: number | null;
             /** Long Context Input Credits Per 1000 Tokens */
             long_context_input_credits_per_1000_tokens?: number | null;
@@ -7517,7 +8517,7 @@ export interface components {
         routers__api__agents__SetEmailTriggerConfigRequest: {
             /**
              * Alias
-             * @description Custom alias for the address `<alias>.<accountID>@agent.seclai.com` (alphanumeric plus '+', '.', '-'; 1–32 chars; not starting/ending with '+', '.', '-'; not UUID-shaped). Pass null/empty to clear.
+             * @description Custom alias, unique per account, answering as `<alias>.<accountID>@agent.seclai.com` and as `<alias>@<domain>` on each verified account email domain (alphanumeric plus '+', '.', '-'; 1–32 chars; not starting/ending with '+', '.', '-'; not UUID-shaped). Pass null/empty to clear.
              */
             alias?: string | null;
             /**
@@ -7657,6 +8657,11 @@ export interface components {
              * @description Feature name (e.g. 'source', 'solution').
              */
             feature: string;
+            /**
+             * Governance Conversation Id
+             * @description Governance conversation ID, if applicable.
+             */
+            governance_conversation_id?: string | null;
             /**
              * Prompt Call Id
              * @description Prompt call ID for credit tracking.
@@ -7828,6 +8833,22 @@ export interface components {
              */
             error: string | null;
             /**
+             * Extracted Media Capped
+             * @description True when extraction stopped with media still unread, so the item references more media than was indexed and media search will not match anything past the cut. Two causes: a web page that ran out of the budget for fetching remote assets, or a container that could not be read to the end (a truncated or hostile archive). An uploaded document that reads cleanly is never capped, however much media it holds — there is no limit on that.
+             * @default false
+             */
+            extracted_media_capped: boolean;
+            /**
+             * Extracted Media Count
+             * @description Number of embedded images / videos extracted from inside this item and indexed as their own chunks. There is no limit on this — a document contributes as many as it holds. Null when there is no media record for the item: the extraction pass has not run, does not apply to this container, or found nothing. Treat null as 'unknown', never as zero.
+             */
+            extracted_media_count?: number | null;
+            /**
+             * Extracted Media Limit
+             * @description The bound that was reached, when extracted_media_capped is true and the stop was a bound — a number of fetch attempts, or a number of seconds. Null when extraction was not capped, or when it stopped because the container could not be read rather than because a bound fired.
+             */
+            extracted_media_limit?: number | null;
+            /**
              * Id
              * @description Unique identifier for the content version.
              */
@@ -7911,9 +8932,14 @@ export interface components {
         routers__api__contents__FileUploadResponse: {
             /**
              * Content Version Id
-             * @description ID of the content version being replaced
+             * @description ID of the newly created content version. A replacement creates a new version rather than overwriting the previous one.
              */
             content_version_id: string | null;
+            /**
+             * Embedder Warning
+             * @description Set when the file's type is not embedded directly on this source, so indexing relies on extracted text. Content with none (e.g. a photograph) will be marked FAILED.
+             */
+            embedder_warning?: string | null;
             /**
              * Filename
              * @description Original filename
@@ -7921,12 +8947,12 @@ export interface components {
             filename: string;
             /**
              * Source Connection Content Version Id
-             * @description ID of the source connection content version
+             * @description ID of the source connection content version. Unchanged by a replacement, so it stays a stable handle for the content.
              */
             source_connection_content_version_id: string | null;
             /**
              * Status
-             * @description Processing status
+             * @description Always `uploaded`. Unlike the create endpoints, a replacement is never rejected as a duplicate of another item.
              */
             status: string;
         };
@@ -8127,6 +9153,7 @@ export interface components {
             deprecated_at?: string | null;
             /** Description */
             description: string;
+            effort_options?: components["schemas"]["EffortOptionsResponse"] | null;
             /** Family */
             family?: string | null;
             /** Family Generation */
@@ -8570,7 +9597,7 @@ export interface components {
         routers__api__sources__FileUploadResponse: {
             /**
              * Content Version Id
-             * @description ID of the created content version
+             * @description ID of the created content version, and what the source content status endpoints take. Set when `status` is `uploaded`; `null` when `status` is `duplicate`, because no new version was created.
              */
             content_version_id: string | null;
             /**
@@ -8585,12 +9612,12 @@ export interface components {
             filename: string;
             /**
              * Source Connection Content Version Id
-             * @description ID of the duplicate source connection content version
+             * @description ID of the existing, already-indexed item this file duplicates, and what `GET /contents/{id}` takes. Set only when `status` is `duplicate`; `null` on a new upload, which has no such id until it finishes indexing.
              */
             source_connection_content_version_id: string | null;
             /**
              * Status
-             * @description Processing status
+             * @description `uploaded` for a new item, or `duplicate` when this exact file is already on the source.
              */
             status: string;
         };
@@ -8608,12 +9635,20 @@ export interface components {
          * @description Response model for prompt model data
          */
         schemas__model_responses__PromptModelResponse: {
+            /**
+             * Chat Capable
+             * @description Whether this model can serve a chat request (`prompt_call`, `extract_data`). True for every plain text LLM, and for a dual-capability model that generates media AND holds a conversation; false for a dedicated generator (Imagen, Veo, a TTS voice), which bills per produced unit and has no chat interface. Authoritative: consumers must read this rather than inferring it from `generation_params` or `supported_output_media`, because the answer also depends on which inference interface serves the model — something no response field exposes.
+             * @default true
+             */
+            chat_capable: boolean;
             /** Default */
             default: boolean;
             /** Deprecated At */
             deprecated_at?: string | null;
             /** Description */
             description: string;
+            /** @description The reasoning-effort values a prompt_call or extract_data step may set as `effort` with this model. Null when the model takes none. */
+            effort_options?: components["schemas"]["EffortOptionsResponse"] | null;
             /** Enabled */
             enabled: boolean;
             /** Family */
@@ -8622,12 +9657,19 @@ export interface components {
             family_generation?: number | null;
             /**
              * Generation Credits Per Unit
-             * @description Per-unit credit cost for a dedicated media-generation model, in the unit named by ``generation_params.pricing_unit`` (per image / per second / per character / per output token). Multiply by the produced unit count (images, seconds, characters) for the run cost. None for token-billed (non-generation) models.
+             * @description Per-unit credit cost for a dedicated media-generation model, in the unit named by ``generation_params.pricing_unit`` (per image / per second / per character / per output token). Multiply by the produced unit count (images, seconds, characters) for the run cost. None for models with no generation descriptor. This rate applies when the model is used in a generate_image/audio/video step; a model that also serves the chat path is billed per token there instead, using the input/output token rates on this same record. When `generation_params.price_varies_by` is set the model has one rate per value of that option and this is the **highest** of them — read `generation_credits_per_variant` for the real spread rather than presenting this as the price.
              */
             generation_credits_per_unit?: number | null;
             /**
+             * Generation Credits Per Variant
+             * @description Per-unit credit cost keyed by the value of the option named in `generation_params.price_varies_by` (e.g. `{'720p': 1330, '1080p': 1995}`). None for a model with a single rate, where `generation_credits_per_unit` already describes it exactly.
+             */
+            generation_credits_per_variant?: {
+                [key: string]: number;
+            } | null;
+            /**
              * Generation Params
-             * @description Media-generation descriptor (modality, pricing_unit, and modality-specific constraints). NULL for text LLMs; present for image/audio/video generation models. See schemas.generation_params.
+             * @description Media-generation descriptor (modality, pricing_unit, and modality-specific constraints). NULL for text LLMs; present for image/audio/video generation models. See schemas.generation_params. A present descriptor does NOT imply the model is generation-only: some models serve both paths (they generate media AND hold a chat conversation). Read `chat_capable` to tell whether a model with a descriptor can also be used as a chat model — do not branch on this field being non-null alone, and do not re-derive the answer from `supported_output_media`.
              */
             generation_params?: {
                 [key: string]: unknown;
@@ -8644,11 +9686,25 @@ export interface components {
              * @description Per-image credit cost of using the built-in image_generation tool (it runs gpt-image-1). Set only for models that actually support the tool (tool-use capable); None otherwise.
              */
             image_generation_tool_credits_per_image?: number | null;
-            /** Input 1H Cache Write Credits Per 1000 Tokens */
+            /**
+             * Input 1H Cache Write Credits Per 1000 Tokens
+             * @description Credits per 1,000 input tokens written to a 1-hour prompt cache.
+             */
             input_1h_cache_write_credits_per_1000_tokens?: number | null;
-            /** Input 5M Cache Write Credits Per 1000 Tokens */
+            /**
+             * Input 30M Cache Write Credits Per 1000 Tokens
+             * @description Credits per 1,000 input tokens written to a 30-minute prompt cache.
+             */
+            input_30m_cache_write_credits_per_1000_tokens?: number | null;
+            /**
+             * Input 5M Cache Write Credits Per 1000 Tokens
+             * @description Credits per 1,000 input tokens written to a 5-minute prompt cache.
+             */
             input_5m_cache_write_credits_per_1000_tokens?: number | null;
-            /** Input Cache Hit Credits Per 1000 Tokens */
+            /**
+             * Input Cache Hit Credits Per 1000 Tokens
+             * @description Credits per 1,000 input tokens read from a prompt cache.
+             */
             input_cache_hit_credits_per_1000_tokens?: number | null;
             /** Input Credits Per 1000 Tokens */
             input_credits_per_1000_tokens?: number | null;
@@ -8849,6 +9905,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     create_agent_api_agents_post: {
@@ -8894,6 +9961,17 @@ export interface operations {
                     "application/json": components["schemas"]["AgentDefinitionImportErrorResponse"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     list_agent_email_optouts_api_api_agents_agent_email_optouts_get: {
@@ -8933,6 +10011,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     remove_agent_email_optout_api_api_agents_agent_email_optouts__optout_id__delete: {
@@ -8965,6 +10054,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -9002,6 +10102,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -9042,6 +10153,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     set_auto_block_mode_api_api_agents_blocked_email_senders_mode_put: {
@@ -9080,6 +10202,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     unblock_email_sender_api_api_agents_blocked_email_senders__blocked_id__delete: {
@@ -9112,6 +10245,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -9150,6 +10294,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     delete_evaluation_criteria_api_agents_evaluation_criteria__criteria_id__delete: {
@@ -9182,6 +10337,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -9224,6 +10390,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     list_compatible_runs_api_agents_evaluation_criteria__criteria_id__compatible_runs_get: {
@@ -9262,6 +10439,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -9307,6 +10495,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     create_evaluation_result_api_agents_evaluation_criteria__criteria_id__results_post: {
@@ -9347,6 +10546,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     get_evaluation_summary_api_agents_evaluation_criteria__criteria_id__summary_get: {
@@ -9381,6 +10591,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -9423,6 +10644,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     list_inbound_email_rejections_api_api_agents_inbound_email_rejections_get: {
@@ -9461,6 +10693,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     get_inbound_email_status_api_api_agents_inbound_email_status_get: {
@@ -9484,6 +10727,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InboundEmailStatusResponse"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -9511,6 +10765,17 @@ export interface operations {
                     "application/json": components["schemas"]["CancelQueuedRunsResponse"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     resume_inbound_email_api_api_agents_inbound_email_status_resume_post: {
@@ -9534,6 +10799,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResumeInboundResponse"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -9574,6 +10850,17 @@ export interface operations {
                     "application/json": components["schemas"]["AgentDefinitionImportErrorResponse"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     search_agent_runs_api_agents_runs_search_post: {
@@ -9610,6 +10897,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -9651,6 +10949,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     delete_agent_run_api_agents_runs__run_id__delete: {
@@ -9687,6 +10996,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     get_agent_metadata_api_agents__agent_id__get: {
@@ -9721,6 +11041,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -9763,6 +11094,17 @@ export interface operations {
                     "application/json": components["schemas"]["AgentDefinitionImportErrorResponse"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     delete_agent_api_agents__agent_id__delete: {
@@ -9795,6 +11137,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -9842,6 +11195,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     generate_agent_steps_api_agents__agent_id__ai_assistant_generate_steps_post: {
@@ -9882,6 +11246,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     generate_step_config_api_agents__agent_id__ai_assistant_step_config_post: {
@@ -9920,6 +11295,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -9963,6 +11349,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     api_get_agent_attachment_references_api_agents__agent_id__attachment_references_get: {
@@ -9997,6 +11394,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -10035,6 +11443,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     get_agent_definition_api_agents__agent_id__definition_get: {
@@ -10069,6 +11488,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -10111,6 +11541,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     disable_agent_api_api_agents__agent_id__disable_post: {
@@ -10147,6 +11588,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     enable_agent_api_api_agents__agent_id__enable_post: {
@@ -10181,6 +11633,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -10220,6 +11683,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -10262,6 +11736,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     test_draft_evaluation_api_agents__agent_id__evaluation_criteria_test_draft_post: {
@@ -10300,6 +11785,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -10346,6 +11842,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     list_evaluation_runs_api_agents__agent_id__evaluation_runs_get: {
@@ -10389,6 +11896,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     export_agent_api_agents__agent_id__export_get: {
@@ -10428,6 +11946,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     api_get_agent_input_upload_status_api_agents__agent_id__input_uploads__upload_id__get: {
@@ -10463,6 +11992,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -10506,6 +12046,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -10555,6 +12106,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -10624,6 +12186,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     list_run_evaluation_results_api_agents__agent_id__runs__run_id__evaluation_results_get: {
@@ -10662,6 +12235,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -10705,6 +12289,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     api_upload_agent_input_api_agents__agent_id__upload_input_post: {
@@ -10739,6 +12334,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -10779,6 +12385,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     api_ai_knowledge_base_api_ai_assistant_knowledge_base_post: {
@@ -10815,6 +12432,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -10855,6 +12483,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     api_ai_memory_bank_history_api_ai_assistant_memory_bank_last_conversation_get: {
@@ -10892,6 +12531,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -10934,6 +12584,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     api_ai_solution_api_ai_assistant_solution_post: {
@@ -10972,6 +12633,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     api_ai_source_api_ai_assistant_source_post: {
@@ -11008,6 +12680,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -11050,6 +12733,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     api_ai_decline_api_ai_assistant__conversation_id__decline_post: {
@@ -11082,6 +12776,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -11133,6 +12838,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     list_alert_configs_api_alerts_configs_get: {
@@ -11178,6 +12894,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     create_alert_config_api_alerts_configs_post: {
@@ -11216,6 +12943,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     get_alert_config_api_alerts_configs__config_id__get: {
@@ -11252,6 +12990,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     delete_alert_config_api_alerts_configs__config_id__delete: {
@@ -11284,6 +13033,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -11326,6 +13086,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     list_organization_preferences_api_alerts_organization_preferences_list_get: {
@@ -11363,6 +13134,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -11406,6 +13188,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     get_alert_detail_api_alerts__alert_id__get: {
@@ -11440,6 +13233,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -11482,6 +13286,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     change_alert_status_api_alerts__alert_id__status_post: {
@@ -11522,6 +13337,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     subscribe_to_alert_api_alerts__alert_id__subscribe_post: {
@@ -11558,6 +13384,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     unsubscribe_from_alert_api_alerts__alert_id__unsubscribe_post: {
@@ -11592,6 +13429,377 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
+        };
+    };
+    list_cloud_drives_api_api_cloud_drives_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CloudDriveResponseModel"][];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
+        };
+    };
+    list_cloud_drive_providers_api_api_cloud_drives_providers_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CloudDriveProviderResponseModel"][];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
+        };
+    };
+    get_cloud_drive_api_api_cloud_drives__connection_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
+            };
+            path: {
+                connection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CloudDriveResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
+        };
+    };
+    delete_cloud_drive_api_api_cloud_drives__connection_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
+            };
+            path: {
+                connection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
+        };
+    };
+    update_cloud_drive_api_api_cloud_drives__connection_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
+            };
+            path: {
+                connection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CloudDriveUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CloudDriveResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
+        };
+    };
+    get_agents_using_cloud_drive_api_api_cloud_drives__connection_id__agents_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
+            };
+            path: {
+                connection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentUsingCloudDriveResponseModel"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
+        };
+    };
+    disconnect_cloud_drive_api_api_cloud_drives__connection_id__disconnect_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
+            };
+            path: {
+                connection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CloudDriveResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
+        };
+    };
+    list_cloud_drive_rejections_api_api_cloud_drives__connection_id__rejections_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
+            };
+            path: {
+                connection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CloudDriveRejectionResponseModel"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -11633,6 +13841,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     replace_content_with_inline_text_api_contents__source_connection_content_version__put: {
@@ -11664,6 +13883,13 @@ export interface operations {
                     "application/json": components["schemas"]["routers__api__contents__FileUploadResponse"];
                 };
             };
+            /** @description The key's user is not an owner or administrator of the account (`error.code` is `permission_denied`), or the account is suspended (`suspended_account`). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -11671,6 +13897,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -11698,6 +13935,13 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description The key's user is a member of the account but not an owner or administrator (`error.code` is `permission_denied`). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -11705,6 +13949,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -11746,6 +14001,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     upload_file_to_content_api_contents__source_connection_content_version__upload_post: {
@@ -11777,6 +14043,13 @@ export interface operations {
                     "application/json": components["schemas"]["routers__api__contents__FileUploadResponse"];
                 };
             };
+            /** @description The key's user is not an owner or administrator of the account (`error.code` is `permission_denied`), or the account is suspended (`suspended_account`). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -11784,6 +14057,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -11827,6 +14111,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     list_email_domains_api_api_email_domains_get: {
@@ -11850,6 +14145,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EmailDomainsListResponse"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -11890,6 +14196,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     use_shared_domain_api_api_email_domains_use_shared_domain_post: {
@@ -11912,6 +14229,17 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
             };
         };
     };
@@ -11947,6 +14275,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -11988,6 +14327,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     set_primary_email_domain_api_api_email_domains__domain_id__primary_post: {
@@ -12022,6 +14372,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -12060,6 +14421,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     verify_email_domain_api_api_email_domains__domain_id__verify_post: {
@@ -12094,6 +14466,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -12148,6 +14531,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     list_governance_ai_conversations_api_governance_ai_assistant_conversations_get: {
@@ -12190,6 +14584,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -12242,6 +14647,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     governance_ai_decline_api_governance_ai_assistant__conversation_id__decline_post: {
@@ -12290,6 +14706,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     list_knowledge_bases_api_knowledge_bases_get: {
@@ -12331,6 +14758,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -12378,6 +14816,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     get_knowledge_base_api_knowledge_bases__knowledge_base_id__get: {
@@ -12412,6 +14861,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -12454,6 +14914,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     delete_knowledge_base_api_knowledge_bases__knowledge_base_id__delete: {
@@ -12488,6 +14959,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     get_me_api_me_get: {
@@ -12511,6 +14993,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MeResponse"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -12558,6 +15051,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     create_memory_bank_api_memory_banks_post: {
@@ -12594,6 +15098,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -12641,6 +15156,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     memory_bank_ai_last_conversation_api_memory_banks_ai_assistant_last_conversation_get: {
@@ -12678,6 +15204,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -12720,6 +15257,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     list_templates_api_memory_banks_templates_get: {
@@ -12743,6 +15291,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -12783,6 +15342,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     get_memory_bank_api_memory_banks__memory_bank_id__get: {
@@ -12817,6 +15387,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -12859,6 +15440,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     delete_memory_bank_api_memory_banks__memory_bank_id__delete: {
@@ -12891,6 +15483,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -12929,6 +15532,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     compact_memory_bank_api_memory_banks__memory_bank_id__compact_post: {
@@ -12965,6 +15579,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     delete_memory_bank_source_api_memory_banks__memory_bank_id__source_delete: {
@@ -12997,6 +15622,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -13041,6 +15677,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     test_compaction_prompt_api_memory_banks__memory_bank_id__test_compaction_post: {
@@ -13079,6 +15726,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -13126,6 +15784,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     list_alerts_api_models_alerts_get: {
@@ -13169,6 +15838,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     mark_all_read_api_models_alerts_mark_all_read_post: {
@@ -13191,6 +15871,17 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
             };
         };
     };
@@ -13215,6 +15906,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UnreadCountResponse"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -13251,6 +15953,65 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
+        };
+    };
+    list_embedding_models_api_models_embedders_get: {
+        parameters: {
+            query?: {
+                /** @description Filter to embedders that can index this input modality — a coarse kind (text, image, video, audio) or a full MIME. */
+                supports_input_media?: string | null;
+            };
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmbeddingModelListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     get_generation_tiers_api_models_generation_tiers_get: {
@@ -13274,6 +16035,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GenerationTierListResponse"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -13321,6 +16093,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     create_experiment_api_models_playground_experiments_post: {
@@ -13359,6 +16142,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     get_experiment_api_models_playground_experiments__experiment_id__get: {
@@ -13395,6 +16189,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     delete_experiment_endpoint_api_models_playground_experiments__experiment_id__delete: {
@@ -13427,6 +16232,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -13465,6 +16281,53 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
+        };
+    };
+    list_reranker_models_api_models_rerankers_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RerankerModelListResponse"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     get_model_api_models__model_id__details_get: {
@@ -13499,6 +16362,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -13548,6 +16422,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     search_api_search_get: {
@@ -13587,6 +16472,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -13634,6 +16530,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     create_solution_api_solutions_post: {
@@ -13672,6 +16579,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     get_solution_api_solutions__solution_id__get: {
@@ -13708,6 +16626,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     delete_solution_api_solutions__solution_id__delete: {
@@ -13740,6 +16669,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -13782,6 +16722,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     link_agents_api_solutions__solution_id__agents_post: {
@@ -13820,6 +16771,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -13862,6 +16824,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     ai_assistant_generate_api_solutions__solution_id__ai_assistant_generate_post: {
@@ -13900,6 +16873,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -13942,6 +16926,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     ai_assistant_source_api_solutions__solution_id__ai_assistant_source_post: {
@@ -13980,6 +16975,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -14023,6 +17029,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     ai_assistant_decline_api_solutions__solution_id__ai_assistant__conversation_id__decline_post: {
@@ -14056,6 +17073,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -14092,6 +17120,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -14134,6 +17173,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     mark_conversation_turn_api_solutions__solution_id__conversations__conversation_id__patch: {
@@ -14171,6 +17221,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -14213,6 +17274,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     unlink_knowledge_bases_api_solutions__solution_id__knowledge_bases_delete: {
@@ -14251,6 +17323,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -14293,6 +17376,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     unlink_source_connections_api_solutions__solution_id__source_connections_delete: {
@@ -14331,6 +17425,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -14378,6 +17483,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     create_source_api_sources_post: {
@@ -14423,6 +17539,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     get_source_api_sources__source_connection_id__get: {
@@ -14457,6 +17584,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -14499,6 +17637,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     upload_inline_text_to_source_api_sources__source_connection_id__post: {
@@ -14530,6 +17679,13 @@ export interface operations {
                     "application/json": components["schemas"]["routers__api__sources__FileUploadResponse"];
                 };
             };
+            /** @description The key's user is not an owner or administrator of the account (`error.code` is `permission_denied`), or the account is suspended (`suspended_account`). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -14537,6 +17693,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -14573,6 +17740,125 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
+        };
+    };
+    list_source_contents_api_sources__source_connection_id__contents_get: {
+        parameters: {
+            query?: {
+                /** @description Page number */
+                page?: number;
+                /** @description Items per page */
+                limit?: number;
+                /** @description Sort field (created_at/title/status) */
+                sort?: string;
+                /** @description Sort order */
+                order?: string;
+                /** @description Filter to one status: pending, fetching, transcribing, scanning, indexing, completed, or failed. Use `failed` to list only the items that could not be indexed. */
+                status?: string | null;
+                /** @description Filter to specific content versions, repeatable. Pass the `content_version_id` values returned by the upload endpoints to poll exactly the items you uploaded in a single request. The ids travel in the query string, so keep a request to about 100: a URL longer than 8,192 bytes is rejected before it reaches the API. The API itself accepts at most 500 — beyond either limit, split the poll or page through the unfiltered listing. */
+                content_version_id?: string[] | null;
+            };
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
+            };
+            path: {
+                source_connection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceContentStatusListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
+        };
+    };
+    get_source_content_status_endpoint_api_sources__source_connection_id__contents__content_version_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
+            };
+            path: {
+                source_connection_id: string;
+                content_version_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceContentStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     get_source_embedding_migration_api_sources__source_connection_id__embedding_migration_get: {
@@ -14607,6 +17893,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -14656,6 +17953,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     cancel_source_embedding_migration_api_sources__source_connection_id__embedding_migration_cancel_post: {
@@ -14690,6 +17998,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -14731,6 +18050,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     create_source_export_api_sources__source_connection_id__exports_post: {
@@ -14762,6 +18092,13 @@ export interface operations {
                     "application/json": components["schemas"]["routers__api__source_exports__ExportResponse"];
                 };
             };
+            /** @description The key's user is not an owner or administrator of the organization account (`error.code` is `permission_denied`). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -14769,6 +18106,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -14811,6 +18159,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     get_source_export_api_sources__source_connection_id__exports__export_id__get: {
@@ -14848,6 +18207,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     delete_source_export_api_sources__source_connection_id__exports__export_id__delete: {
@@ -14874,6 +18244,13 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description The key's user is not an owner or administrator of the organization account (`error.code` is `permission_denied`). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -14881,6 +18258,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -14911,6 +18299,13 @@ export interface operations {
                     "application/json": components["schemas"]["routers__api__source_exports__ExportResponse"];
                 };
             };
+            /** @description The key's user is not an owner or administrator of the organization account (`error.code` is `permission_denied`). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -14918,6 +18313,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -14957,6 +18363,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     upload_file_to_source_api_sources__source_connection_id__upload_post: {
@@ -14988,6 +18405,13 @@ export interface operations {
                     "application/json": components["schemas"]["routers__api__sources__FileUploadResponse"];
                 };
             };
+            /** @description The key's user is not an owner or administrator of the account (`error.code` is `permission_denied`), or the account is suspended (`suspended_account`). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -14995,6 +18419,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -15042,6 +18477,17 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
         };
     };
     get_api_version_api_version_get: {
@@ -15065,6 +18511,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApiVersionResponse"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };
@@ -15103,6 +18560,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
                 };
             };
         };

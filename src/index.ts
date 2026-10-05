@@ -13,6 +13,7 @@
  * @see {@link Seclai} for the main client class.
  * @packageDocumentation
  */
+export type { PaginatedPage } from "./client";
 export { SeclaiApiVersion } from "./versions";
 export type { ApiVersion } from "./versions";
 
@@ -115,6 +116,7 @@ export type {
   AgentRunListResponse,
   AgentRunStepResponse,
   AgentRunAttemptResponse,
+  AgentRunFileResponse,
   AgentRunToolCallResponse,
   AgentTraceSearchRequest,
   AgentTraceSearchResponse,
@@ -210,6 +212,18 @@ export type {
   FileUploadResponse,
   InlineTextUploadRequest,
   InlineTextReplaceRequest,
+  SourceContentStatusResponse,
+  SourceContentStatusListResponse,
+  ListSourceContentsOptions,
+
+  // Cloud Drives
+  CloudDriveProviderResponse,
+  CloudDriveScopeResponse,
+  CloudDriveAccessLevelResponse,
+  CloudDriveResponse,
+  CloudDriveUpdateRequest,
+  AgentUsingCloudDriveResponse,
+  CloudDriveRejectionResponse,
 
   // Source Exports
   ExportListResponse,
@@ -279,6 +293,13 @@ export type {
   PromptModelResponse,
   PromptToolResponse,
   ModalityRateResponse,
+  EffortOptionsResponse,
+  EmbeddingModelResponse,
+  EmbeddingModelListResponse,
+  EmbeddingModalityRateResponse,
+  EmbeddingStorageCreditsResponse,
+  RerankerModelResponse,
+  RerankerModelListResponse,
   VariantCategoryResponse,
   VariantOptionResponse,
   PlaygroundCreateRequest,

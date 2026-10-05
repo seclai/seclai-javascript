@@ -1212,9 +1212,140 @@ describe("Search", () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe("Pagination Helper", () => {
-  test("paginate yields items across multiple pages", async () => {
+  const pageOf = (page: number, pages: number, limit: number, total: number) => ({
+    page,
+    limit,
+    total,
+    pages,
+    has_next: page < pages,
+    has_prev: page > 1,
+  });
+
+  // Two full-envelope pages, as the server sends them, then nothing more.
+  function twoPageClient(path: string, seen: string[]) {
+    return makeClient((req) => {
+      const url = new URL(req.url);
+      expect(url.pathname).toBe(path);
+      seen.push(url.search);
+      const page = Number(url.searchParams.get("page"));
+      return jsonResponse({
+        data: page === 1 ? [{ id: "a" }, { id: "b" }] : [{ id: "c" }],
+        pagination: pageOf(page, 2, 2, 3),
+      });
+    });
+  }
+
+  test("paginate walks listSources and stops after the last page", async () => {
+    const seen: string[] = [];
+    const client = twoPageClient("/sources", seen);
+    const ids: string[] = [];
+    for await (const source of client.paginate((opts) => client.listSources(opts), { limit: 2 })) {
+      ids.push(source.id);
+    }
+    expect(ids).toEqual(["a", "b", "c"]);
+    expect(seen).toEqual(["?page=1&limit=2", "?page=2&limit=2"]);
+  });
+
+  test("paginate walks listAgents and stops after the last page", async () => {
+    const seen: string[] = [];
+    const client = twoPageClient("/agents", seen);
+    const ids: string[] = [];
+    for await (const agent of client.paginate((opts) => client.listAgents(opts), { limit: 2 })) {
+      ids.push(agent.id);
+    }
+    expect(ids).toEqual(["a", "b", "c"]);
+    expect(seen).toEqual(["?page=1&limit=2", "?page=2&limit=2"]);
+  });
+
+  // The four evaluation listings answer `{data, total, page, limit}` with no
+  // `pagination` key unless the client opts into 2026-07-27.
+  test.each([
+    { total: 3, requests: 2, ids: ["p1a", "p1b", "p2a"] },
+    { total: 4, requests: 2, ids: ["p1a", "p1b", "p2a", "p2b"] },
+    { total: 2, requests: 1, ids: ["p1a", "p1b"] },
+  ])("paginate walks a flat-shaped listing of $total", async ({ total, requests, ids }) => {
+    const seen: string[] = [];
+    const client = makeClient((req) => {
+      const url = new URL(req.url);
+      expect(url.pathname).toBe("/agents/evaluation-criteria/c1/results");
+      seen.push(url.search);
+      const page = Number(url.searchParams.get("page"));
+      const all = [`p${page}a`, `p${page}b`].map((id) => ({ id }));
+      return jsonResponse({ data: all.slice(0, total - (page - 1) * 2), total, page, limit: 2 });
+    });
+    const got: string[] = [];
+    for await (const result of client.paginate((opts) => client.listEvaluationResults("c1", opts), {
+      limit: 2,
+    })) {
+      got.push(result.id);
+    }
+    expect(got).toEqual(ids);
+    expect(seen).toHaveLength(requests);
+  });
+
+  test("paginate stops on a flat-shaped listing whose server ignores page", async () => {
+    let calls = 0;
+    const client = makeClient(() => {
+      calls++;
+      return jsonResponse({ data: [{ id: "a" }, { id: "b" }], total: 3, page: 1, limit: 2 });
+    });
+    const got: string[] = [];
+    for await (const result of client.paginate((opts) => client.listEvaluationResults("c1", opts), {
+      limit: 2,
+    })) {
+      got.push(result.id);
+    }
+    expect(calls).toBe(2);
+  });
+
+  test("paginate makes one request for a single full page", async () => {
+    let requests = 0;
+    const client = makeClient(() => {
+      requests += 1;
+      return jsonResponse({ data: [{ id: "a" }, { id: "b" }], pagination: pageOf(1, 1, 2, 2) });
+    });
+    const ids: string[] = [];
+    for await (const source of client.paginate((opts) => client.listSources(opts), { limit: 2 })) {
+      ids.push(source.id);
+    }
+    expect(ids).toEqual(["a", "b"]);
+    expect(requests).toBe(1);
+  });
+
+  test("paginate follows pages when has_next is absent", async () => {
+    const client = makeClient(() => jsonResponse({}));
+    let fetched = 0;
+    const items: string[] = [];
+    for await (const item of client.paginate(
+      async ({ page }) => {
+        fetched += 1;
+        return { data: page === 1 ? ["a", "b"] : ["c"], pagination: { pages: 2 } };
+      },
+      { limit: 2 },
+    )) {
+      items.push(item);
+    }
+    expect(items).toEqual(["a", "b", "c"]);
+    expect(fetched).toBe(2);
+  });
+
+  test("paginate yields a bare array once", async () => {
+    let requests = 0;
+    const client = makeClient(() => {
+      requests += 1;
+      return jsonResponse([{ id: "p1" }, { id: "p2" }]);
+    });
+    const ids: string[] = [];
+    for await (const drive of client.paginate(() => client.listCloudDrives(), { limit: 2 })) {
+      ids.push(drive.id);
+    }
+    expect(ids).toEqual(["p1", "p2"]);
+    expect(requests).toBe(1);
+  });
+
+  test("paginate still accepts a custom fetcher's items and total_pages", async () => {
     let pagesFetched = 0;
-    const client = makeClient(() => jsonResponse({})); // unused in this test
+    const client = makeClient(() => jsonResponse({}));
 
     const allItems: string[] = [];
     for await (const item of client.paginate(
@@ -1234,17 +1365,26 @@ describe("Pagination Helper", () => {
     expect(pagesFetched).toBe(2);
   });
 
-  test("paginate stops on single page", async () => {
+  test("paginate treats a null data as an empty page", async () => {
     const client = makeClient(() => jsonResponse({}));
+    const items: unknown[] = [];
+    for await (const item of client.paginate(async () => ({ data: null }))) items.push(item);
+    expect(items).toEqual([]);
+  });
 
-    const allItems: string[] = [];
-    for await (const item of client.paginate(
-      async () => ({ items: ["x"], pagination: { page: 1, total_pages: 1 } }),
-    )) {
-      allItems.push(item);
-    }
-
-    expect(allItems).toEqual(["x"]);
+  test("paginate throws SeclaiError on a page with no items key", async () => {
+    const client = makeClient(() => jsonResponse({ configs: [{ id: "c1" }], total: 1 }));
+    const run = async () => {
+      // The legacy `configs` shape is not one paginate() reads; the cast stands
+      // in for a caller whose fetcher is typed more loosely than it behaves.
+      for await (const _ of client.paginate<unknown>(
+        async (opts) => (await client.listAlertConfigs(opts)) as { data?: unknown[] },
+      )) {
+        void _;
+      }
+    };
+    await expect(run()).rejects.toThrow(SeclaiError);
+    await expect(run()).rejects.not.toThrow(TypeError);
   });
 });
 
@@ -2648,7 +2788,7 @@ describe("API version constants", () => {
   test("a constant reaches the wire", async () => {
     const client = makeClient(
       (req) => {
-        expect(req.headers["seclai-version"]).toBe("2026-07-27");
+        expect(req.headers["seclai-version"]).toBe("2026-10-03");
         return jsonResponse({ data: [] });
       },
       { apiVersion: SeclaiApiVersion.Latest },
@@ -2790,5 +2930,165 @@ describe("API version guard validates what the merge produces", () => {
     expect(() => new Seclai({ apiKey: "k", apiVersion: "2099-01-01" })).toThrow(
       /via apiVersion/,
     );
+  });
+});
+
+describe("Cloud drives, embedders/rerankers and source contents", () => {
+  const PAGINATION = { page: 1, limit: 1, total: 1, pages: 1, has_next: false, has_prev: false };
+
+  type Call = {
+    name: string;
+    run: (c: Seclai) => Promise<unknown>;
+    verb: string;
+    path: string;
+    query?: [string, string][];
+    body?: unknown;
+  };
+
+  const calls: Call[] = [
+    { name: "listCloudDriveProviders", run: (c) => c.listCloudDriveProviders(), verb: "GET", path: "/cloud-drives/providers" },
+    { name: "listCloudDrives", run: (c) => c.listCloudDrives(), verb: "GET", path: "/cloud-drives" },
+    { name: "getCloudDrive", run: (c) => c.getCloudDrive("c1"), verb: "GET", path: "/cloud-drives/c1" },
+    {
+      name: "updateCloudDrive",
+      run: (c) => c.updateCloudDrive("c1", { name: "Contracts" }),
+      verb: "PATCH",
+      path: "/cloud-drives/c1",
+      body: { name: "Contracts" },
+    },
+    { name: "disconnectCloudDrive", run: (c) => c.disconnectCloudDrive("c1"), verb: "POST", path: "/cloud-drives/c1/disconnect" },
+    { name: "deleteCloudDrive", run: (c) => c.deleteCloudDrive("c1"), verb: "DELETE", path: "/cloud-drives/c1" },
+    { name: "getAgentsUsingCloudDrive", run: (c) => c.getAgentsUsingCloudDrive("c1"), verb: "GET", path: "/cloud-drives/c1/agents" },
+    {
+      name: "listCloudDriveRejections with a limit",
+      run: (c) => c.listCloudDriveRejections("c1", { limit: 20 }),
+      verb: "GET",
+      path: "/cloud-drives/c1/rejections",
+      query: [["limit", "20"]],
+    },
+    { name: "listCloudDriveRejections", run: (c) => c.listCloudDriveRejections("c1"), verb: "GET", path: "/cloud-drives/c1/rejections" },
+    {
+      name: "listEmbeddingModels with a filter",
+      run: (c) => c.listEmbeddingModels({ supportsInputMedia: "image" }),
+      verb: "GET",
+      path: "/models/embedders",
+      query: [["supports_input_media", "image"]],
+    },
+    { name: "listEmbeddingModels", run: (c) => c.listEmbeddingModels(), verb: "GET", path: "/models/embedders" },
+    { name: "listRerankerModels", run: (c) => c.listRerankerModels(), verb: "GET", path: "/models/rerankers" },
+    {
+      name: "listSourceContents with every option",
+      run: (c) =>
+        c.listSourceContents("s1", {
+          page: 2,
+          limit: 10,
+          sort: "title",
+          order: "asc",
+          status: "failed",
+          contentVersionIds: ["cv1", "cv2"],
+        }),
+      verb: "GET",
+      path: "/sources/s1/contents",
+      query: [
+        ["page", "2"],
+        ["limit", "10"],
+        ["sort", "title"],
+        ["order", "asc"],
+        ["status", "failed"],
+        ["content_version_id", "cv1"],
+        ["content_version_id", "cv2"],
+      ],
+    },
+    { name: "listSourceContents", run: (c) => c.listSourceContents("s1"), verb: "GET", path: "/sources/s1/contents" },
+    {
+      name: "getSourceContentStatus",
+      run: (c) => c.getSourceContentStatus("s1", "cv1"),
+      verb: "GET",
+      path: "/sources/s1/contents/cv1",
+    },
+  ];
+
+  test.each(calls)("$name sends $verb $path", async ({ run, verb, path, query, body }) => {
+    let seen: unknown;
+    const client = makeClient((req) => {
+      const url = new URL(req.url);
+      seen = {
+        verb: req.method,
+        path: url.pathname,
+        query: [...url.searchParams.entries()],
+        body: req.bodyText === undefined ? undefined : JSON.parse(req.bodyText),
+      };
+      return jsonResponse({ data: [] });
+    });
+    await run(client);
+    expect(seen).toEqual({ verb, path, query: query ?? [], body });
+  });
+
+  const lists: { name: string; run: (c: Seclai) => Promise<unknown[]> }[] = [
+    { name: "listCloudDriveProviders", run: (c) => c.listCloudDriveProviders() },
+    { name: "listCloudDrives", run: (c) => c.listCloudDrives() },
+    { name: "getAgentsUsingCloudDrive", run: (c) => c.getAgentsUsingCloudDrive("c1") },
+    { name: "listCloudDriveRejections", run: (c) => c.listCloudDriveRejections("c1") },
+  ];
+
+  test.each(lists)("$name reads the legacy bare array", async ({ run }) => {
+    const client = makeClient(() => jsonResponse([{ id: "x1" }]));
+    expect(await run(client)).toEqual([{ id: "x1" }]);
+  });
+
+  test.each(lists)("$name reads the 2026-07-27 envelope", async ({ run }) => {
+    const client = makeClient(() => jsonResponse({ data: [{ id: "x1" }], pagination: PAGINATION }));
+    expect(await run(client)).toEqual([{ id: "x1" }]);
+  });
+
+  const modelLists: { name: string; run: (c: Seclai) => Promise<{ models: unknown[] }> }[] = [
+    { name: "listEmbeddingModels", run: (c) => c.listEmbeddingModels() },
+    { name: "listRerankerModels", run: (c) => c.listRerankerModels() },
+  ];
+
+  test.each(modelLists)("$name reads the legacy models key", async ({ run }) => {
+    const client = makeClient(() =>
+      jsonResponse({ models: [{ model_type: "m1" }], default_model_type: "m1" }),
+    );
+    const res = await run(client);
+    expect(res.models).toEqual([{ model_type: "m1" }]);
+    expect(res).toHaveProperty("default_model_type", "m1");
+  });
+
+  test.each(modelLists)("$name keeps models and the pricing on the 2026-07-27 envelope", async ({ run }) => {
+    const client = makeClient(() =>
+      jsonResponse({ data: [{ model_type: "m1" }], pagination: PAGINATION, default_model_type: "m1" }),
+    );
+    const res = await run(client);
+    expect(res.models).toEqual([{ model_type: "m1" }]);
+    expect(res).toHaveProperty("default_model_type", "m1");
+    expect(res).toHaveProperty("pagination", PAGINATION);
+  });
+
+  test("listSourceContents returns the envelope", async () => {
+    const body = { data: [{ content_version_id: "cv1" }], pagination: PAGINATION };
+    const client = makeClient(() => jsonResponse(body));
+    expect(await client.listSourceContents("s1")).toEqual(body);
+  });
+
+  test("listSourceContents with no ids returns an empty page without a request", async () => {
+    let requests = 0;
+    const client = makeClient(() => {
+      requests += 1;
+      return jsonResponse({ data: [{ content_version_id: "cv1" }], pagination: PAGINATION });
+    });
+    expect(await client.listSourceContents("s1", { contentVersionIds: [] })).toEqual({
+      data: [],
+      pagination: { page: 1, limit: 20, total: 0, pages: 0, has_next: false, has_prev: false },
+    });
+    expect(
+      (await client.listSourceContents("s1", { contentVersionIds: [], page: 3, limit: 5 })).pagination,
+    ).toEqual({ page: 3, limit: 5, total: 0, pages: 0, has_next: false, has_prev: false });
+    expect(requests).toBe(0);
+  });
+
+  test("deleteCloudDrive discards the acknowledgement", async () => {
+    const client = makeClient(() => jsonResponse({ ok: true }));
+    expect(await client.deleteCloudDrive("c1")).toBeUndefined();
   });
 });

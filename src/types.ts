@@ -148,6 +148,9 @@ export type AgentRunStepResponse = components["schemas"]["AgentRunStepResponse"]
 /** Details of a single attempt within an agent run step. */
 export type AgentRunAttemptResponse = components["schemas"]["AgentRunAttemptResponse"];
 
+/** A file a run or step produced or received (within `attachments`). */
+export type AgentRunFileResponse = components["schemas"]["AgentRunFileResponse"];
+
 /** A single LLM tool call made during a `prompt_call` step (within {@link AgentRunStepResponse}'s `tool_calls`). */
 export type AgentRunToolCallResponse = components["schemas"]["AgentRunToolCallResponse"];
 
@@ -462,6 +465,47 @@ export type InlineTextUploadRequest = components["schemas"]["InlineTextUploadReq
 /** Request body for replacing content with inline text. */
 export type InlineTextReplaceRequest = components["schemas"]["InlineTextReplaceRequest"];
 
+/** One content item's indexing status within a source. */
+export type SourceContentStatusResponse = components["schemas"]["SourceContentStatusResponse"];
+
+/** Paginated list of a source's content items and their indexing status. */
+export type SourceContentStatusListResponse = components["schemas"]["SourceContentStatusListResponse"];
+
+/** Filters for {@link Seclai.listSourceContents}. */
+export interface ListSourceContentsOptions extends SortableListOptions {
+  /** Keep only one status: pending, fetching, transcribing, scanning, indexing, completed or failed. */
+  status?: string;
+  /**
+   * Keep only these items — the `content_version_id` values the upload methods
+   * return. Keep it to about 100: the ids travel in the query string, and a URL
+   * over 8,192 bytes is rejected with a 414. The API itself accepts at most 500.
+   */
+  contentVersionIds?: string[];
+}
+
+// ─── Cloud Drives ────────────────────────────────────────────────────────────
+
+/** A cloud-drive provider this deployment has configured. */
+export type CloudDriveProviderResponse = components["schemas"]["CloudDriveProviderResponseModel"];
+
+/** An OAuth scope a {@link CloudDriveProviderResponse} can request. */
+export type CloudDriveScopeResponse = components["schemas"]["CloudDriveScopeResponseModel"];
+
+/** An access level a {@link CloudDriveProviderResponse} offers. */
+export type CloudDriveAccessLevelResponse = components["schemas"]["CloudDriveAccessLevelResponseModel"];
+
+/** A cloud-drive connection. */
+export type CloudDriveResponse = components["schemas"]["CloudDriveResponseModel"];
+
+/** Request body for updating a cloud-drive connection. */
+export type CloudDriveUpdateRequest = components["schemas"]["CloudDriveUpdateRequest"];
+
+/** An agent that uses a cloud-drive connection. */
+export type AgentUsingCloudDriveResponse = components["schemas"]["AgentUsingCloudDriveResponseModel"];
+
+/** A file a cloud-drive connection skipped, and why. */
+export type CloudDriveRejectionResponse = components["schemas"]["CloudDriveRejectionResponseModel"];
+
 // ─── Source Exports ──────────────────────────────────────────────────────────
 
 /** Paginated list of source exports. */
@@ -632,6 +676,27 @@ export type PromptToolResponse = components["schemas"]["PromptToolResponse"];
 
 /** Per-modality rate for a model that prices image/audio/video distinctly from its default text rate. */
 export type ModalityRateResponse = components["schemas"]["ModalityRateResponse"];
+
+/** The effort levels a model accepts, and its default. */
+export type EffortOptionsResponse = components["schemas"]["EffortOptionsResponse"];
+
+/** An embedding model a source can index with. */
+export type EmbeddingModelResponse = components["schemas"]["EmbeddingModelResponse"];
+
+/** The embedding models, with the defaults and pricing that apply to all of them. */
+export type EmbeddingModelListResponse = components["schemas"]["EmbeddingModelListResponse"];
+
+/** Per-modality rate for an embedding model. */
+export type EmbeddingModalityRateResponse = components["schemas"]["EmbeddingModalityRateResponse"];
+
+/** Storage credits for one embedding dimension. */
+export type EmbeddingStorageCreditsResponse = components["schemas"]["EmbeddingStorageCreditsResponse"];
+
+/** A reranker model a knowledge base can use. */
+export type RerankerModelResponse = components["schemas"]["RerankerModelResponse"];
+
+/** The reranker models, with the default and pricing that apply to all of them. */
+export type RerankerModelListResponse = components["schemas"]["RerankerModelListResponse"];
 
 /** Variant category for model pricing tiers. */
 export type VariantCategoryResponse = components["schemas"]["VariantCategoryResponse"];
