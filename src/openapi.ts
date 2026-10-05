@@ -17766,7 +17766,7 @@ export interface operations {
                 order?: string;
                 /** @description Filter to one status: pending, fetching, transcribing, scanning, indexing, completed, or failed. Use `failed` to list only the items that could not be indexed. */
                 status?: string | null;
-                /** @description Filter to specific content versions, repeatable. Pass the `content_version_id` values returned by the upload endpoints to poll exactly the items you uploaded in a single request. At most 500 ids per request — beyond that, page through the unfiltered listing or split the poll. */
+                /** @description Filter to specific content versions, repeatable. Pass the `content_version_id` values returned by the upload endpoints to poll exactly the items you uploaded in a single request. The ids travel in the query string, so keep a request to about 100: a URL longer than 8,192 bytes is rejected before it reaches the API. The API itself accepts at most 500 — beyond either limit, split the poll or page through the unfiltered listing. */
                 content_version_id?: string[] | null;
             };
             header?: {

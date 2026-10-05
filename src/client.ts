@@ -2209,7 +2209,8 @@ export class Seclai {
    * @param sourceId - Source connection identifier.
    * @param opts - Pagination, sorting, and filters. Pass the `content_version_id`
    *   values the upload methods return as `contentVersionIds` to poll a batch of
-   *   uploads in one request, at most 500 ids per request. An empty
+   *   uploads in one request — about 100 at a time, since the ids travel in the
+   *   query string and a URL over 8,192 bytes is rejected with a 414. An empty
    *   `contentVersionIds` matches nothing, so it returns an empty page without
    *   sending a request.
    * @returns The items under `data` with `pagination`, on every API version.

@@ -475,7 +475,11 @@ export type SourceContentStatusListResponse = components["schemas"]["SourceConte
 export interface ListSourceContentsOptions extends SortableListOptions {
   /** Keep only one status: pending, fetching, transcribing, scanning, indexing, completed or failed. */
   status?: string;
-  /** Keep only these items — the `content_version_id` values the upload methods return. At most 500. */
+  /**
+   * Keep only these items — the `content_version_id` values the upload methods
+   * return. Keep it to about 100: the ids travel in the query string, and a URL
+   * over 8,192 bytes is rejected with a 414. The API itself accepts at most 500.
+   */
   contentVersionIds?: string[];
 }
 
