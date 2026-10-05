@@ -292,18 +292,78 @@ export type PaginatedPage<T> =
     }
   | { items: T[]; pagination?: { page: number; total_pages: number } };
 
-/** The items of a list that is a bare array by default and `{data, pagination}` from 2026-07-27. */
+/**
+ * The items of a version-gated list whose method is declared as an array: a
+ * bare array by default, under `data` from 2026-07-27.
+ */
 function listItems<T>(res: unknown): T[] {
   if (Array.isArray(res)) return res as T[];
-  return (res as { data?: T[] | null } | null)?.data ?? [];
+  if (res !== null && typeof res === "object" && "data" in res) {
+    const data = (res as { data: unknown }).data;
+    if (Array.isArray(data)) return data as T[];
+    if (data === null) return [];
+  }
+  throw notAList();
 }
 
-/** Restore `models` on a model listing, which arrives under `data` from 2026-07-27. */
-function withModels<T extends { models: unknown[] }>(res: unknown): T {
-  const body = res as T & { data?: T["models"] };
-  return Array.isArray(body.models) || !Array.isArray(body.data)
-    ? body
-    : { ...body, models: body.data };
+/** An empty list would read as "no results" for a body that is not a list at all. */
+function notAList(): SeclaiError {
+  return new SeclaiError(
+    "Expected a list response: an array, or an object carrying the items under `data` or the endpoint's own key.",
+  );
+}
+
+/**
+ * A version-gated list as its declared object type. The items are under `key`
+ * by default (or the body is a bare array) and under `data` from 2026-07-27,
+ * where `flat` counters arrive inside `pagination`; both are restored to where
+ * the type declares them, and `data`/`pagination` stay when the API sent them.
+ */
+function keyedList<T extends object>(
+  res: unknown,
+  key: keyof T & string,
+  flat: readonly ("total" | "page" | "limit")[] = [],
+): T {
+  if (Array.isArray(res)) return { [key]: res } as T;
+  if (res === null || typeof res !== "object") throw notAList();
+  const body: Record<string, unknown> = { ...(res as Record<string, unknown>) };
+  if (Array.isArray(body.data)) body[key] = body.data;
+  else if ("data" in body && body.data === null) body[key] = [];
+  else if (!Array.isArray(body[key])) throw notAList();
+  const pagination = body.pagination as Record<string, unknown> | null | undefined;
+  for (const field of flat) {
+    if (body[field] === undefined && pagination?.[field] !== undefined) body[field] = pagination[field];
+  }
+  return body as T;
+}
+
+/** The flat counters of a list type that declares `total`, `page` and `limit`. */
+const PAGE_COUNTERS = ["total", "page", "limit"] as const;
+
+/**
+ * Merge header layers into one value per header. A later layer wins, and names
+ * compare case-insensitively, so an override replaces instead of adding a
+ * second spelling for `fetch` to join.
+ */
+function mergeHeaders(...layers: (Record<string, string> | undefined)[]): Record<string, string> {
+  const byName = new Map<string, [string, string]>();
+  for (const layer of layers) {
+    for (const [name, value] of Object.entries(layer ?? {})) {
+      // A nullish value from untyped JavaScript means "not set", not a header.
+      if (value === undefined || value === null) continue;
+      const lower = name.toLowerCase();
+      byName.delete(lower);
+      byName.set(lower, [name, value]);
+    }
+  }
+  return Object.fromEntries(byName.values());
+}
+
+/** The spelling under which `headers` carries `name` — the last one, which is the one a merge keeps. */
+function headerKey(headers: Record<string, string> | undefined, name: string): string | undefined {
+  return Object.keys(headers ?? {})
+    .filter((key) => key.toLowerCase() === name)
+    .pop();
 }
 
 async function safeText(response: Response): Promise<string | undefined> {
@@ -450,6 +510,7 @@ function inferMimeType(fileName: string | undefined): string | undefined {
 export class Seclai {
   private readonly baseUrl: string;
   private readonly defaultHeaders: Record<string, string>;
+  private readonly allowUnknownApiVersion: boolean;
   private readonly fetcher: FetchLike;
   private _authState: AuthState | null = null;
   private _authInitPromise: Promise<void> | null = null;
@@ -485,45 +546,16 @@ export class Seclai {
 
     this.baseUrl = opts.baseUrl ?? getEnv("SECLAI_API_URL") ?? SECLAI_API_URL;
 
-    // Merge first, then validate what the merge produced. `defaultHeaders` is
-    // applied last so an explicit header wins, which means it can carry its own
-    // Seclai-Version — and it may carry several in differing cases. Inspecting
-    // the options instead would have to predict which one survives: picking the
-    // first match while the merge lets the last win is a guard that validates a
-    // value the client never sends.
-    //
-    // Keys are compared case-insensitively so a caller-supplied `seclai-version`
-    // replaces ours rather than adding a second wire header.
-    const merged: Record<string, string> = opts.apiVersion
-      ? { "Seclai-Version": opts.apiVersion }
-      : {};
-    let versionKey = opts.apiVersion ? "Seclai-Version" : undefined;
-    for (const [key, value] of Object.entries(opts.defaultHeaders ?? {})) {
-      for (const existing of Object.keys(merged)) {
-        if (existing.toLowerCase() === key.toLowerCase()) delete merged[existing];
-      }
-      merged[key] = value;
-      if (key.toLowerCase() === "seclai-version") versionKey = key;
-    }
-
-    const effectiveVersion = versionKey ? merged[versionKey] : undefined;
-    if (
-      effectiveVersion &&
-      !opts.allowUnknownApiVersion &&
-      !KNOWN_API_VERSIONS.includes(effectiveVersion)
-    ) {
-      const via =
-        versionKey === "Seclai-Version" && merged[versionKey] === opts.apiVersion
-          ? "apiVersion"
-          : `defaultHeaders['${versionKey}']`;
-      throw new SeclaiConfigurationError(
-        `Unknown API version '${effectiveVersion}' (via ${via}). This release was ` +
-          `built against ${KNOWN_API_VERSIONS.join(", ")}. A newer API version can ` +
-          `change response shapes, which this client would decode incorrectly rather ` +
-          `than reject. Upgrade the package, or set allowUnknownApiVersion to ` +
-          `proceed anyway.`,
-      );
-    }
+    // `defaultHeaders` is applied last so an explicit header wins, which means
+    // it can carry its own Seclai-Version; the guard reads the merged result,
+    // the value the client will send.
+    this.allowUnknownApiVersion = opts.allowUnknownApiVersion ?? false;
+    const merged = mergeHeaders(
+      opts.apiVersion ? { "Seclai-Version": opts.apiVersion } : undefined,
+      opts.defaultHeaders,
+    );
+    const defaultKey = headerKey(opts.defaultHeaders, "seclai-version");
+    this.assertKnownApiVersion(merged, defaultKey ? `defaultHeaders['${defaultKey}']` : "apiVersion");
     this.defaultHeaders = merged;
     this.fetcher = fetcher;
 
@@ -569,6 +601,35 @@ export class Seclai {
     return this._authState;
   }
 
+  /** Throw unless the `Seclai-Version` in `headers` is one this release was built against. */
+  private assertKnownApiVersion(headers: Record<string, string>, via: string): void {
+    const key = headerKey(headers, "seclai-version");
+    if (key === undefined || this.allowUnknownApiVersion) return;
+    const version = headers[key] ?? "";
+    if (KNOWN_API_VERSIONS.includes(version)) return;
+    throw new SeclaiConfigurationError(
+      `Unknown API version '${version}' (via ${via}). This release was ` +
+        `built against ${KNOWN_API_VERSIONS.join(", ")}. A newer API version can ` +
+        `change response shapes, which this client would decode incorrectly rather ` +
+        `than reject. Upgrade the package, or set allowUnknownApiVersion to ` +
+        `proceed anyway.`,
+    );
+  }
+
+  /**
+   * The headers one request sends: `layers` merged in order, later winning,
+   * with the resulting `Seclai-Version` checked against the known versions.
+   */
+  private requestHeaders(
+    layers: (Record<string, string> | undefined)[],
+    perRequest?: Record<string, string>,
+  ): Record<string, string> {
+    const headers = mergeHeaders(...layers);
+    const requestKey = headerKey(perRequest, "seclai-version");
+    this.assertKnownApiVersion(headers, requestKey ? `headers['${requestKey}']` : "defaultHeaders");
+    return headers;
+  }
+
   /** Resolve auth headers for the current request. */
   private async authHeaders(): Promise<Record<string, string>> {
     const state = await this.ensureAuth();
@@ -604,17 +665,18 @@ export class Seclai {
     const url = buildURL(this.baseUrl, path, opts?.query);
 
     const authHeaders = await this.authHeaders();
-    const headers: Record<string, string> = {
-      ...this.defaultHeaders,
-      ...(opts?.headers ?? {}),
-      ...authHeaders,
-    };
-
     let body: BodyInit | undefined;
-    if (opts?.json !== undefined) {
-      headers["content-type"] = headers["content-type"] ?? "application/json";
-      body = JSON.stringify(opts.json);
-    }
+    if (opts?.json !== undefined) body = JSON.stringify(opts.json);
+    // A caller's content type, default or per-request, replaces the JSON one.
+    const headers = this.requestHeaders(
+      [
+        body === undefined ? undefined : { "content-type": "application/json" },
+        this.defaultHeaders,
+        opts?.headers,
+        authHeaders,
+      ],
+      opts?.headers,
+    );
 
     const init: RequestInit = { method, headers };
     if (body !== undefined) {
@@ -683,17 +745,18 @@ export class Seclai {
     const url = buildURL(this.baseUrl, path, opts?.query);
 
     const authHeaders = await this.authHeaders();
-    const headers: Record<string, string> = {
-      ...this.defaultHeaders,
-      ...(opts?.headers ?? {}),
-      ...authHeaders,
-    };
-
     let body: BodyInit | undefined;
-    if (opts?.json !== undefined) {
-      headers["content-type"] = headers["content-type"] ?? "application/json";
-      body = JSON.stringify(opts.json);
-    }
+    if (opts?.json !== undefined) body = JSON.stringify(opts.json);
+    // A caller's content type, default or per-request, replaces the JSON one.
+    const headers = this.requestHeaders(
+      [
+        body === undefined ? undefined : { "content-type": "application/json" },
+        this.defaultHeaders,
+        opts?.headers,
+        authHeaders,
+      ],
+      opts?.headers,
+    );
 
     const init: RequestInit = { method, headers };
     if (body !== undefined) init.body = body;
@@ -741,13 +804,10 @@ export class Seclai {
     const url = buildURL(this.baseUrl, path);
 
     const authHeaders = await this.authHeaders();
-    const headers: Record<string, string> = {
-      ...this.defaultHeaders,
-      ...authHeaders,
-    };
-    // Let fetch set the correct multipart Content-Type with boundary
-    delete headers["content-type"];
-    delete headers["Content-Type"];
+    const headers = this.requestHeaders([this.defaultHeaders, authHeaders]);
+    // Let fetch set the multipart Content-Type with its boundary.
+    const contentType = headerKey(headers, "content-type");
+    if (contentType !== undefined) delete headers[contentType];
 
     const form = new FormData();
     const mimeType = opts.mimeType ?? inferMimeType(opts.fileName);
@@ -935,7 +995,7 @@ export class Seclai {
    * @returns The calling agents.
    */
   async getAgentCallers(agentId: string): Promise<AgentCallerApiResponse[]> {
-    return (await this.request("GET", `/agents/${agentId}/callers`)) as AgentCallerApiResponse[];
+    return listItems<AgentCallerApiResponse>(await this.request("GET", `/agents/${agentId}/callers`));
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1110,12 +1170,11 @@ export class Seclai {
     const url = buildURL(this.baseUrl, `/agents/${agentId}/runs/stream`);
 
     const authHdrs = await this.authHeaders();
-    const headers: Record<string, string> = {
-      ...this.defaultHeaders,
-      ...authHdrs,
-      accept: "text/event-stream",
-      "content-type": "application/json",
-    };
+    const headers = this.requestHeaders([
+      this.defaultHeaders,
+      authHdrs,
+      { accept: "text/event-stream", "content-type": "application/json" },
+    ]);
 
     const timeoutMs = opts?.timeoutMs ?? 60_000;
     const timeoutController = new AbortController();
@@ -1243,12 +1302,11 @@ export class Seclai {
     const url = buildURL(this.baseUrl, `/agents/${agentId}/runs/stream`);
 
     const authHdrs = await this.authHeaders();
-    const headers: Record<string, string> = {
-      ...this.defaultHeaders,
-      ...authHdrs,
-      accept: "text/event-stream",
-      "content-type": "application/json",
-    };
+    const headers = this.requestHeaders([
+      this.defaultHeaders,
+      authHdrs,
+      { accept: "text/event-stream", "content-type": "application/json" },
+    ]);
 
     const timeoutMs = opts?.timeoutMs ?? 60_000;
     const timeoutController = new AbortController();
@@ -1419,14 +1477,13 @@ export class Seclai {
     runId: string,
     opts: ListOptions = {},
   ): Promise<EvaluationResultWithCriteriaListResponse> {
-    // Either wire shape: the endpoint returns a bare array by default and an
-    // envelope once the caller opts in with apiVersion 2026-07-27 or later.
-    const res = (await this.request("GET", `/agents/${agentId}/runs/${runId}/evaluation-results`, {
-      query: { page: opts.page, limit: opts.limit },
-    })) as EvaluationResultWithCriteriaListResponse | EvaluationResultWithCriteriaListResponse["data"];
-    return Array.isArray(res)
-      ? ({ data: res } as EvaluationResultWithCriteriaListResponse)
-      : res;
+    return keyedList<EvaluationResultWithCriteriaListResponse>(
+      await this.request("GET", `/agents/${agentId}/runs/${runId}/evaluation-results`, {
+        query: { page: opts.page, limit: opts.limit },
+      }),
+      "data",
+      PAGE_COUNTERS,
+    );
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1586,10 +1643,9 @@ export class Seclai {
   /**
    * List evaluation criteria for an agent, with pagination metadata.
    *
-   * Accepts either wire shape. The endpoint answered with a bare array before
-   * 2026-07 and with a paginated envelope after, so a client that decodes only
-   * one breaks the day the other ships. `total`, `page` and `limit` are absent
-   * when the endpoint answers with a bare array.
+   * The endpoint answers with a bare array by default and with `{data,
+   * pagination}` once `apiVersion` is 2026-07-27 or later; `pagination` is
+   * absent on the bare array.
    *
    * @param agentId - Agent identifier.
    * @param opts - Pagination options.
@@ -1599,10 +1655,12 @@ export class Seclai {
     agentId: string,
     opts: ListOptions = {},
   ): Promise<EvaluationCriteriaListResponse> {
-    const res = (await this.request("GET", `/agents/${agentId}/evaluation-criteria`, {
-      query: { page: opts.page, limit: opts.limit },
-    })) as EvaluationCriteriaResponse[] | EvaluationCriteriaListResponse;
-    return Array.isArray(res) ? { data: res } : res;
+    return keyedList<EvaluationCriteriaListResponse>(
+      await this.request("GET", `/agents/${agentId}/evaluation-criteria`, {
+        query: { page: opts.page, limit: opts.limit },
+      }),
+      "data",
+    );
   }
 
   /**
@@ -1663,9 +1721,13 @@ export class Seclai {
    * @param opts - Pagination options.
    */
   async listEvaluationResults(criteriaId: string, opts: ListOptions = {}): Promise<EvaluationResultListResponse> {
-    return (await this.request("GET", `/agents/evaluation-criteria/${criteriaId}/results`, {
-      query: { page: opts.page, limit: opts.limit },
-    })) as EvaluationResultListResponse;
+    return keyedList<EvaluationResultListResponse>(
+      await this.request("GET", `/agents/evaluation-criteria/${criteriaId}/results`, {
+        query: { page: opts.page, limit: opts.limit },
+      }),
+      "data",
+      PAGE_COUNTERS,
+    );
   }
 
   /**
@@ -1686,9 +1748,13 @@ export class Seclai {
    * @param opts - Pagination options.
    */
   async listCompatibleRuns(criteriaId: string, opts: ListOptions = {}): Promise<CompatibleRunListResponse> {
-    return (await this.request("GET", `/agents/evaluation-criteria/${criteriaId}/compatible-runs`, {
-      query: { page: opts.page, limit: opts.limit },
-    })) as CompatibleRunListResponse;
+    return keyedList<CompatibleRunListResponse>(
+      await this.request("GET", `/agents/evaluation-criteria/${criteriaId}/compatible-runs`, {
+        query: { page: opts.page, limit: opts.limit },
+      }),
+      "data",
+      PAGE_COUNTERS,
+    );
   }
 
   /**
@@ -1709,9 +1775,13 @@ export class Seclai {
    * @param opts - Pagination options.
    */
   async listAgentEvaluationResults(agentId: string, opts: ListOptions = {}): Promise<EvaluationResultWithCriteriaListResponse> {
-    return (await this.request("GET", `/agents/${agentId}/evaluation-results`, {
-      query: { page: opts.page, limit: opts.limit },
-    })) as EvaluationResultWithCriteriaListResponse;
+    return keyedList<EvaluationResultWithCriteriaListResponse>(
+      await this.request("GET", `/agents/${agentId}/evaluation-results`, {
+        query: { page: opts.page, limit: opts.limit },
+      }),
+      "data",
+      PAGE_COUNTERS,
+    );
   }
 
   /**
@@ -1721,9 +1791,13 @@ export class Seclai {
    * @param opts - Pagination options.
    */
   async listEvaluationRuns(agentId: string, opts: ListOptions = {}): Promise<EvaluationRunSummaryListResponse> {
-    return (await this.request("GET", `/agents/${agentId}/evaluation-runs`, {
-      query: { page: opts.page, limit: opts.limit },
-    })) as EvaluationRunSummaryListResponse;
+    return keyedList<EvaluationRunSummaryListResponse>(
+      await this.request("GET", `/agents/${agentId}/evaluation-runs`, {
+        query: { page: opts.page, limit: opts.limit },
+      }),
+      "data",
+      PAGE_COUNTERS,
+    );
   }
 
   /**
@@ -1780,9 +1854,13 @@ export class Seclai {
   async listAgentEmailOptOuts(
     opts: { agentId?: string; limit?: number; offset?: number } = {},
   ): Promise<AgentEmailOptOutListResponse> {
-    return (await this.request("GET", "/agents/agent-email-optouts", {
-      query: { agent_id: opts.agentId, limit: opts.limit, offset: opts.offset },
-    })) as AgentEmailOptOutListResponse;
+    return keyedList<AgentEmailOptOutListResponse>(
+      await this.request("GET", "/agents/agent-email-optouts", {
+        query: { agent_id: opts.agentId, limit: opts.limit, offset: opts.offset },
+      }),
+      "items",
+      ["total"],
+    );
   }
 
   /**
@@ -1805,9 +1883,13 @@ export class Seclai {
   async listBlockedEmailSenders(
     opts: { limit?: number; offset?: number } = {},
   ): Promise<BlockedEmailSenderListResponse> {
-    return (await this.request("GET", "/agents/blocked-email-senders", {
-      query: { limit: opts.limit, offset: opts.offset },
-    })) as BlockedEmailSenderListResponse;
+    return keyedList<BlockedEmailSenderListResponse>(
+      await this.request("GET", "/agents/blocked-email-senders", {
+        query: { limit: opts.limit, offset: opts.offset },
+      }),
+      "items",
+      ["total"],
+    );
   }
 
   /**
@@ -1845,9 +1927,11 @@ export class Seclai {
    * @returns The updated blocked-sender list.
    */
   async setAutoBlockMode(body: SetAutoBlockModeRequest): Promise<BlockedEmailSenderListResponse> {
-    return (await this.request("PUT", "/agents/blocked-email-senders/mode", {
-      json: body,
-    })) as BlockedEmailSenderListResponse;
+    return keyedList<BlockedEmailSenderListResponse>(
+      await this.request("PUT", "/agents/blocked-email-senders/mode", { json: body }),
+      "items",
+      ["total"],
+    );
   }
 
   /**
@@ -1861,9 +1945,11 @@ export class Seclai {
   async listInboundEmailRejections(
     opts: { agentId?: string; limit?: number } = {},
   ): Promise<InboundEmailRejectionResponse[]> {
-    return (await this.request("GET", "/agents/inbound-email-rejections", {
-      query: { agent_id: opts.agentId, limit: opts.limit },
-    })) as InboundEmailRejectionResponse[];
+    return listItems<InboundEmailRejectionResponse>(
+      await this.request("GET", "/agents/inbound-email-rejections", {
+        query: { agent_id: opts.agentId, limit: opts.limit },
+      }),
+    );
   }
 
   /**
@@ -1910,9 +1996,13 @@ export class Seclai {
    * @returns Paginated list of knowledge bases.
    */
   async listKnowledgeBases(opts: SortableListOptions = {}): Promise<KnowledgeBaseListResponse> {
-    return (await this.request("GET", "/knowledge_bases", {
-      query: { page: opts.page, limit: opts.limit, sort: opts.sort, order: opts.order },
-    })) as KnowledgeBaseListResponse;
+    return keyedList<KnowledgeBaseListResponse>(
+      await this.request("GET", "/knowledge_bases", {
+        query: { page: opts.page, limit: opts.limit, sort: opts.sort, order: opts.order },
+      }),
+      "knowledge_bases",
+      PAGE_COUNTERS,
+    );
   }
 
   /**
@@ -1966,9 +2056,13 @@ export class Seclai {
    * @returns Paginated list of memory banks.
    */
   async listMemoryBanks(opts: SortableListOptions = {}): Promise<MemoryBankListResponse> {
-    return (await this.request("GET", "/memory_banks", {
-      query: { page: opts.page, limit: opts.limit, sort: opts.sort, order: opts.order },
-    })) as MemoryBankListResponse;
+    return keyedList<MemoryBankListResponse>(
+      await this.request("GET", "/memory_banks", {
+        query: { page: opts.page, limit: opts.limit, sort: opts.sort, order: opts.order },
+      }),
+      "memory_banks",
+      PAGE_COUNTERS,
+    );
   }
 
   /**
@@ -2020,7 +2114,7 @@ export class Seclai {
    * @param memoryBankId - Memory bank identifier.
    */
   async getAgentsUsingMemoryBank(memoryBankId: string): Promise<unknown> {
-    return await this.request("GET", `/memory_banks/${memoryBankId}/agents`);
+    return listItems<unknown>(await this.request("GET", `/memory_banks/${memoryBankId}/agents`));
   }
 
   /**
@@ -2073,7 +2167,7 @@ export class Seclai {
    * List available memory bank templates.
    */
   async listMemoryBankTemplates(): Promise<unknown> {
-    return await this.request("GET", "/memory_banks/templates");
+    return listItems<unknown>(await this.request("GET", "/memory_banks/templates"));
   }
 
   // ─── Memory Bank AI Assistant ──────────────────────────────────────────────
@@ -2579,7 +2673,9 @@ export class Seclai {
    * @returns List of conversations.
    */
   async listSolutionConversations(solutionId: string): Promise<SolutionConversationResponse[]> {
-    return (await this.request("GET", `/solutions/${solutionId}/conversations`)) as SolutionConversationResponse[];
+    return listItems<SolutionConversationResponse>(
+      await this.request("GET", `/solutions/${solutionId}/conversations`),
+    );
   }
 
   /**
@@ -2679,7 +2775,9 @@ export class Seclai {
    * List governance AI conversations.
    */
   async listGovernanceAiConversations(): Promise<GovernanceConversationResponse[]> {
-    return (await this.request("GET", "/governance/ai-assistant/conversations")) as GovernanceConversationResponse[];
+    return listItems<GovernanceConversationResponse>(
+      await this.request("GET", "/governance/ai-assistant/conversations"),
+    );
   }
 
   /**
@@ -2778,15 +2876,15 @@ export class Seclai {
    * @returns Paginated list of alert configs.
    */
   /**
-   * The configurations arrive under `configs` alongside `total` by default.
-   * Once the caller opts in with `apiVersion` 2026-07-27 or later the endpoint
-   * returns the canonical `{data, pagination}` envelope instead, so the
-   * top-level key changes.
+   * `configs` and `total` are populated on every API version; `data` and
+   * `pagination` are also present once `apiVersion` is 2026-07-27 or later.
    */
   async listAlertConfigs(opts: ListOptions = {}): Promise<AlertConfigListResponse> {
-    return (await this.request("GET", "/alerts/configs", {
-      query: { page: opts.page, limit: opts.limit },
-    })) as AlertConfigListResponse;
+    return keyedList<AlertConfigListResponse>(
+      await this.request("GET", "/alerts/configs", { query: { page: opts.page, limit: opts.limit } }),
+      "configs",
+      ["total"],
+    );
   }
 
   /**
@@ -2835,7 +2933,11 @@ export class Seclai {
    * List organization alert preferences.
    */
   async listOrganizationAlertPreferences(): Promise<OrganizationAlertPreferenceListResponse> {
-    return (await this.request("GET", "/alerts/organization-preferences/list")) as OrganizationAlertPreferenceListResponse;
+    return keyedList<OrganizationAlertPreferenceListResponse>(
+      await this.request("GET", "/alerts/organization-preferences/list"),
+      "preferences",
+      ["total"],
+    );
   }
 
   /**
@@ -2871,9 +2973,11 @@ export class Seclai {
     // every page after the first returned page 1.
     const limit = opts.limit ?? 50;
     const offset = opts.page && opts.page > 1 ? (opts.page - 1) * limit : undefined;
-    return (await this.request("GET", "/models/alerts", {
-      query: { offset, limit: opts.limit },
-    })) as ModelAlertListResponse;
+    return keyedList<ModelAlertListResponse>(
+      await this.request("GET", "/models/alerts", { query: { offset, limit: opts.limit } }),
+      "alerts",
+      ["total"],
+    );
   }
 
   /**
@@ -2922,7 +3026,7 @@ export class Seclai {
       supportsOutputMedia?: string;
     } = {},
   ): Promise<ProviderGroupResponse[]> {
-    return (await this.request("GET", "/models", {
+    return listItems<ProviderGroupResponse>(await this.request("GET", "/models", {
       query: {
         provider: opts.provider,
         supports_tool_use: opts.supportsToolUse,
@@ -2930,7 +3034,7 @@ export class Seclai {
         supports_input_media: opts.supportsInputMedia,
         supports_output_media: opts.supportsOutputMedia,
       },
-    })) as ProviderGroupResponse[];
+    }));
   }
 
   /**
@@ -2954,7 +3058,7 @@ export class Seclai {
    * Global routing/pricing (the same for every account); read-only.
    */
   async getGenerationTiers(): Promise<Record<string, unknown>> {
-    return (await this.request("GET", "/models/generation-tiers")) as Record<string, unknown>;
+    return keyedList<Record<string, unknown>>(await this.request("GET", "/models/generation-tiers"), "tiers");
   }
 
   /**
@@ -2968,10 +3072,11 @@ export class Seclai {
    *   input modality — a coarse kind (text, image, video, audio) or a full MIME.
    */
   async listEmbeddingModels(opts: { supportsInputMedia?: string } = {}): Promise<EmbeddingModelListResponse> {
-    return withModels<EmbeddingModelListResponse>(
+    return keyedList<EmbeddingModelListResponse>(
       await this.request("GET", "/models/embedders", {
         query: { supports_input_media: opts.supportsInputMedia },
       }),
+      "models",
     );
   }
 
@@ -2981,7 +3086,7 @@ export class Seclai {
    * `models` is populated on either wire shape, as for {@link Seclai.listEmbeddingModels}.
    */
   async listRerankerModels(): Promise<RerankerModelListResponse> {
-    return withModels<RerankerModelListResponse>(await this.request("GET", "/models/rerankers"));
+    return keyedList<RerankerModelListResponse>(await this.request("GET", "/models/rerankers"), "models");
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -2994,9 +3099,13 @@ export class Seclai {
    * @param opts - Optional filters and pagination.
    */
   async listExperiments(opts: { days?: number; startDate?: string; endDate?: string; limit?: number; offset?: number } = {}): Promise<ExperimentListResponse> {
-    return (await this.request("GET", "/models/playground/experiments", {
-      query: { days: opts.days, start_date: opts.startDate, end_date: opts.endDate, limit: opts.limit, offset: opts.offset },
-    })) as ExperimentListResponse;
+    return keyedList<ExperimentListResponse>(
+      await this.request("GET", "/models/playground/experiments", {
+        query: { days: opts.days, start_date: opts.startDate, end_date: opts.endDate, limit: opts.limit, offset: opts.offset },
+      }),
+      "experiments",
+      ["total"],
+    );
   }
 
   /**
@@ -3194,7 +3303,7 @@ export class Seclai {
    * Requires a user-bound credential; an account-only API key is refused with 403.
    */
   async listEmailDomains(): Promise<EmailDomainsListResponse> {
-    return (await this.request("GET", "/email-domains")) as EmailDomainsListResponse;
+    return keyedList<EmailDomainsListResponse>(await this.request("GET", "/email-domains"), "domains");
   }
 
   /**
