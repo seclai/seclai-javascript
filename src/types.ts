@@ -29,6 +29,13 @@ export type ValidationError = components["schemas"]["ValidationError"];
 /** Pagination metadata included in list responses. */
 export type PaginationResponse = components["schemas"]["PaginationResponse"];
 
+/**
+ * A list response whose endpoint is version-gated. `T` is the default shape,
+ * which the client returns on every version; `data` and `pagination` are also
+ * present when `apiVersion` is `2026-07-27` or later.
+ */
+type VersionedList<T, K extends keyof T> = T & { data?: T[K]; pagination?: PaginationResponse };
+
 // ─── Identity ────────────────────────────────────────────────────────────────
 
 /** The authenticated user's personal account ID and the organizations they belong to. */
@@ -102,7 +109,7 @@ export type EmailTriggerConfigResponse = components["schemas"]["EmailTriggerConf
 export type AgentEmailOptOutResponse = components["schemas"]["AgentEmailOptOutResponse"];
 
 /** A page of agent-email opt-outs plus the total count. */
-export type AgentEmailOptOutListResponse = components["schemas"]["AgentEmailOptOutListResponse"];
+export type AgentEmailOptOutListResponse = VersionedList<components["schemas"]["AgentEmailOptOutListResponse"], "items">;
 
 /** Request body for blocking an inbound email sender or domain. */
 export type BlockEmailSenderRequest = components["schemas"]["BlockEmailSenderRequest"];
@@ -111,7 +118,7 @@ export type BlockEmailSenderRequest = components["schemas"]["BlockEmailSenderReq
 export type BlockedEmailSenderResponse = components["schemas"]["BlockedEmailSenderResponse"];
 
 /** A page of blocked senders plus the account's governance auto-block mode. */
-export type BlockedEmailSenderListResponse = components["schemas"]["BlockedEmailSenderListResponse"];
+export type BlockedEmailSenderListResponse = VersionedList<components["schemas"]["BlockedEmailSenderListResponse"], "items">;
 
 /** Request body for setting the governance auto-block mode. */
 export type SetAutoBlockModeRequest = components["schemas"]["SetAutoBlockModeRequest"];
@@ -223,9 +230,8 @@ export type AlertConfigResponse = components["schemas"]["AlertConfigResponse"];
 /**
  * A page of alert configurations.
  *
- * The top-level key is version-gated: `configs` alongside `total` by default,
- * the canonical `{data, pagination}` envelope once `apiVersion` is `2026-07-27`
- * or later. Both are declared optional so either shape type-checks.
+ * `configs` and `total` are populated on every API version; `data` and
+ * `pagination` are also present once `apiVersion` is `2026-07-27` or later.
  */
 export type AlertConfigListResponse = {
   configs?: AlertConfigResponse[];
@@ -240,9 +246,8 @@ export type ModelAlertResponse = components["schemas"]["routers__api__model_life
 /**
  * A page of model lifecycle alerts.
  *
- * The top-level key is version-gated: `alerts` alongside `total` by default, the
- * canonical `{data, pagination}` envelope once `apiVersion` is `2026-07-27` or
- * later. Both are declared optional so either shape type-checks.
+ * `alerts` and `total` are populated on every API version; `data` and
+ * `pagination` are also present once `apiVersion` is `2026-07-27` or later.
  */
 export type ModelAlertListResponse = {
   alerts?: ModelAlertResponse[];
@@ -270,7 +275,7 @@ export type ModelRecommendationsResponse = components["schemas"]["routers__api__
 export type ModelRecommendationResponse = components["schemas"]["routers__api__model_lifecycle__ModelRecommendationResponse"];
 
 /** A page of model playground experiments. */
-export type ExperimentListResponse = components["schemas"]["ExperimentListResponse"];
+export type ExperimentListResponse = VersionedList<components["schemas"]["ExperimentListResponse"], "experiments">;
 
 /** A model playground experiment in a listing. */
 export type ExperimentSummaryResponse = components["schemas"]["ExperimentSummaryResponse"];
@@ -319,7 +324,7 @@ export type UpdateEvaluationCriteriaRequest = components["schemas"]["UpdateEvalu
 export type EvaluationResultResponse = components["schemas"]["EvaluationResultResponse"];
 
 /** Paginated list of evaluation results. */
-export type EvaluationResultListResponse = components["schemas"]["EvaluationResultListResponse"];
+export type EvaluationResultListResponse = VersionedList<components["schemas"]["EvaluationResultListResponse"], "data">;
 
 /** Request body for creating a manual evaluation result. */
 export type CreateEvaluationResultRequest = components["schemas"]["CreateEvaluationResultRequest"];
@@ -341,8 +346,8 @@ export type EvaluationResultWithCriteriaResponse = components["schemas"]["Evalua
  *   `page` and `limit`.
  * - `GET /agents/{id}/runs/{runId}/evaluation-results` is version-gated: a bare
  *   array by default, and the canonical `{data, pagination}` envelope once
- *   `apiVersion` is `2026-07-27` or later — in which case the metadata is on
- *   `pagination` and the flat fields are absent.
+ *   `apiVersion` is `2026-07-27` or later. The client then fills `total`,
+ *   `page` and `limit` from `pagination`; on the bare array they are absent.
  */
 export type EvaluationResultWithCriteriaListResponse = Omit<
   components["schemas"]["EvaluationResultWithCriteriaListResponse"],
@@ -358,7 +363,7 @@ export type EvaluationResultWithCriteriaListResponse = Omit<
 export type EvaluationRunSummaryResponse = components["schemas"]["EvaluationRunSummaryResponse"];
 
 /** Paginated list of evaluation run summaries. */
-export type EvaluationRunSummaryListResponse = components["schemas"]["EvaluationRunSummaryListResponse"];
+export type EvaluationRunSummaryListResponse = VersionedList<components["schemas"]["EvaluationRunSummaryListResponse"], "data">;
 
 /** Status of an evaluation: pending, passed, failed, skipped, or error. */
 export type EvaluationStatus = components["schemas"]["EvaluationStatus"];
@@ -376,7 +381,7 @@ export type TestDraftEvaluationRequest = components["schemas"]["TestDraftEvaluat
 export type TestDraftEvaluationResponse = components["schemas"]["TestDraftEvaluationResponse"];
 
 /** Paginated list of runs compatible with a specific evaluation criteria. */
-export type CompatibleRunListResponse = components["schemas"]["CompatibleRunListResponse"];
+export type CompatibleRunListResponse = VersionedList<components["schemas"]["CompatibleRunListResponse"], "data">;
 
 /** Individual compatible run. */
 export type CompatibleRunResponse = components["schemas"]["CompatibleRunResponse"];
@@ -384,7 +389,7 @@ export type CompatibleRunResponse = components["schemas"]["CompatibleRunResponse
 // ─── Knowledge Bases ─────────────────────────────────────────────────────────
 
 /** Paginated list of knowledge bases. */
-export type KnowledgeBaseListResponse = components["schemas"]["KnowledgeBaseListResponseModel"];
+export type KnowledgeBaseListResponse = VersionedList<components["schemas"]["KnowledgeBaseListResponseModel"], "knowledge_bases">;
 
 /** Full knowledge base configuration and metadata. */
 export type KnowledgeBaseResponse = components["schemas"]["KnowledgeBaseResponseModel"];
@@ -398,7 +403,7 @@ export type UpdateKnowledgeBaseBody = components["schemas"]["UpdateKnowledgeBase
 // ─── Memory Banks ────────────────────────────────────────────────────────────
 
 /** Paginated list of memory banks. */
-export type MemoryBankListResponse = components["schemas"]["MemoryBankListResponseModel"];
+export type MemoryBankListResponse = VersionedList<components["schemas"]["MemoryBankListResponseModel"], "memory_banks">;
 
 /** Full memory bank configuration and metadata. */
 export type MemoryBankResponse = components["schemas"]["MemoryBankResponseModel"];
@@ -647,7 +652,7 @@ export type AddCommentRequest = components["schemas"]["routers__api__alerts__Add
 export type OrganizationAlertPreferenceResponse = components["schemas"]["routers__api__alerts__OrganizationAlertPreferenceResponse"];
 
 /** Paginated list of organization alert preferences. */
-export type OrganizationAlertPreferenceListResponse = components["schemas"]["OrganizationAlertPreferenceListResponse"];
+export type OrganizationAlertPreferenceListResponse = VersionedList<components["schemas"]["OrganizationAlertPreferenceListResponse"], "preferences">;
 
 /** Request to update an organization alert preference. */
 export type UpdateOrganizationAlertPreferenceRequest = components["schemas"]["routers__api__alerts__UpdateOrganizationAlertPreferenceRequest"];
@@ -684,7 +689,7 @@ export type EffortOptionsResponse = components["schemas"]["EffortOptionsResponse
 export type EmbeddingModelResponse = components["schemas"]["EmbeddingModelResponse"];
 
 /** The embedding models, with the defaults and pricing that apply to all of them. */
-export type EmbeddingModelListResponse = components["schemas"]["EmbeddingModelListResponse"];
+export type EmbeddingModelListResponse = VersionedList<components["schemas"]["EmbeddingModelListResponse"], "models">;
 
 /** Per-modality rate for an embedding model. */
 export type EmbeddingModalityRateResponse = components["schemas"]["EmbeddingModalityRateResponse"];
@@ -696,7 +701,7 @@ export type EmbeddingStorageCreditsResponse = components["schemas"]["EmbeddingSt
 export type RerankerModelResponse = components["schemas"]["RerankerModelResponse"];
 
 /** The reranker models, with the default and pricing that apply to all of them. */
-export type RerankerModelListResponse = components["schemas"]["RerankerModelListResponse"];
+export type RerankerModelListResponse = VersionedList<components["schemas"]["RerankerModelListResponse"], "models">;
 
 /** Variant category for model pricing tiers. */
 export type VariantCategoryResponse = components["schemas"]["VariantCategoryResponse"];
@@ -735,7 +740,7 @@ export type AddEmailDomainInput = Pick<AddEmailDomainRequest, "kind" | "value"> 
 export type EmailDomainResponse = components["schemas"]["EmailDomainResponse"];
 
 /** The account's email domains plus the plan capabilities for adding more. */
-export type EmailDomainsListResponse = components["schemas"]["EmailDomainsListResponse"];
+export type EmailDomainsListResponse = VersionedList<components["schemas"]["EmailDomainsListResponse"], "domains">;
 
 /** Result of removing an email domain (with an optional registrar `cleanup_note`). */
 export type RemoveEmailDomainResponse = components["schemas"]["RemoveEmailDomainResponse"];

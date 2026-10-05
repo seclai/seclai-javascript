@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.6.1] - 2026-10-05
+
+### Changed
+
+- Throw `SeclaiError` from the list methods of version-gated endpoints when a successful response is not a list — an error-shaped object, text, or an empty body. Most of them handed that body back as if it were the list; the cloud-drive listings returned `[]`, which reads as "no results". An explicit `data: null` is still an empty list
+
+### Fixed
+
+- Return the declared type from every list method once `apiVersion` is `2026-07-27` or later. The API then answers list endpoints with `{data, pagination}`, and the methods that cast the body handed that object back as their array or keyed type: `getAgentCallers()`, `listModels()`, `listInboundEmailRejections()`, `listGovernanceAiConversations()` and `listSolutionConversations()` returned an object instead of an array, and `listAgentEmailOptOuts()`, `listBlockedEmailSenders()`, `setAutoBlockMode()`, `listAlertConfigs()`, `listOrganizationAlertPreferences()`, `listEmailDomains()`, `listKnowledgeBases()`, `listMemoryBanks()`, `getGenerationTiers()`, `listModelAlerts()` and `listExperiments()` lost their `items`, `configs`, `preferences`, `domains`, `knowledge_bases`, `memory_banks`, `tiers`, `alerts` or `experiments` key. The items are now where each type declares them on both shapes, and `data` and `pagination` stay on the object types, which declare them as optional fields ([#14](https://github.com/seclai/seclai-javascript/issues/14))
+- Fill the flat `total`, `page` and `limit` from `pagination` when `apiVersion` is `2026-07-27` or later, on `listEvaluationResults()`, `listAgentEvaluationResults()`, `listRunEvaluationResults()`, `listEvaluationRuns()`, `listCompatibleRuns()`, `listKnowledgeBases()`, `listMemoryBanks()` and the `total` of the keyed listings above. They were `undefined` although several of those types declare them required ([#14](https://github.com/seclai/seclai-javascript/issues/14))
+- Return an array from `listMemoryBankTemplates()` and `getAgentsUsingMemoryBank()` when `apiVersion` is `2026-07-27` or later, as they do by default. Both are typed `unknown` and returned the `{data, pagination}` object; code that worked around it by reading `.data` must now read the array itself ([#14](https://github.com/seclai/seclai-javascript/issues/14))
+- Reject an unknown `Seclai-Version` passed in the per-request `headers` of `request()` or `requestRaw()` with `SeclaiConfigurationError`, in any letter case. It was sent unchecked, bypassing the guard on `apiVersion`; a caller who relied on that to send a version this release does not know must now set `allowUnknownApiVersion` ([#15](https://github.com/seclai/seclai-javascript/issues/15))
+- Reject an empty `Seclai-Version` in `defaultHeaders` or per-request `headers`. It passed the guard and replaced the configured version with an empty header ([#15](https://github.com/seclai/seclai-javascript/issues/15))
+- Send exactly one value per header on the plain, download, upload and streaming paths. A default or per-request header that differed only in case from another layer's was sent beside it and joined by `fetch`: a default `X-API-Key` went out as `other, real`, a default `Authorization` beside the bearer token, and a per-request `Content-Type` could not replace the JSON one. Which layer wins is unchanged ([#15](https://github.com/seclai/seclai-javascript/issues/15))
+- Keep the multipart boundary on uploads when `defaultHeaders` sets a content type in any case other than `content-type` or `Content-Type` ([#15](https://github.com/seclai/seclai-javascript/issues/15))
+- Correct the README's API-versioning section: `2026-08-03` also rejects a non-zero `max_age_days` on `updateMemoryBank()`; `2026-09-30` breaks code that parses a run's or step's `output` as a JSON manifest; and `SeclaiApiVersion.Latest` moves with each SDK release — `1.6.0` moved it across that `2026-09-30` change — so pin a dated constant to keep behaviour fixed
+
 ## [1.6.0] - 2026-10-04
 
 ### Changed
@@ -206,6 +223,7 @@ _Stable release. No functional changes since 0.0.1._
 
 _Initial release._
 
+[1.6.1]: https://github.com/seclai/seclai-javascript/releases/tag/1.6.1
 [1.6.0]: https://github.com/seclai/seclai-javascript/releases/tag/1.6.0
 [1.5.0]: https://github.com/seclai/seclai-javascript/releases/tag/1.5.0
 [1.4.0]: https://github.com/seclai/seclai-javascript/releases/tag/1.4.0

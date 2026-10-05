@@ -131,8 +131,10 @@ Known versions are on `SeclaiApiVersion` (`V2026_07_01` through `V2026_10_03`,
 plus `Default` and `Latest`), imported from `@seclai/sdk`. A version this release was
 **not** built against throws at construction: a newer version can reshape
 responses, and this client would decode them incorrectly rather than reject them.
-Upgrade the package to adopt a new version, or set `allowUnknownApiVersion` if
-you have to move first and accept that risk.
+The same check applies to a `Seclai-Version` set through `defaultHeaders` or the
+per-request `headers` of `request()` / `requestRaw()`, in any letter case, and an
+empty value is rejected. Upgrade the package to adopt a new version, or set
+`allowUnknownApiVersion` if you have to move first and accept that risk.
 
 The guard only covers the header. An account pinned server-side can still be
 newer than this release — `getApiVersion()` reports the `effective_version` the
@@ -140,38 +142,54 @@ request resolved to, and comparing it against `SeclaiApiVersion.Latest` is how
 you detect the gap.
 
 **What `2026-07-27` changes.** Undeclared query parameters become a 422 instead
-of being ignored, and list endpoints move to the canonical `{data, pagination}`
-envelope. The affected methods read both shapes, so they keep working either way
-— but the metadata moves:
+of being ignored, and every list endpoint that answered with a bare array or
+under a per-resource key moves to the canonical `{data, pagination}` envelope.
+The methods for those endpoints return their declared type on either shape, so
+code written against the default still reads the result after you opt in. Four
+of them return fewer rows once you do, covered below the table:
 
-| Method | Before | From 2026-07-27 |
+| Declared return | Methods | From 2026-07-27 |
 | --- | --- | --- |
-| `listEvaluationCriteriaPage()` | bare array | `data` + `pagination` |
-| `listRunEvaluationResults()` | bare array | `data` + `pagination` |
-| `listAlertConfigs()` | `configs` + `total` | `data` + `pagination` |
-| `listModelAlerts()` | `alerts` + `total` | `data` + `pagination` |
+| An array | `listEvaluationCriteria()`, `getAgentCallers()`, `listInboundEmailRejections()`, `listGovernanceAiConversations()`, `listSolutionConversations()`, `listModels()`, `listMemoryBankTemplates()`, `getAgentsUsingMemoryBank()`, `listCloudDriveProviders()`, `listCloudDrives()`, `getAgentsUsingCloudDrive()`, `listCloudDriveRejections()` | Still the array of items; the page metadata is not returned |
+| `data`, bare array by default | `listEvaluationCriteriaPage()`, `listRunEvaluationResults()` | `data`, plus `pagination` |
+| `data` with flat `total`/`page`/`limit` | `listEvaluationResults()`, `listAgentEvaluationResults()`, `listEvaluationRuns()`, `listCompatibleRuns()` | Unchanged, plus `pagination` |
+| A per-resource key | `listAgentEmailOptOuts()` and `listBlockedEmailSenders()` / `setAutoBlockMode()` (`items`), `listAlertConfigs()` (`configs`), `listOrganizationAlertPreferences()` (`preferences`), `listEmailDomains()` (`domains`), `listKnowledgeBases()` (`knowledge_bases`), `listMemoryBanks()` (`memory_banks`), `getGenerationTiers()` (`tiers`), `listModelAlerts()` (`alerts`), `listExperiments()` (`experiments`), `listEmbeddingModels()` and `listRerankerModels()` (`models`) | The same key and any flat `total`/`page`/`limit`, plus `data` and `pagination` |
 
-Prefer `pagination` over the flat `total`/`page`/`limit` properties, and read the
-last two with `res.data ?? res.configs` / `res.data ?? res.alerts`. The legacy
-keys will be deprecated and then removed once the canonical envelope is the
-default.
+Where a type declares flat `total`, `page` or `limit`, the client fills them
+from `pagination` after you opt in. `listRunEvaluationResults()` has no counters
+on its default bare array, and gains them with `pagination`. Fields that sit
+beside a list, such as `auto_block_mode` or the email-domain plan capabilities,
+are present on both shapes.
 
-The cloud-drive listings (`listCloudDriveProviders()`, `listCloudDrives()`,
-`getAgentsUsingCloudDrive()`, `listCloudDriveRejections()`) follow the same rule
-and return the items as an array on either shape. `listEmbeddingModels()` and
-`listRerankerModels()` move their list from `models` to `data`; both methods
-populate `models` on either shape, with the defaults and pricing beside it.
+Opting in also turns paging on for endpoints that returned everything by
+default, so the same call can return fewer rows:
 
-**Later versions.** Each is cumulative, and none changes a response shape this
-client decodes:
+- `listEvaluationCriteria()` and `listRunEvaluationResults()` return every item
+  by default and one page (20 unless you pass `limit`) after you opt in. The
+  array from `listEvaluationCriteria()` carries no sign of that; use
+  `listEvaluationCriteriaPage()` to see `pagination`.
+- `listAlertConfigs()` ignores `page` and `limit` by default and returns every
+  config; after you opt in it returns one page.
+- `setAutoBlockMode()` reports the account's full `total` by default, and the
+  number of rows it returned after you opt in.
+
+**Later versions.** Each is cumulative. None changes a response shape this
+client decodes, but `2026-09-30` changes what a string you may be parsing
+contains:
 
 | Version | What it changes |
 | --- | --- |
-| `2026-08-03` | `createMemoryBank()` rejects `max_age_days` with a 400, and an omitted `retention_days` resolves per bank type instead of to 30 |
+| `2026-08-03` | `createMemoryBank()` and `updateMemoryBank()` reject a non-zero `max_age_days` with a 400, and a memory bank's `max_age_days` reads as `null`. On create, an omitted `retention_days` resolves per bank type instead of to 30 |
 | `2026-08-21` | `createSource()` rejects an embedding dimension its embedder does not support with a 400 — `listEmbeddingModels()` reports the supported ones |
 | `2026-09-28` | Agent-definition writes use the current file-list grammar: an omitted `attachments` keeps the stored list and `[]` means no files |
-| `2026-09-30` | A run's and a step's `output`, and a step's `input`, are the text rather than a JSON manifest; files are in `attachments` on every version |
+| `2026-09-30` | **Breaks code that parses `output`.** A run's and a step's `output`, and a step's `input`, are the plain text; below this version an output that has files is a JSON manifest string (`{schema, text, attachments}`). Read files from `attachments`, which is populated on every version |
 | `2026-10-03` | A new LLM step written without `attachments` takes its parent's files, and a new retrieval step's matched media are its files |
+
+**`Latest` moves with the SDK.** `SeclaiApiVersion.Latest` is the newest version
+the installed release knows, so upgrading the package can opt a client that
+passes it into every version added since — `1.6.0` moved it from `2026-07-27` to
+`2026-10-03`, across the `2026-09-30` output change. Pass a dated constant such
+as `SeclaiApiVersion.V2026_07_27` to keep behaviour fixed across upgrades.
 
 ## Resources
 

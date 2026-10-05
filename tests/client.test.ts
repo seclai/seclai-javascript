@@ -483,7 +483,7 @@ describe("Knowledge Bases", () => {
   test("listKnowledgeBases sends GET /knowledge_bases", async () => {
     const client = makeClient((req) => {
       expect(new URL(req.url).pathname).toBe("/knowledge_bases");
-      return jsonResponse({ items: [] });
+      return jsonResponse({ knowledge_bases: [], page: 1, limit: 20, total: 0 });
     });
     await client.listKnowledgeBases();
   });
@@ -530,7 +530,7 @@ describe("Memory Banks", () => {
   test("listMemoryBanks sends GET /memory_banks", async () => {
     const client = makeClient((req) => {
       expect(new URL(req.url).pathname).toBe("/memory_banks");
-      return jsonResponse({ items: [] });
+      return jsonResponse({ memory_banks: [], page: 1, limit: 20, total: 0 });
     });
     await client.listMemoryBanks();
   });
@@ -971,7 +971,7 @@ describe("Alerts", () => {
   test("listAlertConfigs sends GET /alerts/configs", async () => {
     const client = makeClient((req) => {
       expect(new URL(req.url).pathname).toBe("/alerts/configs");
-      return jsonResponse({ items: [] });
+      return jsonResponse({ configs: [], total: 0 });
     });
     await client.listAlertConfigs();
   });
@@ -1174,7 +1174,7 @@ describe("Models", () => {
   test("listModelAlerts sends GET /models/alerts", async () => {
     const client = makeClient((req) => {
       expect(new URL(req.url).pathname).toBe("/models/alerts");
-      return jsonResponse({ items: [] });
+      return jsonResponse({ alerts: [], total: 0 });
     });
     await client.listModelAlerts();
   });
@@ -1615,7 +1615,7 @@ describe("Alerts — extended", () => {
   test("listOrganizationAlertPreferences sends GET", async () => {
     const client = makeClient((req) => {
       expect(new URL(req.url).pathname).toBe("/alerts/organization-preferences/list");
-      return jsonResponse({ items: [] });
+      return jsonResponse({ preferences: [], total: 0 });
     });
     await client.listOrganizationAlertPreferences();
   });
@@ -1697,7 +1697,7 @@ describe("Agent Evaluations — extended", () => {
   test("listEvaluationResults sends GET /agents/evaluation-criteria/:id/results", async () => {
     const client = makeClient((req) => {
       expect(new URL(req.url).pathname).toBe("/agents/evaluation-criteria/crit_1/results");
-      return jsonResponse({ items: [] });
+      return jsonResponse({ data: [], total: 0, page: 1, limit: 20 });
     });
     await client.listEvaluationResults("crit_1");
   });
@@ -1717,7 +1717,7 @@ describe("Agent Evaluations — extended", () => {
       expect(u.pathname).toBe("/agents/evaluation-criteria/crit_1/results");
       expect(u.searchParams.get("page")).toBe("2");
       expect(u.searchParams.get("limit")).toBe("10");
-      return jsonResponse({ items: [] });
+      return jsonResponse({ data: [], total: 0, page: 2, limit: 10 });
     });
     await client.listEvaluationResults("crit_1", { page: 2, limit: 10 });
   });
@@ -1725,7 +1725,7 @@ describe("Agent Evaluations — extended", () => {
   test("listCompatibleRuns sends GET /agents/evaluation-criteria/:id/compatible-runs", async () => {
     const client = makeClient((req) => {
       expect(new URL(req.url).pathname).toBe("/agents/evaluation-criteria/crit_1/compatible-runs");
-      return jsonResponse({ items: [] });
+      return jsonResponse({ data: [], total: 0, page: 1, limit: 20 });
     });
     await client.listCompatibleRuns("crit_1");
   });
@@ -1733,7 +1733,7 @@ describe("Agent Evaluations — extended", () => {
   test("listRunEvaluationResults sends GET /agents/:agentId/runs/:runId/evaluation-results", async () => {
     const client = makeClient((req) => {
       expect(new URL(req.url).pathname).toBe("/agents/ag_1/runs/run_1/evaluation-results");
-      return jsonResponse({ items: [] });
+      return jsonResponse([]);
     });
     await client.listRunEvaluationResults("ag_1", "run_1");
   });
@@ -2474,10 +2474,10 @@ describe("Models — media filters & generation tiers", () => {
     const client = makeClient((req) => {
       expect(req.method).toBe("GET");
       expect(new URL(req.url).pathname).toBe("/models/generation-tiers");
-      return jsonResponse({ image: { fast: { model: "m_1" } } });
+      return jsonResponse({ tiers: [{ modality: "image", tier: "fast", model: "m_1" }] });
     });
     const tiers = await client.getGenerationTiers() as Record<string, unknown>;
-    expect(tiers["image"]).toEqual({ fast: { model: "m_1" } });
+    expect(tiers["tiers"]).toEqual([{ modality: "image", tier: "fast", model: "m_1" }]);
   });
 });
 
@@ -2611,7 +2611,7 @@ describe("Undeclared and required query params", () => {
       expect(q.get("offset")).toBe("50");
       expect(q.get("limit")).toBe("25");
       expect(q.has("page")).toBe(false);
-      return jsonResponse({ data: [] });
+      return jsonResponse({ alerts: [], total: 0 });
     });
     await client.listModelAlerts({ page: 3, limit: 25 });
   });
@@ -3090,5 +3090,408 @@ describe("Cloud drives, embedders/rerankers and source contents", () => {
   test("deleteCloudDrive discards the acknowledgement", async () => {
     const client = makeClient(() => jsonResponse({ ok: true }));
     expect(await client.deleteCloudDrive("c1")).toBeUndefined();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Version-gated lists: every gated endpoint, both response shapes
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Every `METHOD path` the API serves through a version gate. Regenerate from the
+// backend (seclai/backend/api/src/api/routers/api): list each call to
+// `versioned_list_response`, `versioned_offset_list_response` and
+// `versioned_complete_list_response`, and write down the route of the handler it
+// returns from — the router's prefix without `/api`, plus the decorator's verb
+// and path. One entry per call site.
+const GATED_ENDPOINTS = [
+  "GET /agents/{agent_id}/evaluation-criteria",
+  "GET /agents/evaluation-criteria/{criteria_id}/results",
+  "GET /agents/{agent_id}/runs/{run_id}/evaluation-results",
+  "GET /agents/{agent_id}/evaluation-runs",
+  "GET /agents/{agent_id}/evaluation-results",
+  "GET /agents/evaluation-criteria/{criteria_id}/compatible-runs",
+  "GET /agents/inbound-email-rejections",
+  "GET /agents/agent-email-optouts",
+  "GET /agents/blocked-email-senders",
+  "PUT /agents/blocked-email-senders/mode",
+  "GET /agents/{agent_id}/callers",
+  "GET /alerts/configs",
+  "GET /alerts/organization-preferences/list",
+  "GET /cloud-drives/providers",
+  "GET /cloud-drives",
+  "GET /cloud-drives/{connection_id}/agents",
+  "GET /cloud-drives/{connection_id}/rejections",
+  "GET /email-domains",
+  "GET /governance/ai-assistant/conversations",
+  "GET /knowledge_bases",
+  "GET /memory_banks/templates",
+  "GET /memory_banks",
+  "GET /memory_banks/{memory_bank_id}/agents",
+  "GET /models/generation-tiers",
+  "GET /models/alerts",
+  "GET /models/playground/experiments",
+  "GET /models",
+  "GET /models/embedders",
+  "GET /models/rerankers",
+  "GET /solutions/{solution_id}/conversations",
+] as const;
+
+describe("Version-gated lists", () => {
+  const ITEMS = [{ id: "x1" }];
+  // `versioned_list_response` / `versioned_offset_list_response`: a real page.
+  const PAGED = { page: 1, limit: 50, total: 1, pages: 1, has_next: false, has_prev: false };
+  // `versioned_complete_list_response`: one page spanning the whole list.
+  const COMPLETE = { page: 1, limit: 1, total: 1, pages: 1, has_next: false, has_prev: false };
+
+  type Row = {
+    endpoint: (typeof GATED_ENDPOINTS)[number];
+    name: string;
+    call: (c: Seclai) => Promise<unknown>;
+    /** The body below 2026-07-27, and what the method must return for it. */
+    legacy: unknown;
+    wantLegacy: unknown;
+    /** The body from 2026-07-27, and what the method must return for it. */
+    canonical: unknown;
+    wantCanonical: unknown;
+  };
+
+  /** A method declared as an array: the items on either shape. */
+  const arrayRow = (
+    endpoint: Row["endpoint"],
+    name: string,
+    call: Row["call"],
+    pagination: typeof PAGED,
+  ): Row => ({
+    endpoint,
+    name,
+    call,
+    legacy: ITEMS,
+    wantLegacy: ITEMS,
+    canonical: { data: ITEMS, pagination },
+    wantCanonical: ITEMS,
+  });
+
+  /**
+   * A method declared as an object. `legacy` is the default body; from
+   * 2026-07-27 its list moves to `data`, its counters into `pagination`, and
+   * `extras` stay beside them — and the method must still return every legacy
+   * field, with `data` and `pagination` kept.
+   */
+  const keyedRow = (
+    endpoint: Row["endpoint"],
+    name: string,
+    call: Row["call"],
+    pagination: typeof PAGED,
+    legacy: Record<string, unknown>,
+    extras: Record<string, unknown> = {},
+  ): Row => ({
+    endpoint,
+    name,
+    call,
+    legacy,
+    wantLegacy: legacy,
+    canonical: { data: ITEMS, pagination, ...extras },
+    wantCanonical: { ...legacy, data: ITEMS, pagination },
+  });
+
+  const FLAT = { data: ITEMS, total: 1, page: 1, limit: 50 };
+  const BLOCKED = { auto_block_mode: "disabled" };
+  const DOMAIN_CAPS = {
+    can_add_vanity: true,
+    can_add_custom: false,
+    has_vanity: false,
+    has_custom: false,
+    vanity_plan_names: ["Pro"],
+    custom_plan_names: ["Enterprise"],
+  };
+  const EMBEDDER_EXTRAS = {
+    storage_credits: [{ dimension: 1024, credits: 1 }],
+    file_processing_credits_per_mb: 2,
+    default_model_type: "m1",
+    default_dimension: 1024,
+  };
+  const RERANKER_EXTRAS = { default_model_type: "m1", search_processing_credits: 3 };
+
+  const rows: Row[] = [
+    arrayRow("GET /agents/{agent_id}/evaluation-criteria", "listEvaluationCriteria", (c) => c.listEvaluationCriteria("a1"), PAGED),
+    {
+      endpoint: "GET /agents/{agent_id}/evaluation-criteria",
+      name: "listEvaluationCriteriaPage",
+      call: (c) => c.listEvaluationCriteriaPage("a1"),
+      legacy: ITEMS,
+      wantLegacy: { data: ITEMS },
+      canonical: { data: ITEMS, pagination: PAGED },
+      wantCanonical: { data: ITEMS, pagination: PAGED },
+    },
+    keyedRow("GET /agents/evaluation-criteria/{criteria_id}/results", "listEvaluationResults", (c) => c.listEvaluationResults("c1"), PAGED, FLAT),
+    {
+      endpoint: "GET /agents/{agent_id}/runs/{run_id}/evaluation-results",
+      name: "listRunEvaluationResults",
+      call: (c) => c.listRunEvaluationResults("a1", "r1"),
+      legacy: ITEMS,
+      wantLegacy: { data: ITEMS },
+      canonical: { data: ITEMS, pagination: PAGED },
+      wantCanonical: { ...FLAT, pagination: PAGED },
+    },
+    keyedRow("GET /agents/{agent_id}/evaluation-runs", "listEvaluationRuns", (c) => c.listEvaluationRuns("a1"), PAGED, FLAT),
+    keyedRow("GET /agents/{agent_id}/evaluation-results", "listAgentEvaluationResults", (c) => c.listAgentEvaluationResults("a1"), PAGED, FLAT),
+    keyedRow("GET /agents/evaluation-criteria/{criteria_id}/compatible-runs", "listCompatibleRuns", (c) => c.listCompatibleRuns("c1"), PAGED, FLAT),
+    arrayRow("GET /agents/inbound-email-rejections", "listInboundEmailRejections", (c) => c.listInboundEmailRejections(), PAGED),
+    keyedRow("GET /agents/agent-email-optouts", "listAgentEmailOptOuts", (c) => c.listAgentEmailOptOuts(), PAGED, { items: ITEMS, total: 1 }),
+    keyedRow("GET /agents/blocked-email-senders", "listBlockedEmailSenders", (c) => c.listBlockedEmailSenders(), PAGED, { items: ITEMS, total: 1, ...BLOCKED }, BLOCKED),
+    keyedRow("PUT /agents/blocked-email-senders/mode", "setAutoBlockMode", (c) => c.setAutoBlockMode({ mode: "disabled" }), COMPLETE, { items: ITEMS, total: 1, ...BLOCKED }, BLOCKED),
+    arrayRow("GET /agents/{agent_id}/callers", "getAgentCallers", (c) => c.getAgentCallers("a1"), COMPLETE),
+    keyedRow("GET /alerts/configs", "listAlertConfigs", (c) => c.listAlertConfigs(), PAGED, { configs: ITEMS, total: 1 }),
+    keyedRow("GET /alerts/organization-preferences/list", "listOrganizationAlertPreferences", (c) => c.listOrganizationAlertPreferences(), COMPLETE, { preferences: ITEMS, total: 1 }),
+    arrayRow("GET /cloud-drives/providers", "listCloudDriveProviders", (c) => c.listCloudDriveProviders(), COMPLETE),
+    arrayRow("GET /cloud-drives", "listCloudDrives", (c) => c.listCloudDrives(), COMPLETE),
+    arrayRow("GET /cloud-drives/{connection_id}/agents", "getAgentsUsingCloudDrive", (c) => c.getAgentsUsingCloudDrive("d1"), COMPLETE),
+    arrayRow("GET /cloud-drives/{connection_id}/rejections", "listCloudDriveRejections", (c) => c.listCloudDriveRejections("d1"), PAGED),
+    keyedRow("GET /email-domains", "listEmailDomains", (c) => c.listEmailDomains(), COMPLETE, { domains: ITEMS, ...DOMAIN_CAPS }, DOMAIN_CAPS),
+    arrayRow("GET /governance/ai-assistant/conversations", "listGovernanceAiConversations", (c) => c.listGovernanceAiConversations(), PAGED),
+    keyedRow("GET /knowledge_bases", "listKnowledgeBases", (c) => c.listKnowledgeBases(), PAGED, { knowledge_bases: ITEMS, page: 1, limit: 50, total: 1 }),
+    arrayRow("GET /memory_banks/templates", "listMemoryBankTemplates", (c) => c.listMemoryBankTemplates(), COMPLETE),
+    keyedRow("GET /memory_banks", "listMemoryBanks", (c) => c.listMemoryBanks(), PAGED, { memory_banks: ITEMS, page: 1, limit: 50, total: 1 }),
+    arrayRow("GET /memory_banks/{memory_bank_id}/agents", "getAgentsUsingMemoryBank", (c) => c.getAgentsUsingMemoryBank("m1"), COMPLETE),
+    keyedRow("GET /models/generation-tiers", "getGenerationTiers", (c) => c.getGenerationTiers(), COMPLETE, { tiers: ITEMS }),
+    keyedRow("GET /models/alerts", "listModelAlerts", (c) => c.listModelAlerts(), PAGED, { alerts: ITEMS, total: 1 }),
+    keyedRow("GET /models/playground/experiments", "listExperiments", (c) => c.listExperiments(), PAGED, { experiments: ITEMS, total: 1 }),
+    arrayRow("GET /models", "listModels", (c) => c.listModels(), COMPLETE),
+    keyedRow("GET /models/embedders", "listEmbeddingModels", (c) => c.listEmbeddingModels(), COMPLETE, { models: ITEMS, ...EMBEDDER_EXTRAS }, EMBEDDER_EXTRAS),
+    keyedRow("GET /models/rerankers", "listRerankerModels", (c) => c.listRerankerModels(), COMPLETE, { models: ITEMS, ...RERANKER_EXTRAS }, RERANKER_EXTRAS),
+    arrayRow("GET /solutions/{solution_id}/conversations", "listSolutionConversations", (c) => c.listSolutionConversations("s1"), COMPLETE),
+  ];
+
+  /** Serve `body`, failing unless the request is the row's `METHOD path`. */
+  function clientFor(endpoint: string, body: unknown): Seclai {
+    const [verb, template] = endpoint.split(" ");
+    const path = new RegExp(`^${template.replace(/\{[^}]+\}/g, "[^/]+")}$`);
+    return makeClient((req) => {
+      expect(req.method).toBe(verb);
+      expect(new URL(req.url).pathname).toMatch(path);
+      return jsonResponse(body);
+    });
+  }
+
+  test("every gated endpoint has a row", () => {
+    expect(GATED_ENDPOINTS).toHaveLength(30);
+    expect([...new Set(rows.map((row) => row.endpoint))].sort()).toEqual([...GATED_ENDPOINTS].sort());
+  });
+
+  test.each(rows)("$name returns its declared shape for the default body", async (row) => {
+    expect(await row.call(clientFor(row.endpoint, row.legacy))).toEqual(row.wantLegacy);
+  });
+
+  test.each(rows)("$name returns its declared shape for the 2026-07-27 body", async (row) => {
+    expect(await row.call(clientFor(row.endpoint, row.canonical))).toEqual(row.wantCanonical);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Headers: one value per header, and a guarded Seclai-Version, on every path
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("Request headers", () => {
+  // `makeFetch` reads headers through `Headers`, which joins two spellings of a
+  // name into one value. These tests need the object exactly as it was sent.
+  function recordingClient(
+    extra: Partial<ConstructorParameters<typeof Seclai>[0]>,
+    respond: () => Response = () => jsonResponse({ data: [] }),
+  ) {
+    const sent: { headers: Record<string, string>; body: unknown }[] = [];
+    const client = new Seclai({
+      baseUrl: "https://test.invalid",
+      fetch: async (_input, init) => {
+        sent.push({ headers: { ...(init?.headers as Record<string, string>) }, body: init?.body });
+        return respond();
+      },
+      ...extra,
+    });
+    return { client, sent };
+  }
+
+  const done = () =>
+    makeSseResponse([`event: done\ndata: ${JSON.stringify({ run_id: "r1", status: "completed" })}\n\n`]);
+
+  const CREDENTIAL_DEFAULTS = { "X-API-KEY": "other", "X-Trace": "default" };
+
+  test("request() sends one value per header whatever the case", async () => {
+    const { client, sent } = recordingClient({ apiKey: "real", defaultHeaders: CREDENTIAL_DEFAULTS });
+    await client.request("POST", "/agents", {
+      json: { name: "a" },
+      headers: { "x-trace": "request", "Content-Type": "application/x-ndjson" },
+    });
+    expect(sent[0].headers).toEqual({
+      "Content-Type": "application/x-ndjson",
+      "x-trace": "request",
+      "x-api-key": "real",
+    });
+  });
+
+  test("request() sends the JSON content type when the caller sets none", async () => {
+    const { client, sent } = recordingClient({ apiKey: "real" });
+    await client.request("POST", "/agents", { json: { name: "a" } });
+    expect(sent[0].headers).toEqual({ "content-type": "application/json", "x-api-key": "real" });
+  });
+
+  test("request() sends the bearer token and account id once", async () => {
+    const { client, sent } = recordingClient({
+      accessToken: "tok",
+      accountId: "acct",
+      defaultHeaders: { Authorization: "Bearer other", "X-Account-Id": "other" },
+    });
+    await client.request("GET", "/agents", { headers: { AUTHORIZATION: "Bearer third" } });
+    expect(sent[0].headers).toEqual({ authorization: "Bearer tok", "x-account-id": "acct" });
+  });
+
+  test("requestRaw() sends one value per header whatever the case", async () => {
+    const { client, sent } = recordingClient({ apiKey: "real", defaultHeaders: CREDENTIAL_DEFAULTS });
+    await client.requestRaw("POST", "/agents", {
+      json: { name: "a" },
+      headers: { "x-trace": "request", "CONTENT-TYPE": "application/x-ndjson" },
+    });
+    expect(sent[0].headers).toEqual({
+      "CONTENT-TYPE": "application/x-ndjson",
+      "x-trace": "request",
+      "x-api-key": "real",
+    });
+  });
+
+  test("a download sends one value per header", async () => {
+    const { client, sent } = recordingClient({ apiKey: "real", defaultHeaders: CREDENTIAL_DEFAULTS });
+    await client.downloadSourceExport("s1", "e1");
+    expect(sent[0].headers).toEqual({ "X-Trace": "default", "x-api-key": "real" });
+  });
+
+  test("an upload leaves the content type to the multipart body", async () => {
+    const { client, sent } = recordingClient({
+      apiKey: "real",
+      defaultHeaders: { ...CREDENTIAL_DEFAULTS, "Content-type": "application/json" },
+    });
+    await client.uploadFileToSource("s1", { file: new Uint8Array([1]), fileName: "a.txt" });
+    expect(sent[0].headers).toEqual({ "X-Trace": "default", "x-api-key": "real" });
+    expect(sent[0].body).toBeInstanceOf(FormData);
+  });
+
+  const STREAM_DEFAULTS = { ...CREDENTIAL_DEFAULTS, Accept: "application/json", "Content-Type": "text/plain" };
+  const STREAM_HEADERS = {
+    "X-Trace": "default",
+    "x-api-key": "real",
+    accept: "text/event-stream",
+    "content-type": "application/json",
+  };
+
+  test("runStreamingAgentAndWait() sends one value per header", async () => {
+    const { client, sent } = recordingClient({ apiKey: "real", defaultHeaders: STREAM_DEFAULTS }, done);
+    await client.runStreamingAgentAndWait("a1", { input: "x" } as never);
+    expect(sent[0].headers).toEqual(STREAM_HEADERS);
+  });
+
+  test("runStreamingAgent() sends one value per header", async () => {
+    const { client, sent } = recordingClient({ apiKey: "real", defaultHeaders: STREAM_DEFAULTS }, done);
+    for await (const _ of client.runStreamingAgent("a1", { input: "x" } as never)) void _;
+    expect(sent[0].headers).toEqual(STREAM_HEADERS);
+  });
+
+  test("a per-request Seclai-Version replaces the client's in any case", async () => {
+    const { client, sent } = recordingClient({ apiKey: "real", apiVersion: SeclaiApiVersion.V2026_07_01 });
+    await client.request("GET", "/agents", { headers: { "seclai-version": SeclaiApiVersion.V2026_07_27 } });
+    await client.requestRaw("GET", "/agents", { headers: { "SECLAI-VERSION": SeclaiApiVersion.V2026_07_27 } });
+    expect(sent.map((s) => s.headers)).toEqual([
+      { "seclai-version": "2026-07-27", "x-api-key": "real" },
+      { "SECLAI-VERSION": "2026-07-27", "x-api-key": "real" },
+    ]);
+  });
+
+  test.each(["Seclai-Version", "seclai-version"])(
+    "an unknown per-request %s is rejected before anything is sent",
+    async (name) => {
+      const { client, sent } = recordingClient({ apiKey: "real", apiVersion: SeclaiApiVersion.V2026_07_01 });
+      const headers = { [name]: "2099-01-01" };
+      await expect(client.request("GET", "/agents", { headers })).rejects.toThrow(SeclaiConfigurationError);
+      await expect(client.requestRaw("GET", "/agents", { headers })).rejects.toThrow(
+        `via headers['${name}']`,
+      );
+      expect(sent).toEqual([]);
+    },
+  );
+
+  test("an empty Seclai-Version is rejected, not treated as absent", async () => {
+    expect(
+      () =>
+        new Seclai({
+          apiKey: "real",
+          apiVersion: SeclaiApiVersion.Latest,
+          defaultHeaders: { "Seclai-Version": "" },
+        }),
+    ).toThrow(/via defaultHeaders\['Seclai-Version'\]/);
+
+    const { client, sent } = recordingClient({ apiKey: "real", apiVersion: SeclaiApiVersion.Latest });
+    await expect(client.request("GET", "/agents", { headers: { "seclai-version": "" } })).rejects.toThrow(
+      SeclaiConfigurationError,
+    );
+    expect(sent).toEqual([]);
+  });
+
+  test("allowUnknownApiVersion lets an unknown per-request version through", async () => {
+    const { client, sent } = recordingClient({ apiKey: "real", allowUnknownApiVersion: true });
+    await client.request("GET", "/agents", { headers: { "Seclai-Version": "2099-01-01" } });
+    expect(sent[0].headers).toEqual({ "Seclai-Version": "2099-01-01", "x-api-key": "real" });
+  });
+});
+
+describe("A list response that is not a list", () => {
+  const clientAnswering = (body: unknown) => makeClient(() => jsonResponse(body));
+
+  test.each([
+    ["an error-shaped object", { error: "boom" }],
+    ["a string", "<html>login</html>"],
+    ["null", null],
+    ["a key holding a non-array", { knowledge_bases: { a: 1 }, models: { a: 1 } }],
+  ])("throws SeclaiError for %s rather than reading as no results", async (_name, body) => {
+    const client = clientAnswering(body);
+    await expect(client.listKnowledgeBases()).rejects.toThrow(SeclaiError);
+    await expect(client.listModels()).rejects.toThrow(SeclaiError);
+    await expect(client.listCloudDrives()).rejects.toThrow(SeclaiError);
+    await expect(client.listMemoryBankTemplates()).rejects.toThrow(SeclaiError);
+  });
+
+  test("an explicit null list is still an empty list", async () => {
+    const client = clientAnswering({ data: null, pagination: null });
+    expect(await client.listModels()).toEqual([]);
+    expect((await client.listKnowledgeBases()).knowledge_bases).toEqual([]);
+  });
+});
+
+describe("Header edge cases from untyped callers", () => {
+  function recording(extra: Partial<ConstructorParameters<typeof Seclai>[0]> = {}) {
+    const sent: Record<string, string>[] = [];
+    const client = new Seclai({
+      apiKey: "real",
+      baseUrl: "https://test.invalid",
+      fetch: async (_input, init) => {
+        sent.push({ ...(init?.headers as Record<string, string>) });
+        return jsonResponse({ data: [] });
+      },
+      ...extra,
+    });
+    return { client, sent };
+  }
+
+  test.each([undefined, null])("a %s content-type does not displace the JSON one", async (value) => {
+    const { client, sent } = recording();
+    const headers = { "content-type": value } as unknown as Record<string, string>;
+    await client.request("POST", "/agents", { json: { a: 1 }, headers });
+    expect(sent[0]).toEqual({ "content-type": "application/json", "x-api-key": "real" });
+  });
+
+  test("the guard names the spelling that carried the rejected version", () => {
+    expect(
+      () =>
+        new Seclai({
+          apiKey: "real",
+          defaultHeaders: { "Seclai-Version": "2026-07-27", "seclai-version": "2099-01-01" },
+        }),
+    ).toThrow("defaultHeaders['seclai-version']");
   });
 });
