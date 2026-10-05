@@ -1257,6 +1257,47 @@ describe("Pagination Helper", () => {
     expect(seen).toEqual(["?page=1&limit=2", "?page=2&limit=2"]);
   });
 
+  // The four evaluation listings answer `{data, total, page, limit}` with no
+  // `pagination` key unless the client opts into 2026-07-27.
+  test.each([
+    { total: 3, requests: 2, ids: ["p1a", "p1b", "p2a"] },
+    { total: 4, requests: 2, ids: ["p1a", "p1b", "p2a", "p2b"] },
+    { total: 2, requests: 1, ids: ["p1a", "p1b"] },
+  ])("paginate walks a flat-shaped listing of $total", async ({ total, requests, ids }) => {
+    const seen: string[] = [];
+    const client = makeClient((req) => {
+      const url = new URL(req.url);
+      expect(url.pathname).toBe("/agents/evaluation-criteria/c1/results");
+      seen.push(url.search);
+      const page = Number(url.searchParams.get("page"));
+      const all = [`p${page}a`, `p${page}b`].map((id) => ({ id }));
+      return jsonResponse({ data: all.slice(0, total - (page - 1) * 2), total, page, limit: 2 });
+    });
+    const got: string[] = [];
+    for await (const result of client.paginate((opts) => client.listEvaluationResults("c1", opts), {
+      limit: 2,
+    })) {
+      got.push(result.id);
+    }
+    expect(got).toEqual(ids);
+    expect(seen).toHaveLength(requests);
+  });
+
+  test("paginate stops on a flat-shaped listing whose server ignores page", async () => {
+    let calls = 0;
+    const client = makeClient(() => {
+      calls++;
+      return jsonResponse({ data: [{ id: "a" }, { id: "b" }], total: 3, page: 1, limit: 2 });
+    });
+    const got: string[] = [];
+    for await (const result of client.paginate((opts) => client.listEvaluationResults("c1", opts), {
+      limit: 2,
+    })) {
+      got.push(result.id);
+    }
+    expect(calls).toBe(2);
+  });
+
   test("paginate makes one request for a single full page", async () => {
     let requests = 0;
     const client = makeClient(() => {

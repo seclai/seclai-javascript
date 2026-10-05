@@ -18,7 +18,7 @@
 
 ### Fixed
 
-- Make `paginate()` work with the list methods. It read `items` and `pagination.total_pages`, while they return `data` and `pagination.pages`, so `client.paginate((opts) => client.listSources(opts))` threw `TypeError: result.items is not iterable`. It now reads the `{data, pagination}` envelope and stops on `has_next`, yields a bare array once, still accepts a custom fetcher's `{items, pagination: {total_pages}}`, and throws `SeclaiError` on anything else. The fetcher's page type is exported as `PaginatedPage`
+- Make `paginate()` work with the list methods. It read `items` and `pagination.total_pages`, while they return `data` and `pagination.pages`, so `client.paginate((opts) => client.listSources(opts))` threw `TypeError: result.items is not iterable`. It now reads the `{data, pagination}` envelope and stops on `has_next`, walks the flat `{data, total, page, limit}` shape of the evaluation listings by `total`, yields a bare array once, still accepts a custom fetcher's `{items, pagination: {total_pages}}`, and throws `SeclaiError` on anything else. The fetcher's page type is exported as `PaginatedPage`
 - Correct the `Seclai` class example, which destructured an `items` property `listAgents()` does not return
 
 ## [1.5.0] - 2026-07-27

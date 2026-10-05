@@ -279,12 +279,17 @@ function buildURL(baseUrl: string, path: string, query?: Record<string, unknown>
 
 /**
  * One page as a fetcher handed to {@link Seclai.paginate} may return it: a list
- * method's `{data, pagination}` envelope, a bare array, or `{items, pagination}`
- * with a `total_pages` count.
+ * method's `{data, pagination}` envelope or flat `{data, total, page, limit}`,
+ * a bare array, or `{items, pagination}` with a `total_pages` count.
  */
 export type PaginatedPage<T> =
   | T[]
-  | { data?: T[] | null; pagination?: { pages?: number; has_next?: boolean } | null }
+  | {
+      data?: T[] | null;
+      pagination?: { pages?: number; has_next?: boolean } | null;
+      total?: number;
+      limit?: number;
+    }
   | { items: T[]; pagination?: { page: number; total_pages: number } };
 
 /** The items of a list that is a bare array by default and `{data, pagination}` from 2026-07-27. */
@@ -3425,6 +3430,8 @@ export class Seclai {
         data?: T[] | null;
         items?: T[] | null;
         pagination?: { pages?: number; total_pages?: number; has_next?: boolean } | null;
+        total?: number;
+        limit?: number;
       };
       const items = "data" in body ? body.data ?? [] : body.items;
       if (!Array.isArray(items)) {
@@ -3435,8 +3442,14 @@ export class Seclai {
       yield* items;
 
       const pagination = body.pagination;
-      if (!pagination || items.length === 0) return;
-      if (typeof pagination.has_next === "boolean") {
+      if (items.length === 0) return;
+      if (!pagination) {
+        // The flat `{data, total, page, limit}` shape. Counted from the page
+        // requested, so a server that ignores `page` cannot loop this forever.
+        if (typeof body.total !== "number") return;
+        const pageSize = typeof body.limit === "number" && body.limit > 0 ? body.limit : limit;
+        if (page * pageSize >= body.total) return;
+      } else if (typeof pagination.has_next === "boolean") {
         if (!pagination.has_next) return;
       } else {
         const pages = pagination.pages ?? pagination.total_pages;
