@@ -36,6 +36,16 @@ import type {
   AgentRunResponse,
   AgentRunStreamRequest,
   AgentSummaryResponse,
+  AgentUsingCloudDriveResponse,
+  CloudDriveProviderResponse,
+  CloudDriveRejectionResponse,
+  CloudDriveResponse,
+  CloudDriveUpdateRequest,
+  EmbeddingModelListResponse,
+  ListSourceContentsOptions,
+  RerankerModelListResponse,
+  SourceContentStatusListResponse,
+  SourceContentStatusResponse,
   AgentTraceSearchRequest,
   AgentTraceSearchResponse,
   AiAssistantAcceptRequest,
@@ -256,10 +266,29 @@ function buildURL(baseUrl: string, path: string, query?: Record<string, unknown>
   if (query) {
     for (const [key, value] of Object.entries(query)) {
       if (value === undefined || value === null) continue;
+      if (Array.isArray(value)) {
+        // A repeatable parameter: one `key=value` pair per element.
+        for (const item of value) url.searchParams.append(key, String(item));
+        continue;
+      }
       url.searchParams.set(key, String(value));
     }
   }
   return url;
+}
+
+/** The items of a list that is a bare array by default and `{data, pagination}` from 2026-07-27. */
+function listItems<T>(res: unknown): T[] {
+  if (Array.isArray(res)) return res as T[];
+  return (res as { data?: T[] | null } | null)?.data ?? [];
+}
+
+/** Restore `models` on a model listing, which arrives under `data` from 2026-07-27. */
+function withModels<T extends { models: unknown[] }>(res: unknown): T {
+  const body = res as T & { data?: T["models"] };
+  return Array.isArray(body.models) || !Array.isArray(body.data)
+    ? body
+    : { ...body, models: body.data };
 }
 
 async function safeText(response: Response): Promise<string | undefined> {
@@ -2159,6 +2188,58 @@ export class Seclai {
     return (await this.request("POST", `/sources/${sourceId}`, { json: body })) as FileUploadResponse;
   }
 
+  /**
+   * List a source's content items and their indexing status.
+   *
+   * @param sourceId - Source connection identifier.
+   * @param opts - Pagination, sorting, and filters. Pass the `content_version_id`
+   *   values the upload methods return as `contentVersionIds` to poll a batch of
+   *   uploads in one request. An empty `contentVersionIds` matches nothing, so
+   *   it returns an empty page without sending a request.
+   * @returns The items under `data` with `pagination`, on every API version.
+   */
+  async listSourceContents(
+    sourceId: string,
+    opts: ListSourceContentsOptions = {},
+  ): Promise<SourceContentStatusListResponse> {
+    if (opts.contentVersionIds?.length === 0) {
+      return {
+        data: [],
+        pagination: {
+          page: opts.page ?? 1,
+          limit: opts.limit ?? 20,
+          total: 0,
+          pages: 0,
+          has_next: false,
+          has_prev: false,
+        },
+      };
+    }
+    return (await this.request("GET", `/sources/${sourceId}/contents`, {
+      query: {
+        page: opts.page,
+        limit: opts.limit,
+        sort: opts.sort,
+        order: opts.order,
+        status: opts.status,
+        content_version_id: opts.contentVersionIds,
+      },
+    })) as SourceContentStatusListResponse;
+  }
+
+  /**
+   * Get one content item's indexing status.
+   *
+   * @param sourceId - Source connection identifier.
+   * @param contentVersionId - The `content_version_id` an upload returned.
+   */
+  async getSourceContentStatus(sourceId: string, contentVersionId: string): Promise<SourceContentStatusResponse> {
+    return (await this.request(
+      "GET",
+      `/sources/${sourceId}/contents/${contentVersionId}`,
+    )) as SourceContentStatusResponse;
+  }
+
   // ─── Source Exports ────────────────────────────────────────────────────────
 
   /**
@@ -2859,6 +2940,33 @@ export class Seclai {
     return (await this.request("GET", "/models/generation-tiers")) as Record<string, unknown>;
   }
 
+  /**
+   * List the embedding models a source can index with, and their pricing.
+   *
+   * The endpoint lists the embedders under `models` by default and under `data`
+   * once the caller opts in with `apiVersion` 2026-07-27 or later; `models` is
+   * populated on either, with the defaults and pricing beside it.
+   *
+   * @param opts.supportsInputMedia - Keep only embedders that can index this
+   *   input modality — a coarse kind (text, image, video, audio) or a full MIME.
+   */
+  async listEmbeddingModels(opts: { supportsInputMedia?: string } = {}): Promise<EmbeddingModelListResponse> {
+    return withModels<EmbeddingModelListResponse>(
+      await this.request("GET", "/models/embedders", {
+        query: { supports_input_media: opts.supportsInputMedia },
+      }),
+    );
+  }
+
+  /**
+   * List the reranker models a knowledge base can use, and their pricing.
+   *
+   * `models` is populated on either wire shape, as for {@link Seclai.listEmbeddingModels}.
+   */
+  async listRerankerModels(): Promise<RerankerModelListResponse> {
+    return withModels<RerankerModelListResponse>(await this.request("GET", "/models/rerankers"));
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
   // Model Playground Experiments
   // ═══════════════════════════════════════════════════════════════════════════
@@ -2911,6 +3019,100 @@ export class Seclai {
    */
   async deleteExperiment(experimentId: string): Promise<void> {
     await this.request("DELETE", `/models/playground/experiments/${experimentId}`);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Cloud Drives
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * List the cloud-drive providers this deployment has configured.
+   *
+   * @returns The providers, read from either wire shape.
+   */
+  async listCloudDriveProviders(): Promise<CloudDriveProviderResponse[]> {
+    return listItems<CloudDriveProviderResponse>(await this.request("GET", "/cloud-drives/providers"));
+  }
+
+  /**
+   * List the account's cloud-drive connections.
+   *
+   * @returns The connections, read from either wire shape.
+   */
+  async listCloudDrives(): Promise<CloudDriveResponse[]> {
+    return listItems<CloudDriveResponse>(await this.request("GET", "/cloud-drives"));
+  }
+
+  /**
+   * Get a cloud-drive connection.
+   *
+   * @param connectionId - Cloud-drive connection identifier.
+   */
+  async getCloudDrive(connectionId: string): Promise<CloudDriveResponse> {
+    return (await this.request("GET", `/cloud-drives/${connectionId}`)) as CloudDriveResponse;
+  }
+
+  /**
+   * Update a cloud-drive connection.
+   *
+   * @param connectionId - Cloud-drive connection identifier.
+   * @param body - Fields to change — `name` and/or `folder_path`.
+   * @returns The updated connection.
+   */
+  async updateCloudDrive(connectionId: string, body: CloudDriveUpdateRequest): Promise<CloudDriveResponse> {
+    return (await this.request("PATCH", `/cloud-drives/${connectionId}`, { json: body })) as CloudDriveResponse;
+  }
+
+  /**
+   * Disconnect a cloud-drive connection, keeping the connection itself.
+   *
+   * @param connectionId - Cloud-drive connection identifier.
+   * @returns The connection in its disconnected state.
+   */
+  async disconnectCloudDrive(connectionId: string): Promise<CloudDriveResponse> {
+    return (await this.request("POST", `/cloud-drives/${connectionId}/disconnect`)) as CloudDriveResponse;
+  }
+
+  /**
+   * Delete a cloud-drive connection.
+   *
+   * @param connectionId - Cloud-drive connection identifier.
+   */
+  async deleteCloudDrive(connectionId: string): Promise<void> {
+    await this.request("DELETE", `/cloud-drives/${connectionId}`);
+  }
+
+  /**
+   * List the agents that use a cloud-drive connection.
+   *
+   * @param connectionId - Cloud-drive connection identifier.
+   * @returns The agents, read from either wire shape.
+   */
+  async getAgentsUsingCloudDrive(connectionId: string): Promise<AgentUsingCloudDriveResponse[]> {
+    return listItems<AgentUsingCloudDriveResponse>(
+      await this.request("GET", `/cloud-drives/${connectionId}/agents`),
+    );
+  }
+
+  /**
+   * List the files a cloud-drive connection skipped, newest first.
+   *
+   * A skipped file fires no trigger, so this is where to look when an agent
+   * did not run for a file.
+   *
+   * @param connectionId - Cloud-drive connection identifier.
+   * @param opts.limit - Maximum number of rejections (1-200, default 50).
+   * @returns The rejections with their reasons, read from either wire shape.
+   */
+  async listCloudDriveRejections(
+    connectionId: string,
+    opts: { limit?: number } = {},
+  ): Promise<CloudDriveRejectionResponse[]> {
+    return listItems<CloudDriveRejectionResponse>(
+      await this.request("GET", `/cloud-drives/${connectionId}/rejections`, {
+        query: { limit: opts.limit },
+      }),
+    );
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

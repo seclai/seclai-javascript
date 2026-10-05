@@ -2648,7 +2648,7 @@ describe("API version constants", () => {
   test("a constant reaches the wire", async () => {
     const client = makeClient(
       (req) => {
-        expect(req.headers["seclai-version"]).toBe("2026-07-27");
+        expect(req.headers["seclai-version"]).toBe("2026-10-03");
         return jsonResponse({ data: [] });
       },
       { apiVersion: SeclaiApiVersion.Latest },
@@ -2790,5 +2790,165 @@ describe("API version guard validates what the merge produces", () => {
     expect(() => new Seclai({ apiKey: "k", apiVersion: "2099-01-01" })).toThrow(
       /via apiVersion/,
     );
+  });
+});
+
+describe("Cloud drives, embedders/rerankers and source contents", () => {
+  const PAGINATION = { page: 1, limit: 1, total: 1, pages: 1, has_next: false, has_prev: false };
+
+  type Call = {
+    name: string;
+    run: (c: Seclai) => Promise<unknown>;
+    verb: string;
+    path: string;
+    query?: [string, string][];
+    body?: unknown;
+  };
+
+  const calls: Call[] = [
+    { name: "listCloudDriveProviders", run: (c) => c.listCloudDriveProviders(), verb: "GET", path: "/cloud-drives/providers" },
+    { name: "listCloudDrives", run: (c) => c.listCloudDrives(), verb: "GET", path: "/cloud-drives" },
+    { name: "getCloudDrive", run: (c) => c.getCloudDrive("c1"), verb: "GET", path: "/cloud-drives/c1" },
+    {
+      name: "updateCloudDrive",
+      run: (c) => c.updateCloudDrive("c1", { name: "Contracts" }),
+      verb: "PATCH",
+      path: "/cloud-drives/c1",
+      body: { name: "Contracts" },
+    },
+    { name: "disconnectCloudDrive", run: (c) => c.disconnectCloudDrive("c1"), verb: "POST", path: "/cloud-drives/c1/disconnect" },
+    { name: "deleteCloudDrive", run: (c) => c.deleteCloudDrive("c1"), verb: "DELETE", path: "/cloud-drives/c1" },
+    { name: "getAgentsUsingCloudDrive", run: (c) => c.getAgentsUsingCloudDrive("c1"), verb: "GET", path: "/cloud-drives/c1/agents" },
+    {
+      name: "listCloudDriveRejections with a limit",
+      run: (c) => c.listCloudDriveRejections("c1", { limit: 20 }),
+      verb: "GET",
+      path: "/cloud-drives/c1/rejections",
+      query: [["limit", "20"]],
+    },
+    { name: "listCloudDriveRejections", run: (c) => c.listCloudDriveRejections("c1"), verb: "GET", path: "/cloud-drives/c1/rejections" },
+    {
+      name: "listEmbeddingModels with a filter",
+      run: (c) => c.listEmbeddingModels({ supportsInputMedia: "image" }),
+      verb: "GET",
+      path: "/models/embedders",
+      query: [["supports_input_media", "image"]],
+    },
+    { name: "listEmbeddingModels", run: (c) => c.listEmbeddingModels(), verb: "GET", path: "/models/embedders" },
+    { name: "listRerankerModels", run: (c) => c.listRerankerModels(), verb: "GET", path: "/models/rerankers" },
+    {
+      name: "listSourceContents with every option",
+      run: (c) =>
+        c.listSourceContents("s1", {
+          page: 2,
+          limit: 10,
+          sort: "title",
+          order: "asc",
+          status: "failed",
+          contentVersionIds: ["cv1", "cv2"],
+        }),
+      verb: "GET",
+      path: "/sources/s1/contents",
+      query: [
+        ["page", "2"],
+        ["limit", "10"],
+        ["sort", "title"],
+        ["order", "asc"],
+        ["status", "failed"],
+        ["content_version_id", "cv1"],
+        ["content_version_id", "cv2"],
+      ],
+    },
+    { name: "listSourceContents", run: (c) => c.listSourceContents("s1"), verb: "GET", path: "/sources/s1/contents" },
+    {
+      name: "getSourceContentStatus",
+      run: (c) => c.getSourceContentStatus("s1", "cv1"),
+      verb: "GET",
+      path: "/sources/s1/contents/cv1",
+    },
+  ];
+
+  test.each(calls)("$name sends $verb $path", async ({ run, verb, path, query, body }) => {
+    let seen: unknown;
+    const client = makeClient((req) => {
+      const url = new URL(req.url);
+      seen = {
+        verb: req.method,
+        path: url.pathname,
+        query: [...url.searchParams.entries()],
+        body: req.bodyText === undefined ? undefined : JSON.parse(req.bodyText),
+      };
+      return jsonResponse({ data: [] });
+    });
+    await run(client);
+    expect(seen).toEqual({ verb, path, query: query ?? [], body });
+  });
+
+  const lists: { name: string; run: (c: Seclai) => Promise<unknown[]> }[] = [
+    { name: "listCloudDriveProviders", run: (c) => c.listCloudDriveProviders() },
+    { name: "listCloudDrives", run: (c) => c.listCloudDrives() },
+    { name: "getAgentsUsingCloudDrive", run: (c) => c.getAgentsUsingCloudDrive("c1") },
+    { name: "listCloudDriveRejections", run: (c) => c.listCloudDriveRejections("c1") },
+  ];
+
+  test.each(lists)("$name reads the legacy bare array", async ({ run }) => {
+    const client = makeClient(() => jsonResponse([{ id: "x1" }]));
+    expect(await run(client)).toEqual([{ id: "x1" }]);
+  });
+
+  test.each(lists)("$name reads the 2026-07-27 envelope", async ({ run }) => {
+    const client = makeClient(() => jsonResponse({ data: [{ id: "x1" }], pagination: PAGINATION }));
+    expect(await run(client)).toEqual([{ id: "x1" }]);
+  });
+
+  const modelLists: { name: string; run: (c: Seclai) => Promise<{ models: unknown[] }> }[] = [
+    { name: "listEmbeddingModels", run: (c) => c.listEmbeddingModels() },
+    { name: "listRerankerModels", run: (c) => c.listRerankerModels() },
+  ];
+
+  test.each(modelLists)("$name reads the legacy models key", async ({ run }) => {
+    const client = makeClient(() =>
+      jsonResponse({ models: [{ model_type: "m1" }], default_model_type: "m1" }),
+    );
+    const res = await run(client);
+    expect(res.models).toEqual([{ model_type: "m1" }]);
+    expect(res).toHaveProperty("default_model_type", "m1");
+  });
+
+  test.each(modelLists)("$name keeps models and the pricing on the 2026-07-27 envelope", async ({ run }) => {
+    const client = makeClient(() =>
+      jsonResponse({ data: [{ model_type: "m1" }], pagination: PAGINATION, default_model_type: "m1" }),
+    );
+    const res = await run(client);
+    expect(res.models).toEqual([{ model_type: "m1" }]);
+    expect(res).toHaveProperty("default_model_type", "m1");
+    expect(res).toHaveProperty("pagination", PAGINATION);
+  });
+
+  test("listSourceContents returns the envelope", async () => {
+    const body = { data: [{ content_version_id: "cv1" }], pagination: PAGINATION };
+    const client = makeClient(() => jsonResponse(body));
+    expect(await client.listSourceContents("s1")).toEqual(body);
+  });
+
+  test("listSourceContents with no ids returns an empty page without a request", async () => {
+    let requests = 0;
+    const client = makeClient(() => {
+      requests += 1;
+      return jsonResponse({ data: [{ content_version_id: "cv1" }], pagination: PAGINATION });
+    });
+    expect(await client.listSourceContents("s1", { contentVersionIds: [] })).toEqual({
+      data: [],
+      pagination: { page: 1, limit: 20, total: 0, pages: 0, has_next: false, has_prev: false },
+    });
+    expect(
+      (await client.listSourceContents("s1", { contentVersionIds: [], page: 3, limit: 5 })).pagination,
+    ).toEqual({ page: 3, limit: 5, total: 0, pages: 0, has_next: false, has_prev: false });
+    expect(requests).toBe(0);
+  });
+
+  test("deleteCloudDrive discards the acknowledgement", async () => {
+    const client = makeClient(() => jsonResponse({ ok: true }));
+    expect(await client.deleteCloudDrive("c1")).toBeUndefined();
   });
 });

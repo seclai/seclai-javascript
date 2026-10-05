@@ -127,8 +127,8 @@ Leave `apiVersion` unset and the header is omitted, so the account's pinned
 baseline applies and responses keep their current shapes. Upgrading this package
 alone never changes the wire contract.
 
-Known versions are on `SeclaiApiVersion` (`V2026_07_01`, `V2026_07_27`, plus
-`Default` and `Latest`), imported from `@seclai/sdk`. A version this release was
+Known versions are on `SeclaiApiVersion` (`V2026_07_01` through `V2026_10_03`,
+plus `Default` and `Latest`), imported from `@seclai/sdk`. A version this release was
 **not** built against throws at construction: a newer version can reshape
 responses, and this client would decode them incorrectly rather than reject them.
 Upgrade the package to adopt a new version, or set `allowUnknownApiVersion` if
@@ -155,6 +155,23 @@ Prefer `pagination` over the flat `total`/`page`/`limit` properties, and read th
 last two with `res.data ?? res.configs` / `res.data ?? res.alerts`. The legacy
 keys will be deprecated and then removed once the canonical envelope is the
 default.
+
+The cloud-drive listings (`listCloudDriveProviders()`, `listCloudDrives()`,
+`getAgentsUsingCloudDrive()`, `listCloudDriveRejections()`) follow the same rule
+and return the items as an array on either shape. `listEmbeddingModels()` and
+`listRerankerModels()` move their list from `models` to `data`; both methods
+populate `models` on either shape, with the defaults and pricing beside it.
+
+**Later versions.** Each is cumulative, and none changes a response shape this
+client decodes:
+
+| Version | What it changes |
+| --- | --- |
+| `2026-08-03` | `createMemoryBank()` rejects `max_age_days` with a 400, and an omitted `retention_days` resolves per bank type instead of to 30 |
+| `2026-08-21` | `createSource()` rejects an embedding dimension its embedder does not support with a 400 — `listEmbeddingModels()` reports the supported ones |
+| `2026-09-28` | Agent-definition writes use the current file-list grammar: an omitted `attachments` keeps the stored list and `[]` means no files |
+| `2026-09-30` | A run's and a step's `output`, and a step's `input`, are the text rather than a JSON manifest; files are in `attachments` on every version |
+| `2026-10-03` | A new LLM step written without `attachments` takes its parent's files, and a new retrieval step's matched media are its files |
 
 ## Resources
 
@@ -427,6 +444,40 @@ await client.updateSource("source_id", { name: "Renamed" });
 await client.deleteSource("source_id");
 ```
 
+Indexing status of a source's content, keyed by the `content_version_id` the
+upload methods return:
+
+<!-- sdksync:check -->
+```ts
+const failed = await client.listSourceContents("source_id", { status: "failed" });
+const batch = await client.listSourceContents("source_id", {
+  contentVersionIds: ["cv_1", "cv_2"],
+});
+console.log(batch.pagination.total, failed.data.map((item) => item.error));
+
+const one = await client.getSourceContentStatus("source_id", "cv_1");
+console.log(one.content_status);
+```
+
+### Cloud drives
+
+<!-- sdksync:check -->
+```ts
+const providers = await client.listCloudDriveProviders();
+const drives = await client.listCloudDrives();
+const drive = await client.getCloudDrive(drives[0].id);
+await client.updateCloudDrive(drive.id, { name: "Contracts" });
+
+// Which agents depend on it, and which files it skipped and why
+const agents = await client.getAgentsUsingCloudDrive(drive.id);
+const skipped = await client.listCloudDriveRejections(drive.id, { limit: 20 });
+console.log(providers.length, agents.length, skipped.map((r) => r.reason));
+
+const disconnected = await client.disconnectCloudDrive(drive.id); // keeps the connection
+console.log(disconnected.connected);
+await client.deleteCloudDrive(drive.id);
+```
+
 ### File uploads
 
 Upload a file to a source (max 200 MiB). The SDK infers MIME type from the file extension when `mimeType` is not provided.
@@ -574,6 +625,11 @@ const model = await client.getModel("model_id");
 
 // Media-generation quality tiers (fast/balanced/thorough) and what each resolves to
 const tiers = await client.getGenerationTiers();
+
+// Embedding and reranker models, with their pricing
+const embedders = await client.listEmbeddingModels({ supportsInputMedia: "image" });
+const rerankers = await client.listRerankerModels();
+console.log(embedders.models, embedders.default_model_type, rerankers.models);
 
 const alerts = await client.listModelAlerts();
 await client.markModelAlertRead("alert_id");

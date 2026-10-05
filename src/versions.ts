@@ -11,10 +11,15 @@
 export const SeclaiApiVersion = {
   V2026_07_01: "2026-07-01",
   V2026_07_27: "2026-07-27",
+  V2026_08_03: "2026-08-03",
+  V2026_08_21: "2026-08-21",
+  V2026_09_28: "2026-09-28",
+  V2026_09_30: "2026-09-30",
+  V2026_10_03: "2026-10-03",
   /** Baseline applied to an unpinned, header-less caller. */
   Default: "2026-07-01",
   /** Newest version known to this SDK release. May lag the server. */
-  Latest: "2026-07-27",
+  Latest: "2026-10-03",
 } as const;
 
 /**

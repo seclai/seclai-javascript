@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.6.0] - 2026-10-04
+
+### Changed
+
+- Sync the bundled OpenAPI spec and regenerate the types. Existing responses gain properties, among them `attachments` on `AgentRunResponse` and `AgentRunStepResponse`, `trace_purged_at` on a run, `warnings` on a step, `strip_quoted_reply_chains` on memory banks, `effort` on playground experiments, `effort_options` and `chat_capable` on `PromptModelResponse`, and `embedder_warning` on `ContentFileUploadResponse`
+- Move `SeclaiApiVersion.Latest` to `2026-10-03`. Nothing is sent unless `apiVersion` is set, so a client that passes `SeclaiApiVersion.Latest` now opts into the five versions added below
+- Send an array passed in the `query` of `request()` or `requestRaw()` as a repeated parameter, one pair per element. It was joined with commas into a single value
+
+### Added
+
+- Add the cloud-drive methods `listCloudDriveProviders()`, `listCloudDrives()`, `getCloudDrive()`, `updateCloudDrive()`, `disconnectCloudDrive()`, `deleteCloudDrive()`, `getAgentsUsingCloudDrive()` and `listCloudDriveRejections()`. The four listings return the items as an array whether the endpoint answers with a bare array or, from `apiVersion` `2026-07-27`, the `{data, pagination}` envelope
+- Add `listSourceContents()` and `getSourceContentStatus()` for the indexing status of a source's content. `contentVersionIds` polls a batch of uploads in one request, and an empty array returns an empty page without calling the API
+- Add `listEmbeddingModels()` and `listRerankerModels()`. The list is under `models` on every API version, with the defaults and pricing beside it
+- Add the `SeclaiApiVersion` constants `V2026_08_03`, `V2026_08_21`, `V2026_09_28`, `V2026_09_30` and `V2026_10_03`, so those versions are accepted as `apiVersion`. The README lists what each one changes
+- Add the type exports for those endpoints, including `CloudDriveResponse`, `CloudDriveProviderResponse`, `CloudDriveRejectionResponse`, `CloudDriveUpdateRequest`, `AgentUsingCloudDriveResponse`, `SourceContentStatusResponse`, `SourceContentStatusListResponse`, `ListSourceContentsOptions`, `EmbeddingModelListResponse` and `RerankerModelListResponse`, plus `AgentRunFileResponse` and `EffortOptionsResponse`
+
 ## [1.5.0] - 2026-07-27
 
 ### Changed
@@ -185,6 +201,7 @@ _Stable release. No functional changes since 0.0.1._
 
 _Initial release._
 
+[1.6.0]: https://github.com/seclai/seclai-javascript/releases/tag/1.6.0
 [1.5.0]: https://github.com/seclai/seclai-javascript/releases/tag/1.5.0
 [1.4.0]: https://github.com/seclai/seclai-javascript/releases/tag/1.4.0
 [1.3.0]: https://github.com/seclai/seclai-javascript/releases/tag/1.3.0
