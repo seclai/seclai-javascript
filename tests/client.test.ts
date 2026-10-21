@@ -1247,22 +1247,13 @@ describe("Agent Input Uploads", () => {
     await client.downloadAgentRunAttachment("run_1", "att_1", { signal: controller.signal });
   });
 
-  test("downloadAgentRunAttachment aborts the request when timeoutMs elapses", async () => {
+  test("downloadAgentRunAttachment rejects when the signal is already aborted", async () => {
+    const controller = new AbortController();
+    controller.abort();
     const client = makeClient(() => new Response("unused"), { fetch: hangUntilAborted });
     await expect(
-      client.downloadAgentRunAttachment("run_1", "att_1", { timeoutMs: 5 }),
+      client.downloadAgentRunAttachment("run_1", "att_1", { signal: controller.signal }),
     ).rejects.toMatchObject({ name: "AbortError" });
-  });
-
-  test("downloadAgentRunAttachment aborts the request when the signal fires alongside timeoutMs", async () => {
-    const controller = new AbortController();
-    const client = makeClient(() => new Response("unused"), { fetch: hangUntilAborted });
-    const pending = client.downloadAgentRunAttachment("run_1", "att_1", {
-      timeoutMs: 60_000,
-      signal: controller.signal,
-    });
-    controller.abort();
-    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
   });
 });
 

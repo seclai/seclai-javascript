@@ -794,34 +794,6 @@ export class Seclai {
     return response;
   }
 
-  /**
-   * Shared GET helper for the binary downloads. `timeoutMs` bounds the whole
-   * download, reading the body included, and combines with `signal`.
-   */
-  private async download(
-    path: string,
-    opts: { timeoutMs?: number; signal?: AbortSignal },
-    query: Record<string, unknown> = {},
-  ): Promise<Response> {
-    if (opts.timeoutMs === undefined) {
-      return await this.requestRaw("GET", path, { query, signal: opts.signal });
-    }
-    const timeoutController = new AbortController();
-    const timeoutId = setTimeout(() => timeoutController.abort(), opts.timeoutMs);
-    // The timer outlives the call while the caller reads the body; in Node, do
-    // not let it alone keep the process running once the download is done.
-    (timeoutId as { unref?: () => void }).unref?.();
-    try {
-      return await this.requestRaw("GET", path, {
-        query,
-        signal: anySignal([opts.signal, timeoutController.signal]),
-      });
-    } catch (err) {
-      clearTimeout(timeoutId);
-      throw err;
-    }
-  }
-
   /** Shared multipart upload helper. */
   private async uploadFile(
     path: string,
@@ -1588,17 +1560,18 @@ export class Seclai {
    * @param attachmentId - URL-safe-base64-encoded `storage_key` of the attachment
    *   (as surfaced in run output manifests and webhook/email payloads).
    * @param opts - Optional `downloadName` filename hint for the download
-   *   disposition, `timeoutMs` to abort a download that runs longer (reading
-   *   the body included), and `signal` to cancel it.
+   *   disposition, and `signal` to cancel the download, reading the body
+   *   included (pass `AbortSignal.timeout(ms)` to bound how long it runs).
    * @returns Raw response with the attachment bytes.
    */
   async downloadAgentRunAttachment(
     runId: string,
     attachmentId: string,
-    opts: { downloadName?: string; timeoutMs?: number; signal?: AbortSignal } = {},
+    opts: { downloadName?: string; signal?: AbortSignal } = {},
   ): Promise<Response> {
-    return await this.download(`/v2/agent-runs/${runId}/attachments/${attachmentId}`, opts, {
-      download_name: opts.downloadName,
+    return await this.requestRaw("GET", `/v2/agent-runs/${runId}/attachments/${attachmentId}`, {
+      query: { download_name: opts.downloadName },
+      signal: opts.signal,
     });
   }
 
@@ -2493,16 +2466,18 @@ export class Seclai {
    *
    * @param sourceId - Source connection identifier.
    * @param exportId - Export identifier.
-   * @param opts - Optional `timeoutMs` to abort a download that runs longer
-   *   (reading the body included), and `signal` to cancel it.
+   * @param opts - Optional `signal` to cancel the download, reading the body
+   *   included (pass `AbortSignal.timeout(ms)` to bound how long it runs).
    * @returns Raw response with the export file.
    */
   async downloadSourceExport(
     sourceId: string,
     exportId: string,
-    opts: { timeoutMs?: number; signal?: AbortSignal } = {},
+    opts: { signal?: AbortSignal } = {},
   ): Promise<Response> {
-    return await this.download(`/sources/${sourceId}/exports/${exportId}/download`, opts);
+    return await this.requestRaw("GET", `/sources/${sourceId}/exports/${exportId}/download`, {
+      signal: opts.signal,
+    });
   }
 
   /**
@@ -2689,8 +2664,8 @@ export class Seclai {
    *
    * @param contentVersionId - Content version identifier.
    * @param attachmentId - Attachment identifier.
-   * @param opts - Optional `timeoutMs` to abort a download that runs longer
-   *   (reading the body included), and `signal` to cancel it.
+   * @param opts - Optional `signal` to cancel the download, reading the body
+   *   included (pass `AbortSignal.timeout(ms)` to bound how long it runs).
    * @returns Raw response with the attachment bytes.
    * @throws {SeclaiAPIStatusError} 403 when the file is withheld, and 402 when
    *   the account has no credits left (`error.code` `insufficient_credits`).
@@ -2698,9 +2673,11 @@ export class Seclai {
   async downloadContentAttachment(
     contentVersionId: string,
     attachmentId: string,
-    opts: { timeoutMs?: number; signal?: AbortSignal } = {},
+    opts: { signal?: AbortSignal } = {},
   ): Promise<Response> {
-    return await this.download(`/contents/${contentVersionId}/attachments/${attachmentId}/file`, opts);
+    return await this.requestRaw("GET", `/contents/${contentVersionId}/attachments/${attachmentId}/file`, {
+      signal: opts.signal,
+    });
   }
 
   /**
