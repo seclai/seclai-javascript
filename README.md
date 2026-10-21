@@ -174,8 +174,17 @@ default, so the same call can return fewer rows:
   number of rows it returned after you opt in.
 
 **Later versions.** Each is cumulative. None changes a response shape this
-client decodes, but `2026-09-30` and `2026-10-16` change what a string you may be
-parsing contains:
+client decodes, but some change a value you may be reading or a request that
+used to succeed:
+
+- `2026-09-30` and `2026-10-16` change what a string you may be parsing
+  contains — a run's `output`, and a run's `input` when it has uploads.
+- `2026-10-05` changes a value you may branch on: an item held for review
+  reports `content_status` `completed` instead of `failed`, so code that looks
+  for governance holds among `failed` items stops finding them. Check
+  `held_for_review` instead.
+- `2026-10-13` and `2026-10-19` reject with a 400 source settings that were
+  accepted before.
 
 | Version | What it changes |
 | --- | --- |
@@ -194,7 +203,9 @@ parsing contains:
 the installed release knows, so upgrading the package can opt a client that
 passes it into every version added since — `1.6.0` moved it from `2026-07-27` to
 `2026-10-03`, across the `2026-09-30` output change, and `1.7.0` moves it to
-`2026-10-19`, across the `2026-10-16` input change. Pass a dated constant such
+`2026-10-19`, across the `2026-10-05` status change, the `2026-10-13` and
+`2026-10-19` source-setting rejections and the `2026-10-16` input change. Pass a
+dated constant such
 as `SeclaiApiVersion.V2026_07_27` to keep behaviour fixed across upgrades.
 
 ## Resources
@@ -340,8 +351,14 @@ const upload = await client.uploadAgentInput("agent_id", {
   file: new Uint8Array([...]),
   fileName: "input.pdf",
 });
+// From API version 2026-10-16 the upload is `ready` at once. Below it, poll
+// until `status` is `ready` before running.
 const status = await client.getAgentInputUploadStatus("agent_id", upload.upload_id);
+const run = await client.runAgent("agent_id", { input_upload_id: upload.upload_id });
 ```
+
+Only a `dynamic_input` agent takes uploads; any other agent rejects one with a
+400.
 
 ### Agent run attachments
 
@@ -661,8 +678,11 @@ const att = await client.getContentAttachment("content_id", "attachment_id", { s
 console.log(att.text_content, att.file_withheld);
 const vectors = await client.listContentAttachmentEmbeddings("content_id", "attachment_id");
 
-// Raw Response; 403 while the file is withheld (see `file_withheld`)
-const file = await client.downloadContentAttachment("content_id", "attachment_id");
+// Raw Response; 403 while the file is withheld (see `file_withheld`).
+// Pass a signal to cancel a large download or bound it with a timeout.
+const file = await client.downloadContentAttachment("content_id", "attachment_id", {
+  signal: AbortSignal.timeout(60_000),
+});
 const bytes = new Uint8Array(await file.arrayBuffer());
 ```
 

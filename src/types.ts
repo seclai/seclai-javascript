@@ -98,11 +98,17 @@ export type AcceptedAttachmentSlot = components["schemas"]["AcceptedAttachmentSl
 export type AcceptedAttachmentSlotInput = Pick<AcceptedAttachmentSlot, "name"> &
   Partial<Omit<AcceptedAttachmentSlot, "name">>;
 
-/** Request body for declaring the input attachments a trigger accepts. */
-export type SetAcceptedAttachmentsRequest = components["schemas"]["SetAcceptedAttachmentsRequest"];
-
-/** Input type for {@link Seclai.setAcceptedAttachments}, with each slot's `min` optional. */
+/**
+ * Request body for {@link Seclai.setAcceptedAttachments}: the full list of
+ * accepted attachments, with each slot's server-defaulted `min` optional.
+ */
 export type SetAcceptedAttachmentsInput = { accepted_attachments: AcceptedAttachmentSlotInput[] | null };
+
+/**
+ * Request body for declaring the input attachments a trigger accepts. The same
+ * type as {@link SetAcceptedAttachmentsInput}, so a slot's `min` can be omitted.
+ */
+export type SetAcceptedAttachmentsRequest = SetAcceptedAttachmentsInput;
 
 /** The input attachments a trigger now accepts. */
 export type AcceptedAttachmentsResponse = components["schemas"]["AcceptedAttachmentsResponse"];

@@ -1159,7 +1159,9 @@ export class Seclai {
    * Run an agent in streaming mode (SSE) and wait for the final result.
    *
    * Consumes the entire SSE stream and returns only the terminal `done` payload.
-   * For real-time event access, use {@link runStreamingAgent} instead.
+   * For real-time event access, use {@link runStreamingAgent} instead. Leave
+   * `include_reasoning` unset here: the `stream_reasoning` events it asks for are
+   * never returned by this method.
    *
    * @param agentId - Agent identifier.
    * @param body - Streaming run request payload.
@@ -1496,10 +1498,14 @@ export class Seclai {
   // ═══════════════════════════════════════════════════════════════════════════
 
   /**
-   * Upload a file to use as input for a `dynamic_input` agent run.
+   * Upload a file to use as input for a `dynamic_input` agent run. Any other
+   * agent rejects the upload with HTTP 400. Files are limited to 200 MB.
    *
-   * After uploading, poll {@link getAgentInputUploadStatus} until `status` is `ready`,
-   * then pass `input_upload_id` to {@link runAgent}.
+   * From API version `2026-10-16` a file of any type is accepted and is `ready`
+   * at once: pass its `upload_id` as `input_upload_id` to {@link runAgent}.
+   * Earlier versions accept only a fixed list of extensions and write each
+   * file's extracted text into the run's `input`, so poll
+   * {@link getAgentInputUploadStatus} until `status` is `ready` before running.
    *
    * @param agentId - Agent identifier.
    * @param opts - File payload and optional metadata.
@@ -2455,10 +2461,17 @@ export class Seclai {
    *
    * @param sourceId - Source connection identifier.
    * @param exportId - Export identifier.
+   * @param opts - Optional `signal` to cancel the request.
    * @returns Raw response with the export file.
    */
-  async downloadSourceExport(sourceId: string, exportId: string): Promise<Response> {
-    return await this.requestRaw("GET", `/sources/${sourceId}/exports/${exportId}/download`);
+  async downloadSourceExport(
+    sourceId: string,
+    exportId: string,
+    opts: { signal?: AbortSignal } = {},
+  ): Promise<Response> {
+    return await this.requestRaw("GET", `/sources/${sourceId}/exports/${exportId}/download`, {
+      ...(opts.signal ? { signal: opts.signal } : {}),
+    });
   }
 
   /**
@@ -2598,8 +2611,11 @@ export class Seclai {
    * @param contentVersionId - Content version identifier.
    * @param attachmentId - The `id` of an entry from {@link listContentAttachments}.
    * @param opts - `start` and `end` character offsets for paging through long text
-   *   (server defaults 0 and 5000). A file that was not indexed has no text.
+   *   (server defaults 0 and 5000). Both are sent as given, so `end: 0` asks for
+   *   the metadata without any text. A file that was not indexed has no text.
    * @returns The attachment with the requested range of its text.
+   * @throws {SeclaiAPIStatusError} 402 when the account has no credits left
+   *   (`error.code` `insufficient_credits`).
    */
   async getContentAttachment(
     contentVersionId: string,
@@ -2619,6 +2635,8 @@ export class Seclai {
    * @param attachmentId - Attachment identifier.
    * @param opts - Pagination options (`limit` 1-100).
    * @returns Paginated list of embeddings.
+   * @throws {SeclaiAPIStatusError} 402 when the account has no credits left
+   *   (`error.code` `insufficient_credits`).
    */
   async listContentAttachmentEmbeddings(
     contentVersionId: string,
@@ -2640,10 +2658,20 @@ export class Seclai {
    *
    * @param contentVersionId - Content version identifier.
    * @param attachmentId - Attachment identifier.
+   * @param opts - Optional `signal` to cancel the request or bound it with a
+   *   timeout, e.g. `AbortSignal.timeout(60_000)`.
    * @returns Raw response with the attachment bytes.
+   * @throws {SeclaiAPIStatusError} 403 when the file is withheld, and 402 when
+   *   the account has no credits left (`error.code` `insufficient_credits`).
    */
-  async downloadContentAttachment(contentVersionId: string, attachmentId: string): Promise<Response> {
-    return await this.requestRaw("GET", `/contents/${contentVersionId}/attachments/${attachmentId}/file`);
+  async downloadContentAttachment(
+    contentVersionId: string,
+    attachmentId: string,
+    opts: { signal?: AbortSignal } = {},
+  ): Promise<Response> {
+    return await this.requestRaw("GET", `/contents/${contentVersionId}/attachments/${attachmentId}/file`, {
+      ...(opts.signal ? { signal: opts.signal } : {}),
+    });
   }
 
   /**

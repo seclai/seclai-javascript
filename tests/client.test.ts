@@ -10,6 +10,7 @@ import {
   SeclaiStreamingError,
   SeclaiApiVersion,
 } from "../src/index";
+import type { SetAcceptedAttachmentsRequest } from "../src/index";
 import { parseIni, isTokenValid } from "../src/auth";
 
 type RecordedRequest = {
@@ -601,7 +602,7 @@ describe("Sources", () => {
       expect(u.searchParams.get("page")).toBe("3");
       expect(u.searchParams.get("limit")).toBe("10");
       return jsonResponse({
-        data: [{ id: "r1", sender: "a@example.com", reason: "sender_not_allowed", authenticated: true }],
+        data: [{ id: "r1", from_address: "a@example.com", reason: "sender_not_allowed", authenticated: true }],
         pagination: { page: 3, limit: 10, total: 21, pages: 3, has_next: false, has_prev: true },
       });
     });
@@ -630,10 +631,10 @@ describe("Sources", () => {
       email_allowed_senders: ["example.com"],
       document_images: true,
     });
-    await client.updateSource("src_1", { feed_attachments: ["audio"], cloud_drive_max_file_mb: 25 });
+    await client.updateSource("src_1", { feed_attachments: ["enclosures"], cloud_drive_max_file_mb: 25 });
     expect(bodies).toEqual([
       { name: "Inbox", source_type: "email", email_allowed_senders: ["example.com"], document_images: true },
-      { feed_attachments: ["audio"], cloud_drive_max_file_mb: 25 },
+      { feed_attachments: ["enclosures"], cloud_drive_max_file_mb: 25 },
     ]);
   });
 
@@ -761,6 +762,15 @@ describe("Source Exports", () => {
     const text = await resp.text();
     expect(text).toBe("binary-data");
   });
+
+  test("downloadSourceExport forwards the abort signal", async () => {
+    const controller = new AbortController();
+    const client = makeClient((req) => {
+      expect(req.signal).toBe(controller.signal);
+      return new Response("binary-data", { status: 200 });
+    });
+    await client.downloadSourceExport("src_1", "exp_1", { signal: controller.signal });
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -887,6 +897,25 @@ describe("Content", () => {
     const resp = await client.downloadContentAttachment("cv_1", "att_1");
     expect(resp.headers.get("content-type")).toBe("image/png");
     expect(await resp.text()).toBe("png-bytes");
+  });
+
+  test("getContentAttachment sends end=0", async () => {
+    const client = makeClient((req) => {
+      const u = new URL(req.url);
+      expect(u.searchParams.get("start")).toBe("0");
+      expect(u.searchParams.get("end")).toBe("0");
+      return jsonResponse({ id: "att_1", text_content: "", file_withheld: null });
+    });
+    await client.getContentAttachment("cv_1", "att_1", { start: 0, end: 0 });
+  });
+
+  test("downloadContentAttachment forwards the abort signal", async () => {
+    const controller = new AbortController();
+    const client = makeClient((req) => {
+      expect(req.signal).toBe(controller.signal);
+      return new Response("bytes", { status: 200 });
+    });
+    await client.downloadContentAttachment("cv_1", "att_1", { signal: controller.signal });
   });
 
   test("downloadContentAttachment throws on a withheld file", async () => {
@@ -2342,6 +2371,15 @@ describe("Agent Email Triggers", () => {
       accepted_attachments: [{ name: "invoice", content_types: ["application/pdf"], max: 1 }],
     });
     expect(res.accepted_attachments[0]!.min).toBe(0);
+  });
+
+  test("SetAcceptedAttachmentsRequest accepts a slot without min", async () => {
+    const body: SetAcceptedAttachmentsRequest = { accepted_attachments: [{ name: "doc" }] };
+    const client = makeClient((req) => {
+      expect(JSON.parse(req.bodyText!)).toEqual({ accepted_attachments: [{ name: "doc" }] });
+      return jsonResponse({ trigger_id: "tr_1", agent_id: "ag_1", accepted_attachments: [{ name: "doc", min: 0 }] });
+    });
+    await client.setAcceptedAttachments("ag_1", "tr_1", body);
   });
 
   test("setAcceptedAttachments sends null to clear the declaration", async () => {
