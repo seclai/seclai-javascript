@@ -1560,8 +1560,8 @@ export class Seclai {
    * @param attachmentId - URL-safe-base64-encoded `storage_key` of the attachment
    *   (as surfaced in run output manifests and webhook/email payloads).
    * @param opts - Optional `downloadName` filename hint for the download
-   *   disposition, and `signal` to cancel the download, reading the body
-   *   included (pass `AbortSignal.timeout(ms)` to bound how long it runs).
+   *   disposition, and `signal` to cancel the download (pass
+   *   `AbortSignal.timeout(ms)` to bound how long it runs).
    * @returns Raw response with the attachment bytes.
    */
   async downloadAgentRunAttachment(
@@ -2466,8 +2466,8 @@ export class Seclai {
    *
    * @param sourceId - Source connection identifier.
    * @param exportId - Export identifier.
-   * @param opts - Optional `signal` to cancel the download, reading the body
-   *   included (pass `AbortSignal.timeout(ms)` to bound how long it runs).
+   * @param opts - Optional `signal` to cancel the download (pass
+   *   `AbortSignal.timeout(ms)` to bound how long it runs).
    * @returns Raw response with the export file.
    */
   async downloadSourceExport(
@@ -2664,8 +2664,8 @@ export class Seclai {
    *
    * @param contentVersionId - Content version identifier.
    * @param attachmentId - Attachment identifier.
-   * @param opts - Optional `signal` to cancel the download, reading the body
-   *   included (pass `AbortSignal.timeout(ms)` to bound how long it runs).
+   * @param opts - Optional `signal` to cancel the download (pass
+   *   `AbortSignal.timeout(ms)` to bound how long it runs).
    * @returns Raw response with the attachment bytes.
    * @throws {SeclaiAPIStatusError} 403 when the file is withheld, and 402 when
    *   the account has no credits left (`error.code` `insufficient_credits`).
