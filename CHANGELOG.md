@@ -10,12 +10,12 @@
 ### Added
 
 - Add `setAcceptedAttachments()` to declare the named input attachments a trigger accepts, and `accepted_attachments` on `createAgent()` and `updateAgentDefinition()`. A slot's server-defaulted `min` can be omitted: the slots are typed `AcceptedAttachmentSlotInput`, and the request `SetAcceptedAttachmentsInput`
-- Add `listContentAttachments()`, `getContentAttachment()`, `listContentAttachmentEmbeddings()` and `downloadContentAttachment()` for the files attached to a content item, with their indexing status, text and embeddings. `downloadContentAttachment()` takes a `signal` that cancels the download; with a standard `fetch` that includes reading the body, so `AbortSignal.timeout(ms)` bounds the whole transfer
+- Add `listContentAttachments()`, `getContentAttachment()`, `listContentAttachmentEmbeddings()` and `downloadContentAttachment()` for the files attached to a content item, with their indexing status, text and embeddings. `downloadContentAttachment()` takes a `signal`
 - Add `listEmailSourceRejections()` for the mail an email source refused
 - Add `include_reasoning` to the `runStreamingAgent()` request, to receive `stream_reasoning` events. It stays optional although the schema gives it a default. `runStreamingAgentAndWait()`, which returns no such events, does not take it and does not send one passed anyway
 - Accept the new source settings on `createSource()` and `updateSource()`: `email_allowed_senders`, `feed_attachments`, `document_images` and `cloud_drive_connection_id`, `cloud_drive_folder_path`, `cloud_drive_path_pattern`, `cloud_drive_content_types` and `cloud_drive_max_file_mb`, and `run_on_attachment_mismatch` on `setEmailTriggerConfig()`
 - Add the `SeclaiApiVersion` constants `V2026_10_05`, `V2026_10_13`, `V2026_10_16`, `V2026_10_18` and `V2026_10_19`, so those versions are accepted as `apiVersion`. The README lists what each one changes
-- Accept a `signal` on `downloadSourceExport()` and `downloadAgentRunAttachment()` that cancels the download; with a standard `fetch` that includes reading the body, so `AbortSignal.timeout(ms)` bounds the whole transfer
+- Accept a `signal` on `downloadSourceExport()` and `downloadAgentRunAttachment()`
 - Add the type exports `AcceptedAttachmentSlot`, `AcceptedAttachmentSlotInput`, `AcceptedAttachmentsResponse`, `SetAcceptedAttachmentsRequest`, `SetAcceptedAttachmentsInput`, `ContentAttachmentResponse`, `ContentAttachmentsListResponse`, `ContentAttachmentDetailResponse`, `SkippedAttachmentResponse`, `SkippedAttachmentReason`, `EmailSourceRejectionResponse` and `EmailSourceRejectionListResponse`
 
 ## [1.6.1] - 2026-10-05
