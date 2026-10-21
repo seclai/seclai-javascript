@@ -91,18 +91,20 @@ export type UpdateAgentDefinitionRequest = Omit<
 export type AcceptedAttachmentSlot = components["schemas"]["AcceptedAttachmentSlot"];
 
 /**
- * An {@link AcceptedAttachmentSlot} as written. Only `name` is required; `min`
- * has a server-side default of `0` and can be omitted — the generated type marks
+ * An {@link AcceptedAttachmentSlot} as written: `min` has a server-side
+ * default of `0` and can be omitted — the generated type marks
  * it required only because the schema declares a default.
  */
-export type AcceptedAttachmentSlotInput = Pick<AcceptedAttachmentSlot, "name"> &
-  Partial<Omit<AcceptedAttachmentSlot, "name">>;
+export type AcceptedAttachmentSlotInput = Omit<AcceptedAttachmentSlot, "min"> & { min?: number };
 
 /**
  * Request body for {@link Seclai.setAcceptedAttachments}: the full list of
  * accepted attachments, with each slot's server-defaulted `min` optional.
  */
-export type SetAcceptedAttachmentsInput = { accepted_attachments: AcceptedAttachmentSlotInput[] | null };
+export type SetAcceptedAttachmentsInput = Omit<
+  components["schemas"]["SetAcceptedAttachmentsRequest"],
+  "accepted_attachments"
+> & { accepted_attachments: AcceptedAttachmentSlotInput[] | null };
 
 /**
  * Request body for declaring the input attachments a trigger accepts. The same

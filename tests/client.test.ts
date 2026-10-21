@@ -83,6 +83,17 @@ function makeSseResponse(
   });
 }
 
+/** Like fetch, never answers: rejects with an AbortError once `init.signal` aborts. */
+function hangUntilAborted(_input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  return new Promise((_resolve, reject) => {
+    const signal = init?.signal;
+    if (!signal) return;
+    const abort = () => reject(new DOMException("The operation was aborted.", "AbortError"));
+    if (signal.aborted) abort();
+    else signal.addEventListener("abort", abort, { once: true });
+  });
+}
+
 function makeClient(
   handler: (req: RecordedRequest) => Response | Promise<Response>,
   extra: Partial<ConstructorParameters<typeof Seclai>[0]> = {},
@@ -457,6 +468,17 @@ describe("Streaming", () => {
     for await (const _ of client.runStreamingAgent("ag_1", { input: "hi" })) void _;
     for await (const _ of client.runStreamingAgent("ag_1", { input: "hi", include_reasoning: true })) void _;
     expect(bodies).toEqual([{ input: "hi" }, { input: "hi", include_reasoning: true }]);
+  });
+  test("runStreamingAgentAndWait does not send include_reasoning from an untyped caller", async () => {
+    const bodies: unknown[] = [];
+    const client = makeClient((req) => {
+      bodies.push(JSON.parse(req.bodyText!));
+      return makeSseResponse([`event: done\ndata: ${JSON.stringify({ run_id: "run_1" })}\n\n`], { signal: req.signal });
+    });
+    // A plain-JS caller can pass the key the TypeScript signature omits.
+    const body = { input: "hi", include_reasoning: true } as unknown as { input: string };
+    await client.runStreamingAgentAndWait("ag_1", body);
+    expect(bodies).toEqual([{ input: "hi" }]);
   });
 });
 
@@ -1225,20 +1247,22 @@ describe("Agent Input Uploads", () => {
     await client.downloadAgentRunAttachment("run_1", "att_1", { signal: controller.signal });
   });
 
-  test("downloadAgentRunAttachment rejects when aborted", async () => {
-    const controller = new AbortController();
-    controller.abort();
-    const client = makeClient((req) => {
-      // Mimics fetch: an already-aborted signal rejects. The point is that
-      // requestRaw passes the rejection through rather than swallowing it.
-      if (req.signal?.aborted) {
-        throw new DOMException("The operation was aborted.", "AbortError");
-      }
-      return new Response("file-bytes", { status: 200 });
-    });
+  test("downloadAgentRunAttachment aborts the request when timeoutMs elapses", async () => {
+    const client = makeClient(() => new Response("unused"), { fetch: hangUntilAborted });
     await expect(
-      client.downloadAgentRunAttachment("run_1", "att_1", { signal: controller.signal }),
-    ).rejects.toThrow();
+      client.downloadAgentRunAttachment("run_1", "att_1", { timeoutMs: 5 }),
+    ).rejects.toMatchObject({ name: "AbortError" });
+  });
+
+  test("downloadAgentRunAttachment aborts the request when the signal fires alongside timeoutMs", async () => {
+    const controller = new AbortController();
+    const client = makeClient(() => new Response("unused"), { fetch: hangUntilAborted });
+    const pending = client.downloadAgentRunAttachment("run_1", "att_1", {
+      timeoutMs: 60_000,
+      signal: controller.signal,
+    });
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
   });
 });
 

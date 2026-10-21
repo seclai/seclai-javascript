@@ -205,8 +205,8 @@ passes it into every version added since — `1.6.0` moved it from `2026-07-27` 
 `2026-10-03`, across the `2026-09-30` output change, and `1.7.0` moves it to
 `2026-10-19`, across the `2026-10-05` status change, the `2026-10-13` and
 `2026-10-19` source-setting rejections and the `2026-10-16` input change. Pass a
-dated constant such
-as `SeclaiApiVersion.V2026_07_27` to keep behaviour fixed across upgrades.
+dated constant such as `SeclaiApiVersion.V2026_07_27` to keep behaviour fixed
+across upgrades.
 
 ## Resources
 
@@ -340,6 +340,7 @@ const result = await client.runAgentAndPoll(
 
 ### Agent input uploads
 
+<!-- sdksync:check -->
 ```ts
 // Discover which files (if any) the agent expects before staging uploads
 const refs = await client.getAgentAttachmentReferences("agent_id");
@@ -348,13 +349,18 @@ if (refs.requires_uploads) {
 }
 
 const upload = await client.uploadAgentInput("agent_id", {
-  file: new Uint8Array([...]),
+  file: new Uint8Array([/* file bytes */]),
   fileName: "input.pdf",
 });
 // From API version 2026-10-16 the upload is `ready` at once. Below it, poll
 // until `status` is `ready` before running.
-const status = await client.getAgentInputUploadStatus("agent_id", upload.upload_id);
-const run = await client.runAgent("agent_id", { input_upload_id: upload.upload_id });
+let status = await client.getAgentInputUploadStatus("agent_id", upload.id);
+while (status.status !== "ready") {
+  if (status.status === "failed") throw new Error(`Upload failed: ${status.error}`);
+  await new Promise((resolve) => setTimeout(resolve, 1_000));
+  status = await client.getAgentInputUploadStatus("agent_id", upload.id);
+}
+const run = await client.runAgent("agent_id", { input_upload_id: upload.id, priority: false });
 ```
 
 Only a `dynamic_input` agent takes uploads; any other agent rejects one with a
@@ -362,12 +368,14 @@ Only a `dynamic_input` agent takes uploads; any other agent rejects one with a
 
 ### Agent run attachments
 
+<!-- sdksync:check -->
 ```ts
 // Download a file emitted by a step in an agent run. The attachment_id is the
 // URL-safe-base64 storage_key surfaced in run output manifests / webhooks.
-// Pass a signal to cancel the download or bound it with a timeout.
+// `timeoutMs` aborts a download that runs longer, reading the body included;
+// `signal` cancels it.
 const resp = await client.downloadAgentRunAttachment("run_id", "attachment_id", {
-  signal: AbortSignal.timeout(60_000),
+  timeoutMs: 60_000,
 });
 const blob = await resp.blob(); // raw Response — stream or save the bytes
 ```
@@ -682,9 +690,9 @@ console.log(att.text_content, att.file_withheld);
 const vectors = await client.listContentAttachmentEmbeddings("content_id", "attachment_id");
 
 // Raw Response; 403 while the file is withheld (see `file_withheld`).
-// Pass a signal to cancel a large download or bound it with a timeout.
+// `timeoutMs` aborts a large download that runs longer; `signal` cancels it.
 const file = await client.downloadContentAttachment("content_id", "attachment_id", {
-  signal: AbortSignal.timeout(60_000),
+  timeoutMs: 60_000,
 });
 const bytes = new Uint8Array(await file.arrayBuffer());
 ```

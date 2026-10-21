@@ -744,7 +744,7 @@ export class Seclai {
       query?: Record<string, unknown>;
       json?: unknown;
       headers?: Record<string, string>;
-      signal?: AbortSignal;
+      signal?: AbortSignal | undefined;
     }
   ): Promise<Response> {
     const url = buildURL(this.baseUrl, path, opts?.query);
@@ -792,6 +792,34 @@ export class Seclai {
     }
 
     return response;
+  }
+
+  /**
+   * Shared GET helper for the binary downloads. `timeoutMs` bounds the whole
+   * download, reading the body included, and combines with `signal`.
+   */
+  private async download(
+    path: string,
+    opts: { timeoutMs?: number; signal?: AbortSignal },
+    query: Record<string, unknown> = {},
+  ): Promise<Response> {
+    if (opts.timeoutMs === undefined) {
+      return await this.requestRaw("GET", path, { query, signal: opts.signal });
+    }
+    const timeoutController = new AbortController();
+    const timeoutId = setTimeout(() => timeoutController.abort(), opts.timeoutMs);
+    // The timer outlives the call while the caller reads the body; in Node, do
+    // not let it alone keep the process running once the download is done.
+    (timeoutId as { unref?: () => void }).unref?.();
+    try {
+      return await this.requestRaw("GET", path, {
+        query,
+        signal: anySignal([opts.signal, timeoutController.signal]),
+      });
+    } catch (err) {
+      clearTimeout(timeoutId);
+      throw err;
+    }
   }
 
   /** Shared multipart upload helper. */
@@ -1159,21 +1187,23 @@ export class Seclai {
    * Run an agent in streaming mode (SSE) and wait for the final result.
    *
    * Consumes the entire SSE stream and returns only the terminal `done` payload.
-   * For real-time event access, use {@link runStreamingAgent} instead. Leave
-   * `include_reasoning` unset here: the `stream_reasoning` events it asks for are
-   * never returned by this method.
+   * For real-time event access, use {@link runStreamingAgent} instead. The body
+   * takes no `include_reasoning`, and one passed anyway is not sent: this method
+   * returns no `stream_reasoning` events.
    *
    * @param agentId - Agent identifier.
-   * @param body - Streaming run request payload.
+   * @param body - Streaming run request payload, without `include_reasoning`.
    * @param opts - Timeout and abort signal options.
    * @returns Final agent run payload from the `done` event.
    * @throws {@link SeclaiStreamingError} If the stream ends before a `done` event.
    */
   async runStreamingAgentAndWait(
     agentId: string,
-    body: AgentRunStreamRequest,
+    body: Omit<AgentRunStreamRequest, "include_reasoning">,
     opts?: { timeoutMs?: number; signal?: AbortSignal },
   ): Promise<AgentRunResponse> {
+    // Not sent even from untyped callers: the reasoning events are discarded here.
+    const { include_reasoning: _ignored, ...runBody } = body as AgentRunStreamRequest;
     const url = buildURL(this.baseUrl, `/agents/${agentId}/runs/stream`);
 
     const authHdrs = await this.authHeaders();
@@ -1196,7 +1226,7 @@ export class Seclai {
     let lastSeen: AgentRunResponse | undefined;
 
     try {
-      const init: RequestInit = { method: "POST", headers, body: JSON.stringify(body) };
+      const init: RequestInit = { method: "POST", headers, body: JSON.stringify(runBody) };
       if (signal) init.signal = signal;
 
       const response = await this.fetcher(url, init);
@@ -1502,7 +1532,7 @@ export class Seclai {
    * agent rejects the upload with HTTP 400. Files are limited to 200 MB.
    *
    * From API version `2026-10-16` a file of any type is accepted and is `ready`
-   * at once: pass its `upload_id` as `input_upload_id` to {@link runAgent}.
+   * at once: pass its `id` as `input_upload_id` to {@link runAgent}.
    * Earlier versions accept only a fixed list of extensions and write each
    * file's extracted text into the run's `input`, so poll
    * {@link getAgentInputUploadStatus} until `status` is `ready` before running.
@@ -1558,18 +1588,17 @@ export class Seclai {
    * @param attachmentId - URL-safe-base64-encoded `storage_key` of the attachment
    *   (as surfaced in run output manifests and webhook/email payloads).
    * @param opts - Optional `downloadName` filename hint for the download
-   *   disposition, and `signal` to cancel the request or bound it with a
-   *   timeout, e.g. `AbortSignal.timeout(60_000)`.
+   *   disposition, `timeoutMs` to abort a download that runs longer (reading
+   *   the body included), and `signal` to cancel it.
    * @returns Raw response with the attachment bytes.
    */
   async downloadAgentRunAttachment(
     runId: string,
     attachmentId: string,
-    opts: { downloadName?: string; signal?: AbortSignal } = {},
+    opts: { downloadName?: string; timeoutMs?: number; signal?: AbortSignal } = {},
   ): Promise<Response> {
-    return await this.requestRaw("GET", `/v2/agent-runs/${runId}/attachments/${attachmentId}`, {
-      query: { download_name: opts.downloadName },
-      ...(opts.signal ? { signal: opts.signal } : {}),
+    return await this.download(`/v2/agent-runs/${runId}/attachments/${attachmentId}`, opts, {
+      download_name: opts.downloadName,
     });
   }
 
@@ -2464,17 +2493,16 @@ export class Seclai {
    *
    * @param sourceId - Source connection identifier.
    * @param exportId - Export identifier.
-   * @param opts - Optional `signal` to cancel the request.
+   * @param opts - Optional `timeoutMs` to abort a download that runs longer
+   *   (reading the body included), and `signal` to cancel it.
    * @returns Raw response with the export file.
    */
   async downloadSourceExport(
     sourceId: string,
     exportId: string,
-    opts: { signal?: AbortSignal } = {},
+    opts: { timeoutMs?: number; signal?: AbortSignal } = {},
   ): Promise<Response> {
-    return await this.requestRaw("GET", `/sources/${sourceId}/exports/${exportId}/download`, {
-      ...(opts.signal ? { signal: opts.signal } : {}),
-    });
+    return await this.download(`/sources/${sourceId}/exports/${exportId}/download`, opts);
   }
 
   /**
@@ -2661,8 +2689,8 @@ export class Seclai {
    *
    * @param contentVersionId - Content version identifier.
    * @param attachmentId - Attachment identifier.
-   * @param opts - Optional `signal` to cancel the request or bound it with a
-   *   timeout, e.g. `AbortSignal.timeout(60_000)`.
+   * @param opts - Optional `timeoutMs` to abort a download that runs longer
+   *   (reading the body included), and `signal` to cancel it.
    * @returns Raw response with the attachment bytes.
    * @throws {SeclaiAPIStatusError} 403 when the file is withheld, and 402 when
    *   the account has no credits left (`error.code` `insufficient_credits`).
@@ -2670,11 +2698,9 @@ export class Seclai {
   async downloadContentAttachment(
     contentVersionId: string,
     attachmentId: string,
-    opts: { signal?: AbortSignal } = {},
+    opts: { timeoutMs?: number; signal?: AbortSignal } = {},
   ): Promise<Response> {
-    return await this.requestRaw("GET", `/contents/${contentVersionId}/attachments/${attachmentId}/file`, {
-      ...(opts.signal ? { signal: opts.signal } : {}),
-    });
+    return await this.download(`/contents/${contentVersionId}/attachments/${attachmentId}/file`, opts);
   }
 
   /**
