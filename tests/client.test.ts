@@ -602,7 +602,18 @@ describe("Sources", () => {
       expect(u.searchParams.get("page")).toBe("3");
       expect(u.searchParams.get("limit")).toBe("10");
       return jsonResponse({
-        data: [{ id: "r1", from_address: "a@example.com", reason: "sender_not_allowed", authenticated: true }],
+        data: [
+          {
+            id: "r1",
+            created_at: "2026-10-21T00:00:00Z",
+            recipient: "inbox@example.seclai.com",
+            sender: "bounce@example.com",
+            sender_ip: "203.0.113.5",
+            from_address: "a@example.com",
+            reason: "sender_not_allowed",
+            authenticated: true,
+          },
+        ],
         pagination: { page: 3, limit: 10, total: 21, pages: 3, has_next: false, has_prev: true },
       });
     });
@@ -1203,6 +1214,31 @@ describe("Agent Input Uploads", () => {
       downloadName: "report.pdf",
     });
     expect(await resp.text()).toBe("file-bytes");
+  });
+
+  test("downloadAgentRunAttachment forwards the abort signal", async () => {
+    const controller = new AbortController();
+    const client = makeClient((req) => {
+      expect(req.signal).toBe(controller.signal);
+      return new Response("file-bytes", { status: 200 });
+    });
+    await client.downloadAgentRunAttachment("run_1", "att_1", { signal: controller.signal });
+  });
+
+  test("downloadAgentRunAttachment rejects when aborted", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const client = makeClient((req) => {
+      // Mimics fetch: an already-aborted signal rejects. The point is that
+      // requestRaw passes the rejection through rather than swallowing it.
+      if (req.signal?.aborted) {
+        throw new DOMException("The operation was aborted.", "AbortError");
+      }
+      return new Response("file-bytes", { status: 200 });
+    });
+    await expect(
+      client.downloadAgentRunAttachment("run_1", "att_1", { signal: controller.signal }),
+    ).rejects.toThrow();
   });
 });
 

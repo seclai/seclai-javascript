@@ -1557,16 +1557,19 @@ export class Seclai {
    * @param runId - Run identifier.
    * @param attachmentId - URL-safe-base64-encoded `storage_key` of the attachment
    *   (as surfaced in run output manifests and webhook/email payloads).
-   * @param opts - Optional `downloadName` filename hint for the download disposition.
+   * @param opts - Optional `downloadName` filename hint for the download
+   *   disposition, and `signal` to cancel the request or bound it with a
+   *   timeout, e.g. `AbortSignal.timeout(60_000)`.
    * @returns Raw response with the attachment bytes.
    */
   async downloadAgentRunAttachment(
     runId: string,
     attachmentId: string,
-    opts: { downloadName?: string } = {},
+    opts: { downloadName?: string; signal?: AbortSignal } = {},
   ): Promise<Response> {
     return await this.requestRaw("GET", `/v2/agent-runs/${runId}/attachments/${attachmentId}`, {
       query: { download_name: opts.downloadName },
+      ...(opts.signal ? { signal: opts.signal } : {}),
     });
   }
 

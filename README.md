@@ -365,7 +365,10 @@ Only a `dynamic_input` agent takes uploads; any other agent rejects one with a
 ```ts
 // Download a file emitted by a step in an agent run. The attachment_id is the
 // URL-safe-base64 storage_key surfaced in run output manifests / webhooks.
-const resp = await client.downloadAgentRunAttachment("run_id", "attachment_id");
+// Pass a signal to cancel the download or bound it with a timeout.
+const resp = await client.downloadAgentRunAttachment("run_id", "attachment_id", {
+  signal: AbortSignal.timeout(60_000),
+});
 const blob = await resp.blob(); // raw Response — stream or save the bytes
 ```
 

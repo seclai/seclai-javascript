@@ -15,7 +15,7 @@
 - Add `include_reasoning` to the `runStreamingAgent()` request, to receive `stream_reasoning` events. It stays optional although the schema gives it a default
 - Accept the new source settings on `createSource()` and `updateSource()`: `email_allowed_senders`, `feed_attachments`, `document_images` and `cloud_drive_connection_id`, `cloud_drive_folder_path`, `cloud_drive_path_pattern`, `cloud_drive_content_types` and `cloud_drive_max_file_mb`, and `run_on_attachment_mismatch` on `setEmailTriggerConfig()`
 - Add the `SeclaiApiVersion` constants `V2026_10_05`, `V2026_10_13`, `V2026_10_16`, `V2026_10_18` and `V2026_10_19`, so those versions are accepted as `apiVersion`. The README lists what each one changes
-- Accept a `signal` on `downloadSourceExport()` to cancel the download
+- Accept a `signal` on `downloadSourceExport()` and `downloadAgentRunAttachment()` to cancel the download
 - Add the type exports `AcceptedAttachmentSlot`, `AcceptedAttachmentSlotInput`, `AcceptedAttachmentsResponse`, `SetAcceptedAttachmentsRequest`, `SetAcceptedAttachmentsInput`, `ContentAttachmentResponse`, `ContentAttachmentsListResponse`, `ContentAttachmentDetailResponse`, `SkippedAttachmentResponse`, `SkippedAttachmentReason`, `EmailSourceRejectionResponse` and `EmailSourceRejectionListResponse`
 
 ## [1.6.1] - 2026-10-05
