@@ -58,14 +58,54 @@ export type AgentExportResponse = components["schemas"]["AgentExportResponse"];
 /** Summary of an agent (returned on create/update). */
 export type AgentSummaryResponse = components["schemas"]["AgentSummaryResponse"];
 
-/** Request body for creating an agent. */
-export type CreateAgentRequest = components["schemas"]["routers__api__agents__CreateAgentRequest"];
+/**
+ * Request body for creating an agent.
+ *
+ * `accepted_attachments` takes {@link AcceptedAttachmentSlotInput}, so a slot's
+ * server-defaulted `min` can be omitted.
+ */
+export type CreateAgentRequest = Omit<
+  components["schemas"]["routers__api__agents__CreateAgentRequest"],
+  "accepted_attachments"
+> & { accepted_attachments?: AcceptedAttachmentSlotInput[] | null };
 
 /** Request body for updating an agent. */
 export type UpdateAgentRequest = components["schemas"]["routers__api__agents__UpdateAgentRequest"];
 
-/** Request body for updating an agent definition (steps, model, etc.). */
-export type UpdateAgentDefinitionRequest = components["schemas"]["UpdateAgentDefinitionRequest"];
+/**
+ * Request body for updating an agent definition (steps, model, etc.).
+ *
+ * `accepted_attachments` takes {@link AcceptedAttachmentSlotInput}, so a slot's
+ * server-defaulted `min` can be omitted.
+ */
+export type UpdateAgentDefinitionRequest = Omit<
+  components["schemas"]["UpdateAgentDefinitionRequest"],
+  "accepted_attachments"
+> & { accepted_attachments?: AcceptedAttachmentSlotInput[] | null };
+
+/**
+ * One input attachment a trigger accepts: a named slot that a run's files are
+ * assigned to before any step runs. Steps reference it as
+ * `{{agent.attachments.<name>}}`.
+ */
+export type AcceptedAttachmentSlot = components["schemas"]["AcceptedAttachmentSlot"];
+
+/**
+ * An {@link AcceptedAttachmentSlot} as written. Only `name` is required; `min`
+ * has a server-side default of `0` and can be omitted — the generated type marks
+ * it required only because the schema declares a default.
+ */
+export type AcceptedAttachmentSlotInput = Pick<AcceptedAttachmentSlot, "name"> &
+  Partial<Omit<AcceptedAttachmentSlot, "name">>;
+
+/** Request body for declaring the input attachments a trigger accepts. */
+export type SetAcceptedAttachmentsRequest = components["schemas"]["SetAcceptedAttachmentsRequest"];
+
+/** Input type for {@link Seclai.setAcceptedAttachments}, with each slot's `min` optional. */
+export type SetAcceptedAttachmentsInput = { accepted_attachments: AcceptedAttachmentSlotInput[] | null };
+
+/** The input attachments a trigger now accepts. */
+export type AcceptedAttachmentsResponse = components["schemas"]["AcceptedAttachmentsResponse"];
 
 /** Request body for previewing an agent_definition import (dry-run validation). */
 export type AgentImportPreviewRequest = components["schemas"]["routers__api__agents__AgentImportPreviewRequest"];
@@ -126,6 +166,12 @@ export type SetAutoBlockModeRequest = components["schemas"]["SetAutoBlockModeReq
 /** An inbound email that was discarded before running an agent. */
 export type InboundEmailRejectionResponse = components["schemas"]["InboundEmailRejectionResponse"];
 
+/** Mail an email content source refused: who sent it and why, never its subject or body. */
+export type EmailSourceRejectionResponse = components["schemas"]["EmailSourceRejectionResponse"];
+
+/** A page of an email source's refused mail, under `data` with `pagination`. */
+export type EmailSourceRejectionListResponse = components["schemas"]["EmailSourceRejectionListResponse"];
+
 /** Account-wide inbound-email overload state (breaker paused + queued backlog size). */
 export type InboundEmailStatusResponse = components["schemas"]["InboundEmailStatusResponse"];
 
@@ -140,8 +186,14 @@ export type ResumeInboundResponse = components["schemas"]["ResumeInboundResponse
 /** Request body for starting an agent run. */
 export type AgentRunRequest = components["schemas"]["AgentRunRequest"];
 
-/** Request body for starting an agent run in streaming mode (SSE). */
-export type AgentRunStreamRequest = components["schemas"]["AgentRunStreamRequest"];
+/**
+ * Request body for starting an agent run in streaming mode (SSE).
+ *
+ * `include_reasoning` has a server-side default of `false` and stays optional —
+ * the generated type marks it required only because the schema declares a default.
+ */
+export type AgentRunStreamRequest = Omit<components["schemas"]["AgentRunStreamRequest"], "include_reasoning"> &
+  Partial<Pick<components["schemas"]["AgentRunStreamRequest"], "include_reasoning">>;
 
 /** Response body describing an agent run. */
 export type AgentRunResponse = components["schemas"]["AgentRunResponse"];
@@ -549,6 +601,21 @@ export type ContentEmbeddingsListResponse = components["schemas"]["routers__api_
 
 /** Individual content embedding. */
 export type ContentEmbeddingResponse = components["schemas"]["ContentEmbeddingResponse"];
+
+/** A file attached to a content item, with whether it is indexed and, if indexing failed, why. */
+export type ContentAttachmentResponse = components["schemas"]["ContentAttachmentResponse"];
+
+/** A page of a content item's attachments, under `data` with `pagination`. */
+export type ContentAttachmentsListResponse = components["schemas"]["routers__api__contents__ContentAttachmentsListResponse"];
+
+/** One content attachment with its indexing status, metadata and a range of the text it is indexed by. */
+export type ContentAttachmentDetailResponse = components["schemas"]["routers__api__contents__ContentAttachmentDetailResponse"];
+
+/** A file on an email that was not attached to the content item, with the reason. */
+export type SkippedAttachmentResponse = components["schemas"]["SkippedAttachmentResponse"];
+
+/** Why an email's file was not attached: `displayed_in_body`, `over_cap`, `no_filename` or `undecodable`. */
+export type SkippedAttachmentReason = components["schemas"]["SkippedAttachmentReason"];
 
 /** Upload response for content replacement uploads. */
 export type ContentFileUploadResponse = components["schemas"]["routers__api__contents__FileUploadResponse"];

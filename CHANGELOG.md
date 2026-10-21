@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.7.0] - 2026-10-21
+
+### Changed
+
+- Sync the bundled OpenAPI spec and regenerate the types. Existing responses gain properties: `email_address`, `email_allowed_senders`, `feed_attachments`, `document_images` and the `cloud_drive_*` settings on `SourceResponse`, `trigger_id` on `AgentSummaryResponse`, `accepted_attachments` on `AgentAttachmentRefsApiResponse`, `email_run_on_attachment_mismatch` on `EmailTriggerConfigResponse`, `held_for_review` on `SourceContentStatusResponse` and `skipped_attachments` on `ContentDetailResponse`
+- Move `SeclaiApiVersion.Latest` to `2026-10-19`. Nothing is sent unless `apiVersion` is set, so a client that passes `SeclaiApiVersion.Latest` now opts into the five versions added below, among them `2026-10-16`, which stops writing an uploaded file's extracted text into a run's `input`
+
+### Added
+
+- Add `setAcceptedAttachments()` to declare the named input attachments a trigger accepts, and `accepted_attachments` on `createAgent()` and `updateAgentDefinition()`. A slot's server-defaulted `min` can be omitted: the slots are typed `AcceptedAttachmentSlotInput`, and the request `SetAcceptedAttachmentsInput`
+- Add `listContentAttachments()`, `getContentAttachment()`, `listContentAttachmentEmbeddings()` and `downloadContentAttachment()` for the files attached to a content item, with their indexing status, text and embeddings
+- Add `listEmailSourceRejections()` for the mail an email source refused
+- Add `include_reasoning` to the `runStreamingAgent()` and `runStreamingAgentAndWait()` request, to receive `stream_reasoning` events. It stays optional although the schema gives it a default
+- Accept the new source settings on `createSource()` and `updateSource()`: `email_allowed_senders`, `feed_attachments`, `document_images` and `cloud_drive_connection_id`, `cloud_drive_folder_path`, `cloud_drive_path_pattern`, `cloud_drive_content_types` and `cloud_drive_max_file_mb`, and `run_on_attachment_mismatch` on `setEmailTriggerConfig()`
+- Add the `SeclaiApiVersion` constants `V2026_10_05`, `V2026_10_13`, `V2026_10_16`, `V2026_10_18` and `V2026_10_19`, so those versions are accepted as `apiVersion`. The README lists what each one changes
+- Add the type exports `AcceptedAttachmentSlot`, `AcceptedAttachmentSlotInput`, `AcceptedAttachmentsResponse`, `SetAcceptedAttachmentsRequest`, `SetAcceptedAttachmentsInput`, `ContentAttachmentResponse`, `ContentAttachmentsListResponse`, `ContentAttachmentDetailResponse`, `SkippedAttachmentResponse`, `SkippedAttachmentReason`, `EmailSourceRejectionResponse` and `EmailSourceRejectionListResponse`
+
 ## [1.6.1] - 2026-10-05
 
 ### Changed
@@ -223,6 +240,7 @@ _Stable release. No functional changes since 0.0.1._
 
 _Initial release._
 
+[1.7.0]: https://github.com/seclai/seclai-javascript/releases/tag/1.7.0
 [1.6.1]: https://github.com/seclai/seclai-javascript/releases/tag/1.6.1
 [1.6.0]: https://github.com/seclai/seclai-javascript/releases/tag/1.6.0
 [1.5.0]: https://github.com/seclai/seclai-javascript/releases/tag/1.5.0

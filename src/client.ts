@@ -23,6 +23,11 @@ import type {
   AgentRunEvent,
   AddEmailDomainInput,
   AgentAttachmentRefsApiResponse,
+  AcceptedAttachmentsResponse,
+  SetAcceptedAttachmentsInput,
+  ContentAttachmentsListResponse,
+  ContentAttachmentDetailResponse,
+  EmailSourceRejectionListResponse,
   AgentCallerApiResponse,
   AgentDefinitionImportErrorResponse,
   AgentDefinitionResponse,
@@ -1838,6 +1843,29 @@ export class Seclai {
     })) as EmailTriggerConfigResponse;
   }
 
+  /**
+   * Replace the input attachments a trigger accepts.
+   *
+   * A run's files are each assigned to one declared attachment before any step
+   * runs, and steps reference one as `{{agent.attachments.<name>}}`. The API
+   * answers 400 when the agent references an attachment the new declaration
+   * leaves out.
+   *
+   * @param agentId - Agent identifier.
+   * @param triggerId - Trigger identifier, as `getAgent()` returns it.
+   * @param body - The full list of accepted attachments; a slot's `min` defaults to 0.
+   * @returns The trigger's accepted attachments.
+   */
+  async setAcceptedAttachments(
+    agentId: string,
+    triggerId: string,
+    body: SetAcceptedAttachmentsInput,
+  ): Promise<AcceptedAttachmentsResponse> {
+    return (await this.request("PUT", `/agents/${agentId}/triggers/${triggerId}/accepted-attachments`, {
+      json: body,
+    })) as AcceptedAttachmentsResponse;
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
   // Agent Email Governance
   // ═══════════════════════════════════════════════════════════════════════════
@@ -2351,6 +2379,28 @@ export class Seclai {
     )) as SourceContentStatusResponse;
   }
 
+  /**
+   * List mail an email content source refused, newest first.
+   *
+   * Each entry says who sent the message and why it was refused, never its
+   * subject or body. To accept a refused sender, add its `from_address` or that
+   * address's domain to the source's `email_allowed_senders` — which only helps
+   * when `authenticated` is true. Requires an account owner or administrator;
+   * the API answers 404 for a source that is not an email source.
+   *
+   * @param sourceId - Source connection identifier.
+   * @param opts - Pagination options (`limit` 1-100).
+   * @returns The rejections under `data` with `pagination`.
+   */
+  async listEmailSourceRejections(
+    sourceId: string,
+    opts: ListOptions = {},
+  ): Promise<EmailSourceRejectionListResponse> {
+    return (await this.request("GET", `/sources/${sourceId}/email-rejections`, {
+      query: { page: opts.page, limit: opts.limit },
+    })) as EmailSourceRejectionListResponse;
+  }
+
   // ─── Source Exports ────────────────────────────────────────────────────────
 
   /**
@@ -2518,6 +2568,82 @@ export class Seclai {
     return (await this.request("GET", `/contents/${contentVersionId}/embeddings`, {
       query: { page: opts.page ?? 1, limit: opts.limit ?? 20 },
     })) as ContentEmbeddingsListResponse;
+  }
+
+  /**
+   * List the files attached to a content item.
+   *
+   * Files arrive from an agent's `write_content_attachment` step, with an email
+   * message, from an RSS feed's `feed_attachments`, from a web page's media, or
+   * as the images inside a document. Each entry says whether it is indexed for
+   * search and, when indexing failed, why.
+   *
+   * @param contentVersionId - Content version identifier.
+   * @param opts - Pagination options.
+   * @returns The attachments under `data` with `pagination`.
+   */
+  async listContentAttachments(
+    contentVersionId: string,
+    opts: ListOptions = {},
+  ): Promise<ContentAttachmentsListResponse> {
+    return (await this.request("GET", `/contents/${contentVersionId}/attachments`, {
+      query: { page: opts.page, limit: opts.limit },
+    })) as ContentAttachmentsListResponse;
+  }
+
+  /**
+   * Get one file attached to a content item: its indexing status and reason,
+   * its metadata, and the text it is indexed by.
+   *
+   * @param contentVersionId - Content version identifier.
+   * @param attachmentId - The `id` of an entry from {@link listContentAttachments}.
+   * @param opts - `start` and `end` character offsets for paging through long text
+   *   (server defaults 0 and 5000). A file that was not indexed has no text.
+   * @returns The attachment with the requested range of its text.
+   */
+  async getContentAttachment(
+    contentVersionId: string,
+    attachmentId: string,
+    opts: { start?: number; end?: number } = {},
+  ): Promise<ContentAttachmentDetailResponse> {
+    return (await this.request("GET", `/contents/${contentVersionId}/attachments/${attachmentId}`, {
+      query: { start: opts.start, end: opts.end },
+    })) as ContentAttachmentDetailResponse;
+  }
+
+  /**
+   * List the embeddings (chunk vectors) a content attachment is indexed by.
+   * The list is empty for a file that has no completed index.
+   *
+   * @param contentVersionId - Content version identifier.
+   * @param attachmentId - Attachment identifier.
+   * @param opts - Pagination options (`limit` 1-100).
+   * @returns Paginated list of embeddings.
+   */
+  async listContentAttachmentEmbeddings(
+    contentVersionId: string,
+    attachmentId: string,
+    opts: ListOptions = {},
+  ): Promise<ContentEmbeddingsListResponse> {
+    return (await this.request("GET", `/contents/${contentVersionId}/attachments/${attachmentId}/embeddings`, {
+      query: { page: opts.page, limit: opts.limit },
+    })) as ContentEmbeddingsListResponse;
+  }
+
+  /**
+   * Download a content attachment's bytes.
+   *
+   * Returns the raw `Response` so you can stream or save the binary data. The
+   * API answers 403 when the file is withheld — blocked or redacted by a
+   * governance policy, or still being indexed after arriving from outside; the
+   * attachment's `file_withheld` field says which before you ask.
+   *
+   * @param contentVersionId - Content version identifier.
+   * @param attachmentId - Attachment identifier.
+   * @returns Raw response with the attachment bytes.
+   */
+  async downloadContentAttachment(contentVersionId: string, attachmentId: string): Promise<Response> {
+    return await this.requestRaw("GET", `/contents/${contentVersionId}/attachments/${attachmentId}/file`);
   }
 
   /**

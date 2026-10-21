@@ -105,6 +105,8 @@ export type {
   BlockedEmailSenderListResponse,
   SetAutoBlockModeRequest,
   InboundEmailRejectionResponse,
+  EmailSourceRejectionResponse,
+  EmailSourceRejectionListResponse,
   InboundEmailStatusResponse,
   CancelQueuedRunsResponse,
   ResumeInboundResponse,
@@ -126,6 +128,11 @@ export type {
   // Agent Input Uploads
   UploadAgentInputApiResponse,
   AgentAttachmentRefsApiResponse,
+  AcceptedAttachmentSlot,
+  AcceptedAttachmentSlotInput,
+  AcceptedAttachmentsResponse,
+  SetAcceptedAttachmentsRequest,
+  SetAcceptedAttachmentsInput,
   AttachmentRefsSourceApiSummary,
 
   // Agent AI Assistant
@@ -241,6 +248,11 @@ export type {
   ContentDetailResponse,
   ContentEmbeddingsListResponse,
   ContentEmbeddingResponse,
+  ContentAttachmentResponse,
+  ContentAttachmentsListResponse,
+  ContentAttachmentDetailResponse,
+  SkippedAttachmentResponse,
+  SkippedAttachmentReason,
   ContentFileUploadResponse,
 
   // Solutions
