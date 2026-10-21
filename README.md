@@ -372,6 +372,7 @@ Only a `dynamic_input` agent takes uploads; any other agent rejects one with a
 ```ts
 // Download a file emitted by a step in an agent run. The attachment_id is the
 // URL-safe-base64 storage_key surfaced in run output manifests / webhooks.
+// With a standard fetch, the signal also covers reading the body: 60 s for the whole transfer.
 const resp = await client.downloadAgentRunAttachment("run_id", "attachment_id", {
   signal: AbortSignal.timeout(60_000),
 });
@@ -688,6 +689,7 @@ console.log(att.text_content, att.file_withheld);
 const vectors = await client.listContentAttachmentEmbeddings("content_id", "attachment_id");
 
 // Raw Response; 403 while the file is withheld (see `file_withheld`).
+// With a standard fetch, the signal also covers reading the body: 60 s for the whole transfer.
 const file = await client.downloadContentAttachment("content_id", "attachment_id", {
   signal: AbortSignal.timeout(60_000),
 });
