@@ -21,7 +21,7 @@
 
 ### Fixed
 
-- Correct `InsufficientCreditsResponse` and `InsufficientCreditsDetail` to the 402 body the API sends: the detail is under `error`, not `detail`, and its machine-readable code is `code`, not `error`. Code that reads `detail.error` no longer compiles; it never found the code
+- Correct `InsufficientCreditsResponse` and `InsufficientCreditsDetail` to the 402 body the API sends: the detail is under `error`, not `detail`, and its machine-readable code is `code`, not `error`
 
 ## [1.6.1] - 2026-10-05
 
