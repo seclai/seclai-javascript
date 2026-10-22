@@ -222,8 +222,8 @@ what each version changes.
 **`testDraftEvaluation()` can return `null` scores.** When the evaluator
 returns no verdict, `status` is `error`. From API version `2026-10-21`, `score`
 and `passed` are then `null`. An account created after `2026-10-21` ships gets
-that version even without setting `apiVersion`. The type says so, so under
-`strictNullChecks` read them only after checking `status`:
+that version even without setting `apiVersion`. Check `status` before reading
+them, in JavaScript too; under `strictNullChecks` the type enforces it:
 
 <!-- sdksync:check -->
 ```ts
@@ -237,23 +237,9 @@ if (result.status === "error") {
 }
 ```
 
-**`InsufficientCreditsResponse` matches the 402 body.** The code is at
+**`InsufficientCreditsResponse` matches the 402 body.** Read the code at
 `error.code`, not `detail.error`. Code that cast a 402 body to this type threw
-on every real 402 before, so this only fixes it:
-
-```ts
-import { SeclaiAPIStatusError, type InsufficientCreditsResponse } from "@seclai/sdk";
-
-try {
-  await client.runAgent("agent_id", { input: "Hello", priority: false });
-} catch (err) {
-  if (err instanceof SeclaiAPIStatusError && err.statusCode === 402) {
-    // 1.6 and earlier: (JSON.parse(err.responseText ?? "{}") as InsufficientCreditsResponse).detail.error
-    const code = (JSON.parse(err.responseText ?? "{}") as InsufficientCreditsResponse).error.code;
-    console.log(code);
-  }
-}
-```
+on every real 402 before, so this only fixes it.
 
 ## Resources
 
