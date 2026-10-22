@@ -10,6 +10,7 @@ import {
   SeclaiStreamingError,
   SeclaiApiVersion,
 } from "../src/index";
+import type { SetAcceptedAttachmentsRequest } from "../src/index";
 import { parseIni, isTokenValid } from "../src/auth";
 
 type RecordedRequest = {
@@ -79,6 +80,17 @@ function makeSseResponse(
   return new Response(stream as any, {
     status: 200,
     headers: { "content-type": opts?.contentType ?? "text/event-stream" },
+  });
+}
+
+/** Like fetch, never answers: rejects with an AbortError once `init.signal` aborts. */
+function hangUntilAborted(_input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  return new Promise((_resolve, reject) => {
+    const signal = init?.signal;
+    if (!signal) return;
+    const abort = () => reject(new DOMException("The operation was aborted.", "AbortError"));
+    if (signal.aborted) abort();
+    else signal.addEventListener("abort", abort, { once: true });
   });
 }
 
@@ -445,6 +457,29 @@ describe("Streaming", () => {
     expect(events[2].event).toBe("done");
     expect((events[2].data as any).status).toBe("completed");
   });
+
+  test("runStreamingAgent sends include_reasoning and keeps it optional", async () => {
+    const bodies: unknown[] = [];
+    const client = makeClient((req) => {
+      bodies.push(JSON.parse(req.bodyText!));
+      return makeSseResponse([`event: done\ndata: ${JSON.stringify({ run_id: "run_1" })}\n\n`], { signal: req.signal });
+    });
+    // No cast: `include_reasoning` is server-defaulted and must not be required.
+    for await (const _ of client.runStreamingAgent("ag_1", { input: "hi" })) void _;
+    for await (const _ of client.runStreamingAgent("ag_1", { input: "hi", include_reasoning: true })) void _;
+    expect(bodies).toEqual([{ input: "hi" }, { input: "hi", include_reasoning: true }]);
+  });
+  test("runStreamingAgentAndWait does not send include_reasoning from an untyped caller", async () => {
+    const bodies: unknown[] = [];
+    const client = makeClient((req) => {
+      bodies.push(JSON.parse(req.bodyText!));
+      return makeSseResponse([`event: done\ndata: ${JSON.stringify({ run_id: "run_1" })}\n\n`], { signal: req.signal });
+    });
+    // A plain-JS caller can pass the key the TypeScript signature omits.
+    const body = { input: "hi", include_reasoning: true } as unknown as { input: string };
+    await client.runStreamingAgentAndWait("ag_1", body);
+    expect(bodies).toEqual([{ input: "hi" }]);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -581,6 +616,61 @@ describe("Memory Banks", () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe("Sources", () => {
+  test("listEmailSourceRejections sends GET /sources/:id/email-rejections with page/limit", async () => {
+    const client = makeClient((req) => {
+      const u = new URL(req.url);
+      expect(req.method).toBe("GET");
+      expect(u.pathname).toBe("/sources/src_1/email-rejections");
+      expect(u.searchParams.get("page")).toBe("3");
+      expect(u.searchParams.get("limit")).toBe("10");
+      return jsonResponse({
+        data: [
+          {
+            id: "r1",
+            created_at: "2026-10-21T00:00:00Z",
+            recipient: "inbox@example.seclai.com",
+            sender: "bounce@example.com",
+            sender_ip: "203.0.113.5",
+            from_address: "a@example.com",
+            reason: "sender_not_allowed",
+            authenticated: true,
+          },
+        ],
+        pagination: { page: 3, limit: 10, total: 21, pages: 3, has_next: false, has_prev: true },
+      });
+    });
+    const res = await client.listEmailSourceRejections("src_1", { page: 3, limit: 10 });
+    expect(res.data[0]!.reason).toBe("sender_not_allowed");
+    expect(res.pagination.pages).toBe(3);
+  });
+
+  test("listEmailSourceRejections sends no query by default", async () => {
+    const client = makeClient((req) => {
+      expect(new URL(req.url).search).toBe("");
+      return jsonResponse({ data: [], pagination: {} });
+    });
+    await client.listEmailSourceRejections("src_1");
+  });
+
+  test("createSource and updateSource send the new source settings", async () => {
+    const bodies: unknown[] = [];
+    const client = makeClient((req) => {
+      bodies.push(JSON.parse(req.bodyText!));
+      return jsonResponse({ id: "src_1" });
+    });
+    await client.createSource({
+      name: "Inbox",
+      source_type: "email",
+      email_allowed_senders: ["example.com"],
+      document_images: true,
+    });
+    await client.updateSource("src_1", { feed_attachments: ["enclosures"], cloud_drive_max_file_mb: 25 });
+    expect(bodies).toEqual([
+      { name: "Inbox", source_type: "email", email_allowed_senders: ["example.com"], document_images: true },
+      { feed_attachments: ["enclosures"], cloud_drive_max_file_mb: 25 },
+    ]);
+  });
+
   test("listSources sends GET /sources with query params", async () => {
     const client = makeClient((req) => {
       const u = new URL(req.url);
@@ -705,6 +795,15 @@ describe("Source Exports", () => {
     const text = await resp.text();
     expect(text).toBe("binary-data");
   });
+
+  test("downloadSourceExport forwards the abort signal", async () => {
+    const controller = new AbortController();
+    const client = makeClient((req) => {
+      expect(req.signal).toBe(controller.signal);
+      return new Response("binary-data", { status: 200 });
+    });
+    await client.downloadSourceExport("src_1", "exp_1", { signal: controller.signal });
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -768,6 +867,93 @@ describe("Content", () => {
       return jsonResponse({ items: [] });
     });
     await client.listContentEmbeddings("cv_1");
+  });
+
+  test("listContentAttachments sends GET /contents/:id/attachments with page/limit", async () => {
+    const client = makeClient((req) => {
+      const u = new URL(req.url);
+      expect(req.method).toBe("GET");
+      expect(u.pathname).toBe("/contents/cv_1/attachments");
+      expect(u.searchParams.get("page")).toBe("2");
+      expect(u.searchParams.get("limit")).toBe("50");
+      return jsonResponse({
+        data: [{ id: "att_1", key: "k", content_type: "image/png", size_bytes: 3, indexed: true }],
+        pagination: { page: 2, limit: 50, total: 51, pages: 2, has_next: false, has_prev: true },
+      });
+    });
+    const res = await client.listContentAttachments("cv_1", { page: 2, limit: 50 });
+    expect(res.data[0]!.id).toBe("att_1");
+    expect(res.pagination.total).toBe(51);
+  });
+
+  test("listContentAttachments sends no query by default", async () => {
+    const client = makeClient((req) => {
+      expect(new URL(req.url).search).toBe("");
+      return jsonResponse({ data: [], pagination: {} });
+    });
+    await client.listContentAttachments("cv_1");
+  });
+
+  test("getContentAttachment sends GET with start/end", async () => {
+    const client = makeClient((req) => {
+      const u = new URL(req.url);
+      expect(req.method).toBe("GET");
+      expect(u.pathname).toBe("/contents/cv_1/attachments/att_1");
+      expect(u.searchParams.get("start")).toBe("10");
+      expect(u.searchParams.get("end")).toBe("20");
+      return jsonResponse({ id: "att_1", text_content: "hello", file_withheld: null });
+    });
+    const res = await client.getContentAttachment("cv_1", "att_1", { start: 10, end: 20 });
+    expect(res.text_content).toBe("hello");
+  });
+
+  test("listContentAttachmentEmbeddings sends GET .../embeddings with page/limit", async () => {
+    const client = makeClient((req) => {
+      const u = new URL(req.url);
+      expect(req.method).toBe("GET");
+      expect(u.pathname).toBe("/contents/cv_1/attachments/att_1/embeddings");
+      expect(u.searchParams.get("page")).toBe("1");
+      expect(u.searchParams.get("limit")).toBe("100");
+      return jsonResponse({ items: [] });
+    });
+    await client.listContentAttachmentEmbeddings("cv_1", "att_1", { page: 1, limit: 100 });
+  });
+
+  test("downloadContentAttachment returns the raw Response", async () => {
+    const client = makeClient((req) => {
+      const u = new URL(req.url);
+      expect(req.method).toBe("GET");
+      expect(u.pathname).toBe("/contents/cv_1/attachments/att_1/file");
+      expect(u.search).toBe("");
+      return new Response("png-bytes", { status: 200, headers: { "content-type": "image/png" } });
+    });
+    const resp = await client.downloadContentAttachment("cv_1", "att_1");
+    expect(resp.headers.get("content-type")).toBe("image/png");
+    expect(await resp.text()).toBe("png-bytes");
+  });
+
+  test("getContentAttachment sends end=0", async () => {
+    const client = makeClient((req) => {
+      const u = new URL(req.url);
+      expect(u.searchParams.get("start")).toBe("0");
+      expect(u.searchParams.get("end")).toBe("0");
+      return jsonResponse({ id: "att_1", text_content: "", file_withheld: null });
+    });
+    await client.getContentAttachment("cv_1", "att_1", { start: 0, end: 0 });
+  });
+
+  test("downloadContentAttachment forwards the abort signal", async () => {
+    const controller = new AbortController();
+    const client = makeClient((req) => {
+      expect(req.signal).toBe(controller.signal);
+      return new Response("bytes", { status: 200 });
+    });
+    await client.downloadContentAttachment("cv_1", "att_1", { signal: controller.signal });
+  });
+
+  test("downloadContentAttachment throws on a withheld file", async () => {
+    const client = makeClient(() => jsonResponse({ detail: "withheld" }, 403));
+    await expect(client.downloadContentAttachment("cv_1", "att_1")).rejects.toThrow();
   });
 
   test("uploadFileToContent sends multipart", async () => {
@@ -1050,6 +1236,24 @@ describe("Agent Input Uploads", () => {
       downloadName: "report.pdf",
     });
     expect(await resp.text()).toBe("file-bytes");
+  });
+
+  test("downloadAgentRunAttachment forwards the abort signal", async () => {
+    const controller = new AbortController();
+    const client = makeClient((req) => {
+      expect(req.signal).toBe(controller.signal);
+      return new Response("file-bytes", { status: 200 });
+    });
+    await client.downloadAgentRunAttachment("run_1", "att_1", { signal: controller.signal });
+  });
+
+  test("downloadAgentRunAttachment rejects when the signal is already aborted", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const client = makeClient(() => new Response("unused"), { fetch: hangUntilAborted });
+    await expect(
+      client.downloadAgentRunAttachment("run_1", "att_1", { signal: controller.signal }),
+    ).rejects.toMatchObject({ name: "AbortError" });
   });
 });
 
@@ -2188,6 +2392,72 @@ describe("Agent Email Triggers", () => {
     });
     expect(config.email_addresses).toEqual(["support.acct@agent.seclai.com"]);
   });
+
+  test("setEmailTriggerConfig sends run_on_attachment_mismatch", async () => {
+    const client = makeClient((req) => {
+      expect(JSON.parse(req.bodyText!)).toEqual({ run_on_attachment_mismatch: true });
+      return jsonResponse({ trigger_id: "tr_1", email_run_on_attachment_mismatch: true });
+    });
+    const config = await client.setEmailTriggerConfig("ag_1", "tr_1", { run_on_attachment_mismatch: true });
+    expect(config.email_run_on_attachment_mismatch).toBe(true);
+  });
+
+  test("setAcceptedAttachments sends PUT /agents/:id/triggers/:tid/accepted-attachments", async () => {
+    const client = makeClient((req) => {
+      const u = new URL(req.url);
+      expect(req.method).toBe("PUT");
+      expect(u.pathname).toBe("/agents/ag_1/triggers/tr_1/accepted-attachments");
+      expect(u.search).toBe("");
+      expect(JSON.parse(req.bodyText!)).toEqual({
+        accepted_attachments: [{ name: "invoice", content_types: ["application/pdf"], max: 1 }],
+      });
+      return jsonResponse({
+        trigger_id: "tr_1",
+        agent_id: "ag_1",
+        accepted_attachments: [{ name: "invoice", content_types: ["application/pdf"], min: 0, max: 1 }],
+      });
+    });
+    // `min` is server-defaulted, so a slot without it must typecheck.
+    const res = await client.setAcceptedAttachments("ag_1", "tr_1", {
+      accepted_attachments: [{ name: "invoice", content_types: ["application/pdf"], max: 1 }],
+    });
+    expect(res.accepted_attachments[0]!.min).toBe(0);
+  });
+
+  test("SetAcceptedAttachmentsRequest accepts a slot without min", async () => {
+    const body: SetAcceptedAttachmentsRequest = { accepted_attachments: [{ name: "doc" }] };
+    const client = makeClient((req) => {
+      expect(JSON.parse(req.bodyText!)).toEqual({ accepted_attachments: [{ name: "doc" }] });
+      return jsonResponse({ trigger_id: "tr_1", agent_id: "ag_1", accepted_attachments: [{ name: "doc", min: 0 }] });
+    });
+    await client.setAcceptedAttachments("ag_1", "tr_1", body);
+  });
+
+  test("setAcceptedAttachments sends null to clear the declaration", async () => {
+    const client = makeClient((req) => {
+      expect(JSON.parse(req.bodyText!)).toEqual({ accepted_attachments: null });
+      return jsonResponse({ trigger_id: "tr_1", agent_id: "ag_1", accepted_attachments: [] });
+    });
+    await client.setAcceptedAttachments("ag_1", "tr_1", { accepted_attachments: null });
+  });
+
+  test("createAgent and updateAgentDefinition accept slots without min", async () => {
+    const bodies: unknown[] = [];
+    const client = makeClient((req) => {
+      bodies.push(JSON.parse(req.bodyText!));
+      return jsonResponse({ id: "ag_1" });
+    });
+    await client.createAgent({ name: "A", trigger_type: "dynamic_input", accepted_attachments: [{ name: "doc" }] });
+    await client.updateAgentDefinition("ag_1", {
+      expected_change_id: "chg_1",
+      definition: {},
+      accepted_attachments: [{ name: "doc" }],
+    });
+    expect(bodies).toEqual([
+      { name: "A", trigger_type: "dynamic_input", accepted_attachments: [{ name: "doc" }] },
+      { expected_change_id: "chg_1", definition: {}, accepted_attachments: [{ name: "doc" }] },
+    ]);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2788,7 +3058,7 @@ describe("API version constants", () => {
   test("a constant reaches the wire", async () => {
     const client = makeClient(
       (req) => {
-        expect(req.headers["seclai-version"]).toBe("2026-10-03");
+        expect(req.headers["seclai-version"]).toBe("2026-10-21");
         return jsonResponse({ data: [] });
       },
       { apiVersion: SeclaiApiVersion.Latest },

@@ -23,6 +23,11 @@ import type {
   AgentRunEvent,
   AddEmailDomainInput,
   AgentAttachmentRefsApiResponse,
+  AcceptedAttachmentsResponse,
+  SetAcceptedAttachmentsInput,
+  ContentAttachmentsListResponse,
+  ContentAttachmentDetailResponse,
+  EmailSourceRejectionListResponse,
   AgentCallerApiResponse,
   AgentDefinitionImportErrorResponse,
   AgentDefinitionResponse,
@@ -739,7 +744,7 @@ export class Seclai {
       query?: Record<string, unknown>;
       json?: unknown;
       headers?: Record<string, string>;
-      signal?: AbortSignal;
+      signal?: AbortSignal | undefined;
     }
   ): Promise<Response> {
     const url = buildURL(this.baseUrl, path, opts?.query);
@@ -1154,19 +1159,23 @@ export class Seclai {
    * Run an agent in streaming mode (SSE) and wait for the final result.
    *
    * Consumes the entire SSE stream and returns only the terminal `done` payload.
-   * For real-time event access, use {@link runStreamingAgent} instead.
+   * For real-time event access, use {@link runStreamingAgent} instead. The body
+   * takes no `include_reasoning`, and one passed anyway is not sent: this method
+   * returns no `stream_reasoning` events.
    *
    * @param agentId - Agent identifier.
-   * @param body - Streaming run request payload.
+   * @param body - Streaming run request payload, without `include_reasoning`.
    * @param opts - Timeout and abort signal options.
    * @returns Final agent run payload from the `done` event.
    * @throws {@link SeclaiStreamingError} If the stream ends before a `done` event.
    */
   async runStreamingAgentAndWait(
     agentId: string,
-    body: AgentRunStreamRequest,
+    body: Omit<AgentRunStreamRequest, "include_reasoning">,
     opts?: { timeoutMs?: number; signal?: AbortSignal },
   ): Promise<AgentRunResponse> {
+    // Not sent even from untyped callers: the reasoning events are discarded here.
+    const { include_reasoning: _ignored, ...runBody } = body as AgentRunStreamRequest;
     const url = buildURL(this.baseUrl, `/agents/${agentId}/runs/stream`);
 
     const authHdrs = await this.authHeaders();
@@ -1189,7 +1198,7 @@ export class Seclai {
     let lastSeen: AgentRunResponse | undefined;
 
     try {
-      const init: RequestInit = { method: "POST", headers, body: JSON.stringify(body) };
+      const init: RequestInit = { method: "POST", headers, body: JSON.stringify(runBody) };
       if (signal) init.signal = signal;
 
       const response = await this.fetcher(url, init);
@@ -1491,10 +1500,14 @@ export class Seclai {
   // ═══════════════════════════════════════════════════════════════════════════
 
   /**
-   * Upload a file to use as input for a `dynamic_input` agent run.
+   * Upload a file to use as input for a `dynamic_input` agent run. Any other
+   * agent rejects the upload with HTTP 400. Files are limited to 200 MB.
    *
-   * After uploading, poll {@link getAgentInputUploadStatus} until `status` is `ready`,
-   * then pass `input_upload_id` to {@link runAgent}.
+   * From API version `2026-10-16` a file of any type is accepted and is `ready`
+   * at once: pass its `id` as `input_upload_id` to {@link runAgent}.
+   * Earlier versions accept only a fixed list of extensions and write each
+   * file's extracted text into the run's `input`, so poll
+   * {@link getAgentInputUploadStatus} until `status` is `ready` before running.
    *
    * @param agentId - Agent identifier.
    * @param opts - File payload and optional metadata.
@@ -1546,16 +1559,20 @@ export class Seclai {
    * @param runId - Run identifier.
    * @param attachmentId - URL-safe-base64-encoded `storage_key` of the attachment
    *   (as surfaced in run output manifests and webhook/email payloads).
-   * @param opts - Optional `downloadName` filename hint for the download disposition.
+   * @param opts - Optional `downloadName` filename hint for the download
+   *   disposition, and `signal`, which cancels the request; with a standard `fetch` this
+   *   includes reading the body, so `AbortSignal.timeout(ms)` bounds the whole
+   *   transfer.
    * @returns Raw response with the attachment bytes.
    */
   async downloadAgentRunAttachment(
     runId: string,
     attachmentId: string,
-    opts: { downloadName?: string } = {},
+    opts: { downloadName?: string; signal?: AbortSignal } = {},
   ): Promise<Response> {
     return await this.requestRaw("GET", `/v2/agent-runs/${runId}/attachments/${attachmentId}`, {
       query: { download_name: opts.downloadName },
+      signal: opts.signal,
     });
   }
 
@@ -1836,6 +1853,29 @@ export class Seclai {
     return (await this.request("PUT", `/agents/${agentId}/triggers/${triggerId}/email-config`, {
       json: body,
     })) as EmailTriggerConfigResponse;
+  }
+
+  /**
+   * Replace the input attachments a trigger accepts.
+   *
+   * A run's files are each assigned to one declared attachment before any step
+   * runs, and steps reference one as `{{agent.attachments.<name>}}`. The API
+   * answers 400 when the agent references an attachment the new declaration
+   * leaves out.
+   *
+   * @param agentId - Agent identifier.
+   * @param triggerId - Trigger identifier, as `getAgent()` returns it.
+   * @param body - The full list of accepted attachments; a slot's `min` defaults to 0.
+   * @returns The trigger's accepted attachments.
+   */
+  async setAcceptedAttachments(
+    agentId: string,
+    triggerId: string,
+    body: SetAcceptedAttachmentsInput,
+  ): Promise<AcceptedAttachmentsResponse> {
+    return (await this.request("PUT", `/agents/${agentId}/triggers/${triggerId}/accepted-attachments`, {
+      json: body,
+    })) as AcceptedAttachmentsResponse;
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -2351,6 +2391,28 @@ export class Seclai {
     )) as SourceContentStatusResponse;
   }
 
+  /**
+   * List mail an email content source refused, newest first.
+   *
+   * Each entry says who sent the message and why it was refused, never its
+   * subject or body. To accept a refused sender, add its `from_address` or that
+   * address's domain to the source's `email_allowed_senders` — which only helps
+   * when `authenticated` is true. Requires an account owner or administrator;
+   * the API answers 404 for a source that is not an email source.
+   *
+   * @param sourceId - Source connection identifier.
+   * @param opts - Pagination options (`limit` 1-100).
+   * @returns The rejections under `data` with `pagination`.
+   */
+  async listEmailSourceRejections(
+    sourceId: string,
+    opts: ListOptions = {},
+  ): Promise<EmailSourceRejectionListResponse> {
+    return (await this.request("GET", `/sources/${sourceId}/email-rejections`, {
+      query: { page: opts.page, limit: opts.limit },
+    })) as EmailSourceRejectionListResponse;
+  }
+
   // ─── Source Exports ────────────────────────────────────────────────────────
 
   /**
@@ -2405,10 +2467,19 @@ export class Seclai {
    *
    * @param sourceId - Source connection identifier.
    * @param exportId - Export identifier.
+   * @param opts - Optional `signal`, which cancels the request; with a standard `fetch` this
+   *   includes reading the body, so `AbortSignal.timeout(ms)` bounds the whole
+   *   transfer.
    * @returns Raw response with the export file.
    */
-  async downloadSourceExport(sourceId: string, exportId: string): Promise<Response> {
-    return await this.requestRaw("GET", `/sources/${sourceId}/exports/${exportId}/download`);
+  async downloadSourceExport(
+    sourceId: string,
+    exportId: string,
+    opts: { signal?: AbortSignal } = {},
+  ): Promise<Response> {
+    return await this.requestRaw("GET", `/sources/${sourceId}/exports/${exportId}/download`, {
+      signal: opts.signal,
+    });
   }
 
   /**
@@ -2518,6 +2589,98 @@ export class Seclai {
     return (await this.request("GET", `/contents/${contentVersionId}/embeddings`, {
       query: { page: opts.page ?? 1, limit: opts.limit ?? 20 },
     })) as ContentEmbeddingsListResponse;
+  }
+
+  /**
+   * List the files attached to a content item.
+   *
+   * Files arrive from an agent's `write_content_attachment` step, with an email
+   * message, from an RSS feed's `feed_attachments`, from a web page's media, or
+   * as the images inside a document. Each entry says whether it is indexed for
+   * search and, when indexing failed, why.
+   *
+   * @param contentVersionId - Content version identifier.
+   * @param opts - Pagination options.
+   * @returns The attachments under `data` with `pagination`.
+   */
+  async listContentAttachments(
+    contentVersionId: string,
+    opts: ListOptions = {},
+  ): Promise<ContentAttachmentsListResponse> {
+    return (await this.request("GET", `/contents/${contentVersionId}/attachments`, {
+      query: { page: opts.page, limit: opts.limit },
+    })) as ContentAttachmentsListResponse;
+  }
+
+  /**
+   * Get one file attached to a content item: its indexing status and reason,
+   * its metadata, and the text it is indexed by.
+   *
+   * @param contentVersionId - Content version identifier.
+   * @param attachmentId - The `id` of an entry from {@link listContentAttachments}.
+   * @param opts - `start` and `end` character offsets for paging through long text
+   *   (server defaults 0 and 5000). Both are sent as given, so `end: 0` asks for
+   *   the metadata without any text. A file that was not indexed has no text.
+   * @returns The attachment with the requested range of its text.
+   * @throws {SeclaiAPIStatusError} 402 when the account has no credits left
+   *   (`error.code` `insufficient_credits`).
+   */
+  async getContentAttachment(
+    contentVersionId: string,
+    attachmentId: string,
+    opts: { start?: number; end?: number } = {},
+  ): Promise<ContentAttachmentDetailResponse> {
+    return (await this.request("GET", `/contents/${contentVersionId}/attachments/${attachmentId}`, {
+      query: { start: opts.start, end: opts.end },
+    })) as ContentAttachmentDetailResponse;
+  }
+
+  /**
+   * List the embeddings (chunk vectors) a content attachment is indexed by.
+   * The list is empty for a file that has no completed index.
+   *
+   * @param contentVersionId - Content version identifier.
+   * @param attachmentId - Attachment identifier.
+   * @param opts - Pagination options (`limit` 1-100).
+   * @returns Paginated list of embeddings.
+   * @throws {SeclaiAPIStatusError} 402 when the account has no credits left
+   *   (`error.code` `insufficient_credits`).
+   */
+  async listContentAttachmentEmbeddings(
+    contentVersionId: string,
+    attachmentId: string,
+    opts: ListOptions = {},
+  ): Promise<ContentEmbeddingsListResponse> {
+    return (await this.request("GET", `/contents/${contentVersionId}/attachments/${attachmentId}/embeddings`, {
+      query: { page: opts.page, limit: opts.limit },
+    })) as ContentEmbeddingsListResponse;
+  }
+
+  /**
+   * Download a content attachment's bytes.
+   *
+   * Returns the raw `Response` so you can stream or save the binary data. The
+   * API answers 403 when the file is withheld — blocked or redacted by a
+   * governance policy, or still being indexed after arriving from outside; the
+   * attachment's `file_withheld` field says which before you ask.
+   *
+   * @param contentVersionId - Content version identifier.
+   * @param attachmentId - Attachment identifier.
+   * @param opts - Optional `signal`, which cancels the request; with a standard `fetch` this
+   *   includes reading the body, so `AbortSignal.timeout(ms)` bounds the whole
+   *   transfer.
+   * @returns Raw response with the attachment bytes.
+   * @throws {SeclaiAPIStatusError} 403 when the file is withheld, and 402 when
+   *   the account has no credits left (`error.code` `insufficient_credits`).
+   */
+  async downloadContentAttachment(
+    contentVersionId: string,
+    attachmentId: string,
+    opts: { signal?: AbortSignal } = {},
+  ): Promise<Response> {
+    return await this.requestRaw("GET", `/contents/${contentVersionId}/attachments/${attachmentId}/file`, {
+      signal: opts.signal,
+    });
   }
 
   /**

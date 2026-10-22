@@ -29,7 +29,7 @@ export interface paths {
          *     - `template_input`: triggered via API with a predefined template
          *     - `schedule`: triggered on a schedule
          *     - `new_content`: triggered when new content arrives
-         *     - `email_received`: a virtual email inbox; runs when mail arrives at the agent's address. Configure the alias/allowlist with `PUT /agents/{agent_id}/triggers/{trigger_id}/email-config`.
+         *     - `email_received`: a virtual email inbox; runs when mail arrives at the agent's address. Configure the alias/allowlist with `PUT /agents/{agent_id}/triggers/{trigger_id}/email-config`, using the `trigger_id` this response returns.
          *
          *     Templates: `blank`, `retrieval_example`, `simple_qa`, `summarizer`, `json_extractor`, `content_change_notifier`, `scheduled_report`, `webhook_pipeline`
          *
@@ -269,6 +269,8 @@ export interface paths {
          *
          *     Returns total, passed, failed, error, and flagged counts alongside the
          *     average score, giving a quick overview of how the criteria is performing.
+         *     With ``2026-10-21`` or later, ``average_score`` averages only passed and failed
+         *     results; earlier versions average every stored score, ``error`` included.
          */
         get: operations["get_evaluation_summary_api_agents_evaluation_criteria__criteria_id__summary_get"];
         put?: never;
@@ -291,6 +293,11 @@ export interface paths {
          * @description Get an evaluation summary for API key clients.
          *
          *     Returns aggregated pass/fail/flagged counts and pass rates for each evaluation mode (eval_and_retry, sample_and_flag).
+         *
+         *     With ``2026-10-21`` or later, ``error`` results (the evaluator returned no
+         *     verdict) are left out of ``failed``, and the rates are over passed and
+         *     failed results. Earlier versions count them in ``failed`` and rate over
+         *     every result. ``error`` is returned on every version.
          *
          *     The ``agent_id`` scoping parameter is part of the ``2026-07-27`` changeset
          *     (opt in via the ``Seclai-Version`` header). Clients on the legacy baseline
@@ -641,9 +648,9 @@ export interface paths {
         };
         /**
          * Get agent attachment-reference contract
-         * @description Return the static attachment-reference contract for an agent — what files the agent's definition expects on a run.
+         * @description Return the input attachments the agent's dynamic_input trigger declares — the files a run may carry.
          *
-         *     Call this BEFORE staging uploads so you know whether the agent accepts files at all (``requires_uploads``), and which specific filenames/indexes/patterns the templates reference. Mismatched batches are rejected at run time with HTTP 400.
+         *     Call this BEFORE staging uploads so you know whether the agent accepts files at all (``requires_uploads``), and which attachments its trigger declares (``accepted_attachments``). Batches that do not fit them are rejected at run time with HTTP 400.
          */
         get: operations["api_get_agent_attachment_references_api_agents__agent_id__attachment_references_get"];
         put?: never;
@@ -847,6 +854,10 @@ export interface paths {
          *     Use this to interactively test evaluation prompts and expectation
          *     configurations while editing criteria.  The evaluation is a billed LLM
          *     call; only its result goes unrecorded.
+         *
+         *     ``status`` is ``error`` when the evaluator returned no verdict. With
+         *     ``Seclai-Version: 2026-10-21`` or later, ``score`` and ``passed`` are then
+         *     ``null``; earlier versions return ``score`` 0.5 and ``passed`` false.
          */
         post: operations["test_draft_evaluation_api_agents__agent_id__evaluation_criteria_test_draft_post"];
         delete?: never;
@@ -998,7 +1009,7 @@ export interface paths {
          *
          *     Key fields:
          *     - `input`: text input for agents with a `dynamic_input` trigger.
-         *     - `input_upload_id` / `input_upload_ids`: reference one or more files previously uploaded via `POST /agents/{agent_id}/upload-input`. Send them **with** `input` to pair prompt text with the files (the text leads, each file's extracted text follows); only the two upload fields are mutually exclusive with each other.
+         *     - `input_upload_id` / `input_upload_ids`: reference one or more files previously uploaded via `POST /agents/{agent_id}/upload-input`. Send them **with** `input` to pair prompt text with the files (the text leads, each file follows under its heading); only the two upload fields are mutually exclusive with each other.
          *     - `priority`: set true for latency-sensitive, user-facing work. For agents with a `streaming_result` step, set `priority=true` to enable real-time token streaming; otherwise the run still proceeds, but without live token streaming.
          *     - `metadata`: a JSON object that becomes available to agent steps for string substitution.
          *
@@ -1035,6 +1046,7 @@ export interface paths {
          *     - The first `init` event contains an `AgentRunResponse` snapshot, including the `run_id`.
          *     - Subsequent events are forwarded from the run event stream (status changes, step events, etc).
          *     - If the agent contains a `streaming_result` step, `stream_token` events deliver individual LLM tokens (with a `token` field) and a `stream_end` event signals completion.
+         *     - With `include_reasoning=true`, `stream_reasoning` events (with a `text` field) carry the model's reasoning while it thinks, when the `streaming_result` step's author enabled `show_reasoning`. Reasoning is never part of `output`.
          *     - The final `done` event contains the terminal snapshot (including `output` and `credits` when available).
          *
          *     Input options (for `dynamic_input` triggers):
@@ -1087,6 +1099,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/agents/{agent_id}/triggers/{trigger_id}/accepted-attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Declare the input attachments a trigger accepts
+         * @description Replace the input attachments a trigger accepts. A run's files are each assigned to one declared attachment before any step runs; steps reference one as ``{{agent.attachments.<name>}}``. Rejected with HTTP 400 when the agent references an attachment the new declaration leaves out. `trigger_id` is the one `GET /agents/{agent_id}` returns.
+         *
+         *     Auth & scoping: requires `X-API-Key` header or OAuth Bearer token; the trigger must belong to an agent in the key's account.
+         */
+        put: operations["set_accepted_attachments_api_api_agents__agent_id__triggers__trigger_id__accepted_attachments_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/agents/{agent_id}/triggers/{trigger_id}/email-config": {
         parameters: {
             query?: never;
@@ -1097,7 +1131,7 @@ export interface paths {
         get?: never;
         /**
          * Configure an EMAIL_RECEIVED trigger
-         * @description Set the custom alias, sender allowlist, and inbound-handling flags (`ignore_auto_generated`, `require_sender_auth`, `queue_on_quota`) on an agent's EMAIL_RECEIVED trigger, and return its computed email address(es). Omitted fields are left unchanged.
+         * @description Set the custom alias, sender allowlist, and inbound-handling flags (`ignore_auto_generated`, `require_sender_auth`, `queue_on_quota`, `run_on_attachment_mismatch`) on an agent's EMAIL_RECEIVED trigger, and return its computed email address(es). `trigger_id` is the one `GET /agents/{agent_id}` returns. Omitted fields are left unchanged.
          *
          *     Auth & scoping: requires `X-API-Key` header or OAuth Bearer token; the trigger must belong to an agent in the key's account.
          */
@@ -1120,17 +1154,15 @@ export interface paths {
         put?: never;
         /**
          * Upload file input
-         * @description Upload a file to use as input for a `dynamic_input` agent run.
-         *
-         *     Supports the same file types as content source uploads: text, PDF, DOCX, audio, video, images, etc.  Text and document files are processed synchronously; audio/video are submitted for asynchronous transcription.
+         * @description Upload a file to use as input for a `dynamic_input` agent run. Any other agent rejects the upload with HTTP 400.
          *
          *     **Size limit:** 200 MB per file.
          *
-         *     **Supported extensions:** txt, html, md, csv, xml, json, pdf, msg, docx, doc, pptx, ppt, xlsx, xls, zip, epub, png, jpg, gif, bmp, tiff, webp, mp3, wav, m4a, flac, ogg, mp4, mov, avi.
+         *     From `Seclai-Version: 2026-10-16` a file of any type is accepted and is `ready` at once: pass `input_upload_id` to `POST /agents/{agent_id}/runs`. Each step receives the file itself when its model reads that type, and otherwise its text (OCR, extraction or transcript), made once for the steps that need it; a type nothing reads or converts is passed on as a file only. `input` carries a `# filename` heading per file.
          *
-         *     After uploading, poll `GET /agents/{agent_id}/input-uploads/{upload_id}` until `status` is `ready`, then pass `input_upload_id` to `POST /agents/{agent_id}/runs`.
+         *     Earlier versions accept only these extensions: avi, bmp, csv, docx, epub, flac, gif, html, jpg, json, m4a, markdown, md, mov, mp3, mp4, msg, ogg, pdf, png, ppt, pptx, svg, tiff, txt, wav, webp, xls, xlsx, xml, zip. They write each file's text into `input`, so poll `GET /agents/{agent_id}/input-uploads/{upload_id}` until `status` is `ready` before running.
          *
-         *     **Multi-modal routing:** non-text uploads (image, audio, video, PDF) are surfaced natively to multi-modal-capable prompt steps; text-only models fall back to the OCR / transcript text counterpart.  Audio originals are preserved past transcription so audio-capable models (Gemini 2.5/3, GPT-5 audio) read them directly; the agent-input-binary janitor sweeps originals once they pass your account's agent-trace retention (the agent-traces source's retention period; free default 7 days).
+         *     The agent-input-binary janitor sweeps originals once they pass your account's agent-trace retention (the agent-traces source's retention period; free default 7 days).
          *
          *     Auth & scoping:
          *     - Requires `X-API-Key` header or OAuth Bearer token. All resources are scoped to the caller's account.
@@ -1826,6 +1858,106 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/contents/{source_connection_content_version}/attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List content attachments
+         * @description List the files attached to a content item, with pagination.
+         *
+         *     An agent's `write_content_attachment` step attaches a file, and an email content source attaches the files sent with a message. An RSS source attaches the kinds of feed file chosen in its `feed_attachments`. The images and video in a web page's main content are attached on a source with media indexing on. The images inside a PDF, DOCX, PPTX or XLSX item or attachment are attached too, on a source that indexes document images. Each entry says whether the file is indexed for search and, when indexing failed, why.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key` header or OAuth Bearer token. You can only access attachments of content belonging to your account.
+         */
+        get: operations["list_content_attachments_api_contents__source_connection_content_version__attachments_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/contents/{source_connection_content_version}/attachments/{attachment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a content attachment
+         * @description Get one file attached to a content item: its indexing status and reason, its metadata, and the text it is indexed by.
+         *
+         *     `attachment_id` is the `id` of an entry in the item's attachment list. Use `start` and `end` to page through long text. A file that was not indexed has no text.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key` header or OAuth Bearer token. You can only access attachments of content belonging to your account.
+         */
+        get: operations["get_content_attachment_api_contents__source_connection_content_version__attachments__attachment_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/contents/{source_connection_content_version}/attachments/{attachment_id}/embeddings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a content attachment's embeddings
+         * @description List the embeddings (chunk vectors) an attached file is indexed by, with pagination. The list is empty for a file that has no completed index.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key` header or OAuth Bearer token. You can only access attachments of content belonging to your account.
+         */
+        get: operations["list_content_attachment_embeddings_api_contents__source_connection_content_version__attachments__attachment_id__embeddings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/contents/{source_connection_content_version}/attachments/{attachment_id}/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download a content attachment
+         * @description Download an attached file's bytes.
+         *
+         *     Images, audio, video, PDF and plain text are served with their own type; an SVG that cannot be sanitized, and anything else, is served as `application/octet-stream`.
+         *
+         *     Answers 403 when the file is withheld: a governance policy blocked or redacted it, or it arrived from outside and is still being indexed. The attachment's `file_withheld` field says which before you ask.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key` header or OAuth Bearer token. You can only access attachments of content belonging to your account.
+         */
+        get: operations["get_content_attachment_file_api_contents__source_connection_content_version__attachments__attachment_id__file_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/contents/{source_connection_content_version}/embeddings": {
         parameters: {
             query?: never;
@@ -1869,22 +2001,31 @@ export interface paths {
          *     **Maximum file size:** 209715200 bytes, except `image/svg+xml` at 5242880 bytes (SVG is sanitized before it is stored).
          *
          *     **Supported MIME types:**
+         *     - `application/atom+xml`
          *     - `application/epub+zip`
          *     - `application/json`
          *     - `application/pdf`
+         *     - `application/rss+xml`
+         *     - `application/rtf`
          *     - `application/vnd.ms-excel`
          *     - `application/vnd.ms-outlook`
          *     - `application/vnd.ms-powerpoint`
          *     - `application/vnd.openxmlformats-officedocument.presentationml.presentation`
          *     - `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`
          *     - `application/vnd.openxmlformats-officedocument.wordprocessingml.document`
+         *     - `application/x-ipynb+json`
+         *     - `application/xhtml+xml`
          *     - `application/xml`
          *     - `application/zip`
+         *     - `audio/aac`
+         *     - `audio/amr`
          *     - `audio/flac`
          *     - `audio/mp4`
          *     - `audio/mpeg`
          *     - `audio/ogg`
+         *     - `audio/opus`
          *     - `audio/wav`
+         *     - `audio/webm`
          *     - `image/bmp`
          *     - `image/gif`
          *     - `image/jpeg`
@@ -1892,14 +2033,43 @@ export interface paths {
          *     - `image/svg+xml`
          *     - `image/tiff`
          *     - `image/webp`
+         *     - `message/rfc822`
+         *     - `text/calendar`
          *     - `text/csv`
          *     - `text/html`
+         *     - `text/javascript`
          *     - `text/markdown`
          *     - `text/plain`
+         *     - `text/tab-separated-values`
+         *     - `text/vcard`
+         *     - `text/vtt`
+         *     - `text/x-c`
+         *     - `text/x-c++`
+         *     - `text/x-csharp`
+         *     - `text/x-go`
+         *     - `text/x-ini`
+         *     - `text/x-java`
+         *     - `text/x-log`
          *     - `text/x-markdown`
+         *     - `text/x-php`
+         *     - `text/x-python`
+         *     - `text/x-ruby`
+         *     - `text/x-rust`
+         *     - `text/x-shellscript`
+         *     - `text/x-sql`
+         *     - `text/x-subrip`
+         *     - `text/x-tex`
+         *     - `text/x-toml`
+         *     - `text/x-typescript`
          *     - `text/xml`
+         *     - `text/yaml`
+         *     - `video/3gpp`
+         *     - `video/mp2t`
          *     - `video/mp4`
+         *     - `video/mpeg`
          *     - `video/quicktime`
+         *     - `video/webm`
+         *     - `video/x-matroska`
          *     - `video/x-msvideo`
          *
          *     Notes:
@@ -2692,7 +2862,7 @@ export interface paths {
          * List Embedding Models
          * @description List the embedding models a source can be created with.
          *
-         *     Each entry carries the `model_type` to pass as `embedding_model` when creating a source, the `dimensions` it supports, and — most importantly for multi-modal indexing — `supported_input_media`: the modalities that embedder can actually index. A source only honours a `media_types` entry its embedder lists here; unsupported kinds are dropped at save time with an `embedder_warning`, so check this before choosing an embedder for a knowledge base of images or video.
+         *     Each entry carries the `model_type` to pass as `embedding_model` when creating a source, the `dimensions` it supports, and — most importantly for multi-modal indexing — `supported_input_media`: the modalities that embedder can actually index. A source only honours a `media_types` entry its embedder lists here; a kind it does not list is stored and not indexed, so check this before choosing an embedder for a knowledge base of images or video.
          *
          *     Text-only embedders report `supported_input_media` as null. Pricing is reported as `credits` (per ~1,000 English words of text) plus `per_modality_rates` for the non-text modalities a multi-modal embedder bills differently.
          *
@@ -2820,7 +2990,7 @@ export interface paths {
          * Cancel Experiment Endpoint
          * @description Cancel a running or pending model playground experiment.
          *
-         *     Signals running model calls to abort and marks the experiment as canceled.
+         *     Marks the experiment as canceled. An experiment that has not started never runs. One that is running starts no further model calls, and records each model it did not call with the error `Canceled`. A model call or evaluation already in progress is not interrupted by the cancel: it continues and is billed, and its result is recorded on the canceled experiment. Canceling may therefore not shorten the run or reduce its cost.
          *
          *     Auth & scoping:
          *     - Requires `X-API-Key` header or OAuth Bearer token. The experiment must belong to the caller's account and, when the credential is bound to a user, to that user; otherwise 404.
@@ -3274,9 +3444,13 @@ export interface paths {
          * Create Source
          * @description Create a new content source.
          *
-         *     Source types: `rss`, `website`, `custom_index`.
+         *     Source types: `rss_feed`, `website`, `custom_index`, `cloud_drive`, `email`.
          *
          *     For RSS and website sources, provide the URL. For custom index sources, the URL is created automatically.
+         *
+         *     An `email` source takes no URL and requires `email_allowed_senders`; the response's `email_address` is where to send mail.
+         *
+         *     A `cloud_drive` source takes no URL and requires `cloud_drive_connection_id`, the id of a drive connected in the app (`GET /cloud-drives` lists them).
          *
          *     For custom_index sources, you can optionally specify an `index_mode`: `fast_and_cheap` (default), `balanced`, `slow_and_thorough`, or `custom`. The legacy `file_uploads` source type is accepted as an alias for `custom_index` with `index_mode=fast_and_cheap`.
          */
@@ -3336,6 +3510,7 @@ export interface paths {
          *       - `duplicate` — this exact file is already on the source, so nothing was created and nothing is being indexed. `content_version_id` is `null` and `source_connection_content_version_id` is the existing, already-indexed item: pass it straight to `GET /contents/{id}`. There is nothing to poll.
          *     - For an `uploaded` item, poll `GET /sources/{id}/contents/{content_version_id}` with the returned `content_version_id`, or `GET /sources/{id}/contents?content_version_id=…&content_version_id=…` for a whole batch, to follow each item through to `completed` or `failed`.
          *     - On those status endpoints `source_connection_content_version_id` stays `null` until the item finishes indexing; that is the id `GET /contents/{id}` takes.
+         *     - An item that reports `held_for_review: true` was blocked by an Enforce governance policy. It is not in the source and its id stays `null` unless a reviewer releases it, so stop polling.
          */
         post: operations["upload_inline_text_to_source_api_sources__source_connection_id__post"];
         /**
@@ -3367,6 +3542,7 @@ export interface paths {
          *     - Each item is keyed by `content_version_id`, which is what the upload endpoints return. Pass those ids as repeated `content_version_id` query parameters to poll exactly the items you uploaded.
          *     - `source_connection_content_version_id` is `null` until an item finishes indexing; once set, it is the id `GET /contents/{id}` takes.
          *     - `content_status` reaches `completed` on success and `failed` on error, with the reason in `error`. The intermediate values are `pending`, `fetching`, `transcribing`, `scanning`, and `indexing`.
+         *     - An item an Enforce governance policy blocked at import is held for review: `held_for_review` is `true` and `source_connection_content_version_id` stays `null` until a reviewer releases it. With `Seclai-Version: 2026-10-05` or later it reports `completed`; earlier versions report it as `failed` with the hold as the `error`. The `status` filter matches the item under `completed` on every version.
          *
          *     Parameters:
          *     - Pagination: `page` and `limit`.
@@ -3398,10 +3574,36 @@ export interface paths {
          *
          *     Use this to follow one uploaded file through indexing. To follow many at once, use `GET /sources/{id}/contents` with repeated `content_version_id` parameters instead of polling this endpoint per item.
          *
+         *     An item held for review by an Enforce governance policy reports `held_for_review: true`. With `Seclai-Version: 2026-10-05` or later its `content_status` is `completed`; earlier versions report `failed` with the hold as the `error`.
+         *
          *     Auth & scoping:
          *     - Requires `X-API-Key` header or OAuth Bearer token. You can only access content belonging to your account.
          */
         get: operations["get_source_content_status_endpoint_api_sources__source_connection_id__contents__content_version_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sources/{source_connection_id}/email-rejections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List mail an email source refused
+         * @description List mail that an email content source refused, newest first. Each entry says who sent the message and why it was refused, never its subject or body. A message refused as `unsafe_content` also has a prompt-scan record, which keeps the scanned text.
+         *
+         *     To accept a refused sender, add its `from_address` or that address's domain to the source's `email_allowed_senders`. That only helps when `authenticated` is true. A `repeat_*` reason marks a message the source received before; allowing its sender does not store it.
+         *
+         *     Requires an account owner or administrator: a key or token bound to another member gets 403. Returns 404 for a source that is not an email source.
+         */
+        get: operations["list_email_source_rejections_api_api_sources__source_connection_id__email_rejections_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3591,22 +3793,31 @@ export interface paths {
          *     **Maximum file size:** 209715200 bytes, except `image/svg+xml` at 5242880 bytes (SVG is sanitized before it is stored).
          *
          *     **Supported MIME types:**
+         *     - `application/atom+xml`
          *     - `application/epub+zip`
          *     - `application/json`
          *     - `application/pdf`
+         *     - `application/rss+xml`
+         *     - `application/rtf`
          *     - `application/vnd.ms-excel`
          *     - `application/vnd.ms-outlook`
          *     - `application/vnd.ms-powerpoint`
          *     - `application/vnd.openxmlformats-officedocument.presentationml.presentation`
          *     - `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`
          *     - `application/vnd.openxmlformats-officedocument.wordprocessingml.document`
+         *     - `application/x-ipynb+json`
+         *     - `application/xhtml+xml`
          *     - `application/xml`
          *     - `application/zip`
+         *     - `audio/aac`
+         *     - `audio/amr`
          *     - `audio/flac`
          *     - `audio/mp4`
          *     - `audio/mpeg`
          *     - `audio/ogg`
+         *     - `audio/opus`
          *     - `audio/wav`
+         *     - `audio/webm`
          *     - `image/bmp`
          *     - `image/gif`
          *     - `image/jpeg`
@@ -3614,14 +3825,43 @@ export interface paths {
          *     - `image/svg+xml`
          *     - `image/tiff`
          *     - `image/webp`
+         *     - `message/rfc822`
+         *     - `text/calendar`
          *     - `text/csv`
          *     - `text/html`
+         *     - `text/javascript`
          *     - `text/markdown`
          *     - `text/plain`
+         *     - `text/tab-separated-values`
+         *     - `text/vcard`
+         *     - `text/vtt`
+         *     - `text/x-c`
+         *     - `text/x-c++`
+         *     - `text/x-csharp`
+         *     - `text/x-go`
+         *     - `text/x-ini`
+         *     - `text/x-java`
+         *     - `text/x-log`
          *     - `text/x-markdown`
+         *     - `text/x-php`
+         *     - `text/x-python`
+         *     - `text/x-ruby`
+         *     - `text/x-rust`
+         *     - `text/x-shellscript`
+         *     - `text/x-sql`
+         *     - `text/x-subrip`
+         *     - `text/x-tex`
+         *     - `text/x-toml`
+         *     - `text/x-typescript`
          *     - `text/xml`
+         *     - `text/yaml`
+         *     - `video/3gpp`
+         *     - `video/mp2t`
          *     - `video/mp4`
+         *     - `video/mpeg`
          *     - `video/quicktime`
+         *     - `video/webm`
+         *     - `video/x-matroska`
          *     - `video/x-msvideo`
          *
          *     Notes:
@@ -3640,6 +3880,7 @@ export interface paths {
          *       - `duplicate` — this exact file is already on the source, so nothing was created and nothing is being indexed. `content_version_id` is `null` and `source_connection_content_version_id` is the existing, already-indexed item: pass it straight to `GET /contents/{id}`. There is nothing to poll.
          *     - For an `uploaded` item, poll `GET /sources/{id}/contents/{content_version_id}` with the returned `content_version_id`, or `GET /sources/{id}/contents?content_version_id=…&content_version_id=…` for a whole batch, to follow each item through to `completed` or `failed`.
          *     - On those status endpoints `source_connection_content_version_id` stays `null` until the item finishes indexing; that is the id `GET /contents/{id}` takes.
+         *     - An item that reports `held_for_review: true` was blocked by an Enforce governance policy. It is not in the source and its id stays `null` unless a reviewer releases it, so stop polling.
          */
         post: operations["upload_file_to_source_api_sources__source_connection_id__upload_post"];
         delete?: never;
@@ -3657,7 +3898,7 @@ export interface paths {
         };
         /**
          * Download an agent-run attachment
-         * @description Streams the bytes of an attachment emitted by a step in the given agent run.  ``attachment_id`` is the ``id`` of an entry in the run's or a step's ``attachments``, or the URL-safe-base64-encoded storage key, which webhook and email links carry.
+         * @description Streams the bytes of a file of the given agent run: one a step emitted, or one the run started with.  ``attachment_id`` is the ``id`` of an entry in the run's or a step's ``attachments``, or the URL-safe-base64-encoded storage key, which webhook and email links carry.
          *
          *     Auth & scoping:
          *     - Requires `X-API-Key` header or OAuth Bearer token.
@@ -3704,6 +3945,55 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AcceptedAttachmentSlot */
+        AcceptedAttachmentSlot: {
+            /**
+             * Content Types
+             * @description Accepted types, e.g. ``application/pdf`` or ``image/*``; empty accepts any type.
+             */
+            content_types?: string[];
+            /**
+             * Label
+             * @description Shown to people.
+             */
+            label?: string | null;
+            /**
+             * Max
+             * @description Most files a run may include; empty is no limit.
+             */
+            max?: number | null;
+            /**
+             * Min
+             * @description Fewest files a run must include; fewer refuses the run, except on an email trigger set to run anyway, which lists the shortfall.
+             * @default 0
+             */
+            min: number;
+            /**
+             * Name
+             * @description Lowercase letters, digits and underscores, starting with a letter. Steps reference the files as ``{{agent.attachments.<name>}}``.
+             */
+            name: string;
+            /**
+             * Name Pattern
+             * @description Filename glob a file must also match, ignoring case.
+             */
+            name_pattern?: string | null;
+        };
+        /** AcceptedAttachmentsResponse */
+        AcceptedAttachmentsResponse: {
+            /** Accepted Attachments */
+            accepted_attachments: components["schemas"]["AcceptedAttachmentSlot"][];
+            /**
+             * Agent Id
+             * Format: uuid
+             */
+            agent_id: string;
+            /**
+             * Trigger Id
+             * Format: uuid
+             */
+            trigger_id: string;
+        };
         /** AddConversationTurnRequest */
         AddConversationTurnRequest: {
             /**
@@ -3741,19 +4031,23 @@ export interface components {
         };
         /**
          * AgentAttachmentRefsApiResponse
-         * @description Static attachment-reference contract for an agent.
+         * @description The input attachments an agent's trigger declares.
          *
-         *     Mirrors the MCP ``get_agent_attachment_references`` tool: returns
-         *     what files (if any) an agent's templates expect on a run so API
-         *     consumers can stage uploads correctly before calling
+         *     Mirrors the MCP ``get_agent_attachment_references`` tool, so API
+         *     consumers can stage uploads that fit before calling
          *     ``POST /agents/{id}/runs``.
          */
         AgentAttachmentRefsApiResponse: {
-            /** @description Aggregated selector summary across all consumer steps. ``exact_names`` entries must each appear in the upload batch; ``indexes_max+1`` is the minimum file count; every ``patterns`` glob must match at least one upload. */
+            /**
+             * Accepted Attachments
+             * @description The attachments the agent's trigger declares. A run's files are each assigned to one; a file none accepts, or an attachment with fewer files than its ``min``, rejects the run with HTTP 400. Steps reference one as ``{{agent.attachments.<name>}}``.
+             */
+            accepted_attachments?: components["schemas"]["AcceptedAttachmentSlot"][];
+            /** @description Aggregated summary of the agent-file references in the steps. Informational: which files a run accepts is ``accepted_attachments``. */
             agent?: components["schemas"]["AttachmentRefsSourceApiSummary"];
             /**
              * Requires Uploads
-             * @description When ``false`` the agent's definition does NOT reference any uploaded attachments — ``POST /agents/{id}/upload-input`` will reject with HTTP 400. When ``true`` the ``agent`` block lists the specific selectors a run-time batch must satisfy.
+             * @description When ``false`` the agent takes no files through the API — it has no ``dynamic_input`` trigger, or that trigger declares no attachments — and ``POST /agents/{id}/upload-input`` will reject with HTTP 400. When ``true`` ``accepted_attachments`` lists what a run's files must fit.
              */
             requires_uploads: boolean;
         };
@@ -3995,16 +4289,16 @@ export interface components {
             input?: string | null;
             /**
              * Input Upload Id
-             * @description ID of a previously uploaded file (via POST /{agent_id}/upload-input) to use as the run input for dynamic-input triggers. Mutually exclusive with ``input_upload_ids`` — use that field to attach multiple files. May be combined with ``input``: the prompt text leads and the file's extracted text follows under a ``# {filename}`` heading.
+             * @description ID of a previously uploaded file (via POST /{agent_id}/upload-input) to use as the run input for dynamic-input triggers. Mutually exclusive with ``input_upload_ids`` — use that field to attach multiple files. May be combined with ``input``: the prompt text leads and the file follows under a ``# {filename}`` heading (before ``Seclai-Version: 2026-10-16``, followed by its extracted text).
              *
-             *     **Attachment visibility:** a step only sees the upload when its template references the input — via ``{{input}}`` / ``{{agent.input}}`` / ``{{step.<id>.input|output}}`` (implicit, all attachments) or the ``{{attachments[…]}}`` family (explicit narrowing — e.g. ``{{attachments[0]}}``, ``{{attachments[*.pdf]}}``).
+             *     **Which steps receive it:** a step that sends or stores files takes the files its ``attachments`` field selects. An LLM step (``prompt_call``, ``extract_data``, ``evaluate_step``) takes the files its ``attachments`` field names, or else the files its plain-text templates reference: ``{{agent.attachments.<name>}}`` for one attachment the trigger declares, or ``{{agent.input}}`` for every upload unless a template also names an agent attachment.
              *
-             *     **Per-batch validation:** every selector the agent's definition declares must be satisfied or the run is rejected with HTTP 400. Exact-name selectors require that filename to be present; indexed selectors require at least N+1 files; glob patterns require at least one matching filename.
+             *     **Per-batch validation:** the batch must fit the trigger's ``accepted_attachments`` — every file fits one declared attachment and each attachment gets at least its ``min`` files — or the run is rejected with HTTP 400.
              */
             input_upload_id?: string | null;
             /**
              * Input Upload Ids
-             * @description IDs of multiple previously uploaded files. Each upload's extracted text is concatenated under a heading; each upload's binary is surfaced as a separate ``MediaAttachment`` so multi-modal prompt steps reason over all files at once. Steps narrow visibility via ``{{attachments[…]}}`` selectors (by index, filename, or fnmatch glob). The batch must satisfy every selector the agent declares — exact names, indexed references (length must exceed the highest index), and glob patterns (each pattern needs at least one match). Mismatches return HTTP 400 with the unmet requirements listed.  Mutually exclusive with ``input_upload_id`` (two spellings of the same batch), but may be combined with ``input`` — the prompt text leads and the per-file sections follow, so "a photo plus a sentence about it" needs no synthetic text upload. Max 20 uploads per run.
+             * @description IDs of multiple previously uploaded files. Each upload gets a heading in ``input`` (before ``Seclai-Version: 2026-10-16``, followed by its extracted text); each upload reaches steps as a separate file (before ``Seclai-Version: 2026-10-16``, a text upload in the open ``files`` attachment is written into ``input`` instead). Steps choose files as described under ``input_upload_id``. The batch must fit the trigger's ``accepted_attachments``; a mismatch returns HTTP 400 listing what does not fit.  Mutually exclusive with ``input_upload_id`` (two spellings of the same batch), but may be combined with ``input`` — the prompt text leads and the per-file sections follow, so "a photo plus a sentence about it" needs no synthetic text upload. Max 20 uploads per run.
              */
             input_upload_ids?: string[] | null;
             /**
@@ -4022,7 +4316,7 @@ export interface components {
             priority: boolean;
             /**
              * Replay Of Run Id
-             * @description Re-run this agent reusing a prior run's uploaded input files. The files are re-resolved server-side from the source run (which must belong to this account and agent) — you do not re-upload them. Combine with ``input`` to change the text while keeping the files. A fresh upload batch (``input_upload_id(s)``) takes precedence and disables replay. Binaries swept by retention fall back to their extracted text.
+             * @description Re-run this agent reusing a prior run's uploaded input files. The files are re-resolved server-side from the source run (which must belong to this account and agent) — you do not re-upload them. Combine with ``input`` to change the text while keeping the files. A fresh upload batch (``input_upload_id(s)``) takes precedence and disables replay. Binaries swept by retention fall back to their extracted text. Files the trigger's ``accepted_attachments`` no longer accepts are left out.
              */
             replay_of_run_id?: string | null;
         };
@@ -4085,7 +4379,7 @@ export interface components {
             input_scan_status?: string | null;
             /**
              * Output
-             * @description The run's output text; its files are in `attachments`.  Below `Seclai-Version: 2026-09-30` an output that has files is instead the manifest JSON `{schema, text, attachments: [{storage_key, mime, name, label, bytes}]}`; `bytes` is absent on runs made before that version shipped.
+             * @description The run's output text; its files are in `attachments`.  Below `Seclai-Version: 2026-09-30` an output that has files is instead the manifest JSON `{schema, text, attachments: [{storage_key, mime, name, label, bytes}]}`; `bytes` can be `null` on runs made before that version shipped.
              */
             output: string | null;
             /**
@@ -4117,7 +4411,7 @@ export interface components {
             steps?: components["schemas"]["AgentRunStepResponse"][] | null;
             /**
              * Trace Purged At
-             * @description When this run's trace content was deleted under the account's agent-trace retention window.  Non-null means `input`, `output` and every step's and tool call's I/O are null **by design** and will never be available again — the run aged out, it did not fail.  Branch on this rather than on a null `output`: a run that genuinely produced nothing looks identical.  Status, timing and credits remain accurate.
+             * @description When this run's trace content was deleted under the account's agent-trace retention window.  Non-null means `input`, `output` and every step's and tool call's I/O are null **by design** and will never be available again — the run aged out, it did not fail.  A tool call's `error` may be null as well, so a failed tool call can report its status without a message.  Branch on this rather than on a null `output`: a run that genuinely produced nothing looks identical.  Status, timing and credits remain accurate.
              */
             trace_purged_at?: string | null;
             /**
@@ -4187,12 +4481,18 @@ export interface components {
             tool_calls?: components["schemas"]["AgentRunToolCallResponse"][];
             /**
              * Warnings
-             * @description Authoring problems the step ran into, whether or not it then failed, such as a file name selector that matched none of its source's files.
+             * @description Problems the step ran into, whether or not it then failed, such as a file name selector that matched none of its source's files, or a model that returned no answer.
              */
             warnings?: string[] | null;
         };
         /** AgentRunStreamRequest */
         AgentRunStreamRequest: {
+            /**
+             * Include Reasoning
+             * @description Receive `stream_reasoning` events carrying the model's reasoning while it thinks. They are sent only for a `streaming_result` step whose author enabled `show_reasoning`, and never when a governance policy redacts that step.
+             * @default false
+             */
+            include_reasoning: boolean;
             /**
              * Input
              * @description Input to provide to the agent upon running for agents with dynamic triggers.
@@ -4200,12 +4500,12 @@ export interface components {
             input?: string | null;
             /**
              * Input Upload Id
-             * @description ID of a previously uploaded file (via POST /{agent_id}/upload-input) to use as the run input for dynamic-input triggers. Mutually exclusive with ``input_upload_ids`` — use that field to attach multiple files. May be combined with ``input``. Subject to the same per-batch attachment-selector validation as the non-streaming endpoint.
+             * @description ID of a previously uploaded file (via POST /{agent_id}/upload-input) to use as the run input for dynamic-input triggers. Mutually exclusive with ``input_upload_ids`` — use that field to attach multiple files. May be combined with ``input``. Must fit the trigger's ``accepted_attachments``, as on the non-streaming endpoint.
              */
             input_upload_id?: string | null;
             /**
              * Input Upload Ids
-             * @description IDs of multiple previously uploaded files. See the non-streaming endpoint for full semantics, including per-batch selector validation (exact names, indexed references, and glob patterns must all be satisfied or the run is rejected with HTTP 400) and combining the batch with ``input`` prompt text. Max 20.
+             * @description IDs of multiple previously uploaded files. See the non-streaming endpoint for full semantics, including fitting the trigger's ``accepted_attachments`` (else HTTP 400) and combining the batch with ``input`` prompt text. Max 20.
              */
             input_upload_ids?: string[] | null;
             /**
@@ -4217,7 +4517,7 @@ export interface components {
             } | null;
             /**
              * Replay Of Run Id
-             * @description Re-run reusing a prior run's uploaded input files (re-resolved server-side from the source run, which must belong to this account and agent). A fresh upload batch takes precedence.
+             * @description Re-run reusing a prior run's uploaded input files (re-resolved server-side from the source run, which must belong to this account and agent). A fresh upload batch takes precedence. Files the trigger's ``accepted_attachments`` no longer accepts are left out.
              */
             replay_of_run_id?: string | null;
         };
@@ -4381,6 +4681,11 @@ export interface components {
             sampling_config?: {
                 [key: string]: unknown;
             } | null;
+            /**
+             * Trigger Id
+             * @description ID of the agent's trigger, for the `/agents/{agent_id}/triggers/{trigger_id}/…` endpoints such as `accepted-attachments` and `email-config`.
+             */
+            trigger_id?: string | null;
             /**
              * Trigger Type
              * @description Trigger type for the agent.
@@ -5174,6 +5479,64 @@ export interface components {
             started_at?: string | null;
         };
         /**
+         * ContentAttachmentResponse
+         * @description A file attached to a content item.
+         */
+        ContentAttachmentResponse: {
+            /**
+             * Content Type
+             * @description MIME type of the attached file.
+             */
+            content_type: string;
+            /**
+             * Created At
+             * @description When the file was first attached.
+             */
+            created_at: string;
+            /**
+             * Id
+             * @description The attachment's id, which the single-attachment endpoints take.
+             */
+            id: string;
+            /**
+             * Indexed
+             * @description Whether indexing the file for search was asked for.
+             */
+            indexed: boolean;
+            /**
+             * Indexing Error
+             * @description Why the file was not indexed, when `indexing_status` is `failed`.
+             */
+            indexing_error: string | null;
+            /**
+             * Indexing Status
+             * @description `pending`, `completed` or `failed`; null when indexing was not asked for. Search finds the file only when `completed`.
+             */
+            indexing_status: string | null;
+            /**
+             * Key
+             * @description The attachment's key, unique within the item.
+             */
+            key: string;
+            /**
+             * Metadata
+             * @description What is known about the file beyond its bytes. An image extracted from a PDF carries its `page_number`, and `page_render: true` when it is a render of the whole page. An image or video from a web page carries `source_url` (the address it was fetched from), `position` (its place among the media the page listed, from 0) and, when the page gave one, `alt_text`. Empty for most files. A retrieval metadata filter matches these keys, except `alt_text`, which is indexed as the attachment's text.
+             */
+            metadata: {
+                [key: string]: unknown;
+            };
+            /**
+             * Size Bytes
+             * @description Size of the attached file in bytes.
+             */
+            size_bytes: number;
+            /**
+             * Updated At
+             * @description When the attachment last changed.
+             */
+            updated_at: string;
+        };
+        /**
          * ContentEmbeddingResponse
          * @description Response model for content embedding.
          */
@@ -5473,6 +5836,31 @@ export interface components {
              */
             chunk_size?: number | null;
             /**
+             * Cloud Drive Connection Id
+             * @description Required for a cloud_drive source, and ignored on any other: the id of a connected drive, from GET /cloud-drives.
+             */
+            cloud_drive_connection_id?: string | null;
+            /**
+             * Cloud Drive Content Types
+             * @description For a cloud_drive source: comma-separated MIME types a file must have to be indexed. Omit for no filter.
+             */
+            cloud_drive_content_types?: string | null;
+            /**
+             * Cloud Drive Folder Path
+             * @description For a cloud_drive source: the folder to index, as a path inside the drive. Omit to index the connected drive's own folder.
+             */
+            cloud_drive_folder_path?: string | null;
+            /**
+             * Cloud Drive Max File Mb
+             * @description For a cloud_drive source: files larger than this many megabytes are skipped. Omit for no limit of the source's own.
+             */
+            cloud_drive_max_file_mb?: number | null;
+            /**
+             * Cloud Drive Path Pattern
+             * @description For a cloud_drive source: a glob a file's path must match to be indexed, such as `**\/*.pdf` or `/reports/*`. Omit for no filter.
+             */
+            cloud_drive_path_pattern?: string | null;
+            /**
              * Content Filter
              * @description Content filter type.
              */
@@ -5483,15 +5871,30 @@ export interface components {
              */
             dimensions?: number | null;
             /**
+             * Document Images
+             * @description Whether the images inside PDF, DOCX, PPTX and XLSX files are attached to the item and indexed; on a text-only embedder, by the text in each image. Applies to documents added after it changes. Defaults to true; below Seclai-Version 2026-10-18 it defaults to false on a text-only embedder. On a website or RSS source it is ignored: `media_types` decides.
+             */
+            document_images?: boolean | null;
+            /**
+             * Email Allowed Senders
+             * @description Required for an email source, and only valid there: the senders whose mail is stored. Each entry is a full address (news@example.com) or a bare domain (example.com), which also matches its sub-domains. Matched against the message's From address, which must pass DMARC.
+             */
+            email_allowed_senders?: string[] | null;
+            /**
              * Embedding Model
              * @description Embedding model override — a `model_type` from `GET /models/embedders`, which also reports each embedder's `supported_input_media`. Defaults to the platform embedder (`default_model_type` on that endpoint) when omitted. Indexing images or video requires an embedder that lists that modality.
              */
             embedding_model?: string | null;
+            /**
+             * Feed Attachments
+             * @description Kinds of file listed beside a feed item's content to attach to the item and index, on an RSS source. Subset of ['enclosures', 'item_image', 'media_rss']; any other value is refused. None are attached unless chosen.
+             */
+            feed_attachments?: string[] | null;
             /** @description Index mode for custom_index sources: fast_and_cheap (default), balanced, slow_and_thorough, or custom. */
             index_mode?: components["schemas"]["SourceIndexMode"] | null;
             /**
              * Media Types
-             * @description Media kinds to extract from indexed content and embed as multi-modal KB chunks. Subset of ['images', 'video']. Only kinds the source's embedder can index are honored (see `supported_input_media` on GET /models/embedders); unsupported values are dropped. Omit / [] for text-only.
+             * @description Media kinds in a web page's main content to attach to the page's item and index, on a website or RSS source. Subset of ['images', 'video']. From `Seclai-Version: 2026-10-13` any other value, and any kind on another source type, is refused with a 400; older versions drop an unknown value and store the rest. A kind the source's embedder cannot index is stored and not indexed (see `supported_input_media` on GET /models/embedders). 'images' also covers the images inside PDF, DOCX, PPTX and XLSX files. Applies to pages and documents added after it is set.
              */
             media_types?: string[] | null;
             /**
@@ -5511,7 +5914,7 @@ export interface components {
             polling_action?: string | null;
             /**
              * Polling Max Items
-             * @description Max items per poll.
+             * @description The most new feed items a scheduled poll takes. Read for RSS feeds only: from Seclai-Version 2026-10-19 any other source type rejects it with 400. Earlier versions store it there. An email source rejects it at every version.
              */
             polling_max_items?: number | null;
             /**
@@ -5521,7 +5924,7 @@ export interface components {
             retention?: number | null;
             /**
              * Source Type
-             * @description Source type: rss, website, or custom_index. The legacy value 'file_uploads' is accepted as an alias for custom_index.
+             * @description Source type: rss_feed, website, custom_index, cloud_drive or email. The legacy value 'file_uploads' is accepted as an alias for custom_index.
              */
             source_type: string;
             /**
@@ -5718,6 +6121,69 @@ export interface components {
             vanity_plan_names?: string[];
         };
         /**
+         * EmailSourceRejectionListResponse
+         * @description A page of mail an email content source refused.
+         */
+        EmailSourceRejectionListResponse: {
+            /** Data */
+            data: components["schemas"]["EmailSourceRejectionResponse"][];
+            pagination: components["schemas"]["PaginationResponse"];
+        };
+        /**
+         * EmailSourceRejectionResponse
+         * @description Mail an email content source refused: who sent it and why, never what
+         *     it said.
+         */
+        EmailSourceRejectionResponse: {
+            /**
+             * Auth Verdicts
+             * @description The SPF, DKIM and DMARC verdicts reported for the message.
+             */
+            auth_verdicts?: {
+                [key: string]: string;
+            };
+            /**
+             * Authenticated
+             * @description Whether the message passed DMARC, which is what authenticates its From address. Adding an unauthenticated sender to the allowed senders does not let its mail in.
+             */
+            authenticated: boolean;
+            /**
+             * Created At
+             * @description When the mail was refused.
+             */
+            created_at: string;
+            /**
+             * From Address
+             * @description The address in the message's From line, which the source's allowed senders are matched against. Null when no single From address could be read from the message unambiguously.
+             */
+            from_address?: string | null;
+            /**
+             * Id
+             * @description Unique identifier of the refusal.
+             */
+            id: string;
+            /**
+             * Reason
+             * @description Why it was refused: sender_not_allowed, unauthenticated_sender, unreadable_from, sender_blocked, spam, virus, unsafe_content, rate_limited, account_not_chargeable or empty_message; or, for a message the source received before, what became of the earlier one: repeat_stored, repeat_held, repeat_deleted or repeat_in_progress.
+             */
+            reason: string;
+            /**
+             * Recipient
+             * @description The source address it was sent to.
+             */
+            recipient: string;
+            /**
+             * Sender
+             * @description The envelope sender. For bulk mail this is the delivery provider's bounce address, not the From address.
+             */
+            sender: string;
+            /**
+             * Sender Ip
+             * @description IP address the mail came from.
+             */
+            sender_ip: string | null;
+        };
+        /**
          * EmailTriggerConfigResponse
          * @description An EMAIL_RECEIVED trigger's resolved address(es) and config.
          */
@@ -5748,6 +6214,11 @@ export interface components {
              * @default true
              */
             email_require_sender_auth: boolean;
+            /**
+             * Email Run On Attachment Mismatch
+             * @default false
+             */
+            email_run_on_attachment_mismatch: boolean;
             /**
              * Trigger Id
              * Format: uuid
@@ -6044,7 +6515,7 @@ export interface components {
         EvaluationResultSummaryResponse: {
             /**
              * Average Score
-             * @description Mean score across all evaluated results, or null if none.
+             * @description Mean score of the final passed and failed results, or null if none. On /api before Seclai-Version 2026-10-21 it averages every final result's stored score, `error` included.
              */
             average_score?: number | null;
             /** Error */
@@ -6351,7 +6822,7 @@ export interface components {
         GenerateAgentStepsResponse: {
             /**
              * Agent Config
-             * @description Suggested agent-level configuration, if any.
+             * @description Suggested agent-level configuration, if any. For an email_received agent it may carry `email_run_on_attachment_mismatch`, which the caller applies through the trigger's email-config endpoint. For a dynamic_input or email_received agent it may carry `accepted_attachments`, which the caller passes with the steps to `PUT /agents/{agent_id}/definition` so both save together.
              */
             agent_config?: {
                 [key: string]: unknown;
@@ -6701,7 +7172,7 @@ export interface components {
         };
         /**
          * InsufficientCreditsDetail
-         * @description ``detail`` body for a 402 ``insufficient_credits`` response.
+         * @description ``error`` body of a 402 ``insufficient_credits`` response.
          */
         InsufficientCreditsDetail: {
             /**
@@ -6710,11 +7181,11 @@ export interface components {
              */
             account_id: string;
             /**
-             * Error
+             * Code
              * @description Stable machine-readable error code.
              * @constant
              */
-            error: "insufficient_credits";
+            code: "insufficient_credits";
             /**
              * Message
              * @description Human-readable explanation.
@@ -6724,9 +7195,11 @@ export interface components {
         /**
          * InsufficientCreditsResponse
          * @description 402 envelope returned when the account has exhausted its credits.
+         *
+         *     The wire shape ``http_exception_handler`` and ``insufficient_credits_exception_handler`` send.
          */
         InsufficientCreditsResponse: {
-            detail: components["schemas"]["InsufficientCreditsDetail"];
+            error: components["schemas"]["InsufficientCreditsDetail"];
         };
         JsonValue: unknown;
         /**
@@ -7396,6 +7869,14 @@ export interface components {
                 message: string;
             };
         };
+        /** SetAcceptedAttachmentsRequest */
+        SetAcceptedAttachmentsRequest: {
+            /**
+             * Accepted Attachments
+             * @description The input attachments the trigger accepts; ``null`` accepts any files (one attachment named ``files``). Only ``dynamic_input`` and ``email_received`` triggers take files.
+             */
+            accepted_attachments: components["schemas"]["AcceptedAttachmentSlot"][] | null;
+        };
         /**
          * SetAutoBlockModeRequest
          * @description Set the account's governance auto-block mode (shared REST request).
@@ -7403,6 +7884,34 @@ export interface components {
         SetAutoBlockModeRequest: {
             /** Mode */
             mode: string;
+        };
+        /**
+         * SkippedAttachmentReason
+         * @enum {string}
+         */
+        SkippedAttachmentReason: "displayed_in_body" | "over_cap" | "no_filename" | "undecodable";
+        /**
+         * SkippedAttachmentResponse
+         * @description A part of an email that was not stored as an attachment.
+         */
+        SkippedAttachmentResponse: {
+            /**
+             * Content Type
+             * @description The part's declared media type.
+             */
+            content_type: string;
+            /**
+             * Filename
+             * @description The file name the part is listed under; null when it had none.
+             */
+            filename: string | null;
+            /** @description Why the part was not stored. */
+            reason: components["schemas"]["SkippedAttachmentReason"];
+            /**
+             * Size Bytes
+             * @description Decoded size in bytes.
+             */
+            size_bytes: number | null;
         };
         /** SolutionSourceConnectionResponse */
         SolutionSourceConnectionResponse: {
@@ -7554,20 +8063,26 @@ export interface components {
             error: string | null;
             /**
              * Extracted Media Capped
-             * @description True when extraction stopped with media still unread, so the item references more media than was indexed and media search will not match anything past the cut. Two causes: a web page that ran out of the budget for fetching remote assets, or a container that could not be read to the end (a truncated or hostile archive). An uploaded document that reads cleanly is never capped, however much media it holds — there is no limit on that.
+             * @description True when extraction stopped with media still unread, so the item references more media than was attached and media search will not match anything past the cut. The cause is a web page that ran out of the budget for fetching remote assets or listed more media than is recorded, or a web page or document that could not be read to the end.
              * @default false
              */
             extracted_media_capped: boolean;
             /**
              * Extracted Media Count
-             * @description Number of embedded images / videos extracted from inside this item and indexed as their own chunks. There is no limit on this — a document contributes as many as it holds. Null when there is no media record for the item: the extraction pass has not run, does not apply to this container, or found nothing. Treat null as 'unknown', never as zero.
+             * @description Number of images / videos in this web page's main content, or of images inside this PDF or Office document, that were attached to the item on this source; a file over the per-file size limit, listed as a failed attachment, is not counted. Null when there is no media record for the item: the extraction pass has not run, does not apply to this container or this source's settings, or found nothing. Treat null as 'unknown', never as zero.
              */
             extracted_media_count?: number | null;
             /**
              * Extracted Media Limit
-             * @description The bound that was reached, when extracted_media_capped is true and the stop was a bound — a number of fetch attempts, or a number of seconds. Null when extraction was not capped, or when it stopped because the container could not be read rather than because a bound fired.
+             * @description The bound that was reached, when extracted_media_capped is true and the stop was a bound — a number of fetch attempts, of seconds, of bytes, or of media listed. Null when extraction was not capped, or when it stopped because the container could not be read rather than because a bound fired.
              */
             extracted_media_limit?: number | null;
+            /**
+             * Held For Review
+             * @description An ENFORCE governance policy blocked this item at import. It is held for review and is not retrievable: resolving its blocking evaluations releases it into the source, and it is purged when the hold window ends.
+             * @default false
+             */
+            held_for_review: boolean;
             /**
              * Indexed At
              * @description Timestamp when the item finished indexing and became retrievable. `null` until then.
@@ -7704,6 +8219,31 @@ export interface components {
              */
             chunk_size?: number | null;
             /**
+             * Cloud Drive Connection Id
+             * @description For a cloud_drive source: the id of the connected drive it indexes. Null for every other source type.
+             */
+            cloud_drive_connection_id?: string | null;
+            /**
+             * Cloud Drive Content Types
+             * @description For a cloud_drive source: the comma-separated MIME types a file must have to be indexed. Null when there is no filter.
+             */
+            cloud_drive_content_types?: string | null;
+            /**
+             * Cloud Drive Folder Path
+             * @description For a cloud_drive source: the folder it indexes. Null when it indexes the connected drive's own folder.
+             */
+            cloud_drive_folder_path?: string | null;
+            /**
+             * Cloud Drive Max File Mb
+             * @description For a cloud_drive source: the size in megabytes above which a file is skipped. Null when the source sets no limit of its own.
+             */
+            cloud_drive_max_file_mb?: number | null;
+            /**
+             * Cloud Drive Path Pattern
+             * @description For a cloud_drive source: the glob a file's path must match to be indexed. Null when there is none.
+             */
+            cloud_drive_path_pattern?: string | null;
+            /**
              * Content Count
              * @description Number of content items associated with the source connection.
              * @default 0
@@ -7725,6 +8265,22 @@ export interface components {
              */
             dimensions?: number | null;
             /**
+             * Document Images
+             * @description Whether the images inside PDF, DOCX, PPTX and XLSX files are attached to the item and indexed; on a source that follows no web pages and has a text-only embedder, by the text in each image. Applies to documents added after it changes. On a website or RSS source it reports whether `media_types` holds 'images', and the images are attached only when the source's embedder indexes images.
+             * @default true
+             */
+            document_images: boolean;
+            /**
+             * Email Address
+             * @description For an email source: the address to send mail to. Null for every other source type.
+             */
+            email_address?: string | null;
+            /**
+             * Email Allowed Senders
+             * @description For an email source: the addresses and domains whose mail is stored. Null for every other source type.
+             */
+            email_allowed_senders?: string[] | null;
+            /**
              * Embedding Model
              * @description Embedding model used for the source connection.
              */
@@ -7734,6 +8290,11 @@ export interface components {
              * @description Type of the embedding model.
              */
             embedding_model_type?: string | null;
+            /**
+             * Feed Attachments
+             * @description Kinds of file listed beside a feed item's content that an RSS source attaches to the item and indexes (subset of ['enclosures', 'item_image', 'media_rss']).
+             */
+            feed_attachments?: string[];
             /**
              * Free Retention Days
              * @description Number of days content is stored for free before billing applies.
@@ -7754,7 +8315,7 @@ export interface components {
             index_mode?: components["schemas"]["SourceIndexMode"] | null;
             /**
              * Media Types
-             * @description Media kinds extracted from indexed content and embedded as multi-modal KB chunks (subset of ['images', 'video']). Empty = text-only.
+             * @description Media kinds in a web page's main content that are attached to the page's item and indexed (subset of ['images', 'video']). On a website or RSS source 'images' also covers the images inside PDF, DOCX, PPTX and XLSX files.
              */
             media_types?: string[];
             /**
@@ -7779,7 +8340,7 @@ export interface components {
             polling_action: string | null;
             /**
              * Polling Max Items
-             * @description Maximum items to poll for the source connection.
+             * @description The most new feed items a scheduled poll takes. Read for RSS feeds only.
              */
             polling_max_items: number | null;
             /**
@@ -7989,6 +8550,8 @@ export interface components {
             passed: boolean;
             /** Score */
             score: number;
+            /** @description `passed`, `failed`, or `error` when the evaluator returned no verdict. */
+            status: components["schemas"]["EvaluationStatus"];
         };
         /** UnlinkResourcesRequest */
         UnlinkResourcesRequest: {
@@ -8005,6 +8568,11 @@ export interface components {
         };
         /** UpdateAgentDefinitionRequest */
         UpdateAgentDefinitionRequest: {
+            /**
+             * Accepted Attachments
+             * @description When given, declared on the main branch's file-taking triggers in the same save, so the steps may read its slots as `{{agent.attachments.<slot>}}`; omitted, the triggers keep theirs.
+             */
+            accepted_attachments?: components["schemas"]["AcceptedAttachmentSlot"][] | null;
             /**
              * Definition
              * @description The full agent definition (name, description, tags, steps). Steps form a tree workflow. Each step has a `step_type`, `id`, `name`, and type-specific config. Content enrichment steps (write_metadata, write_content_attachment, load_content_attachment, load_content) require content-triggered agents.
@@ -8191,8 +8759,43 @@ export interface components {
          */
         UpdateSourceBody: {
             /**
+             * Cloud Drive Content Types
+             * @description For a cloud_drive source: comma-separated MIME types a file must have to be indexed. Send an empty string to clear it; omit to leave it unchanged.
+             */
+            cloud_drive_content_types?: string | null;
+            /**
+             * Cloud Drive Folder Path
+             * @description For a cloud_drive source: the folder to index, as a path inside the drive. Send an empty string to index the connected drive's own folder; omit to leave it unchanged.
+             */
+            cloud_drive_folder_path?: string | null;
+            /**
+             * Cloud Drive Max File Mb
+             * @description For a cloud_drive source: files larger than this many megabytes are skipped. Send 0 to clear the source's own limit; omit to leave it unchanged.
+             */
+            cloud_drive_max_file_mb?: number | null;
+            /**
+             * Cloud Drive Path Pattern
+             * @description For a cloud_drive source: a glob a file's path must match to be indexed, such as `**\/*.pdf` or `/reports/*`. Send an empty string to clear it; omit to leave it unchanged.
+             */
+            cloud_drive_path_pattern?: string | null;
+            /**
+             * Document Images
+             * @description Whether the images inside PDF, DOCX, PPTX and XLSX files are attached to the item and indexed; on a text-only embedder, by the text in each image. Applies to documents added after it changes. Omit the field to leave it unchanged. On a website or RSS source it is ignored: `media_types` decides.
+             */
+            document_images?: boolean | null;
+            /**
+             * Email Allowed Senders
+             * @description For an email source: replaces the allowed senders. Each entry is a full address or a bare domain. The list cannot be emptied. Omit to leave it unchanged.
+             */
+            email_allowed_senders?: string[] | null;
+            /**
+             * Feed Attachments
+             * @description Kinds of file listed beside a feed item's content to attach to the item and index, on an RSS source. Subset of ['enclosures', 'item_image', 'media_rss']; any other value is refused. [] attaches none. Applies to items added after it changes. Omit the field to leave it unchanged.
+             */
+            feed_attachments?: string[] | null;
+            /**
              * Media Types
-             * @description Media kinds to extract from indexed content and embed as multi-modal KB chunks. Subset of ['images', 'video']. Only kinds the source's embedder can index are honored (see `supported_input_media` on GET /models/embedders); unsupported values are dropped. [] disables media extraction (text-only).
+             * @description Media kinds in a web page's main content to attach to the page's item and index, on a website or RSS source. Subset of ['images', 'video']. From `Seclai-Version: 2026-10-13` any other value, and any kind on another source type, is refused with a 400; older versions drop an unknown value and store the rest. A kind the source's embedder cannot index is stored and not indexed (see `supported_input_media` on GET /models/embedders). [] attaches no media from web pages. 'images' also covers the images inside PDF, DOCX, PPTX and XLSX files. Applies to pages and documents added after it changes.
              */
             media_types?: string[] | null;
             /**
@@ -8456,6 +9059,11 @@ export interface components {
         /** CreateAgentRequest */
         routers__api__agents__CreateAgentRequest: {
             /**
+             * Accepted Attachments
+             * @description The input attachments the trigger accepts. Omitted, the ``agent_definition`` trigger's declaration is kept when the export carries one and both trigger types take files; otherwise a dynamic_input or email_received trigger accepts any files (one attachment named ``files``), and any other trigger none.
+             */
+            accepted_attachments?: components["schemas"]["AcceptedAttachmentSlot"][] | null;
+            /**
              * Agent Definition
              * @description Optional payload in the same format produced by GET /agents/{id}/export. When provided, replaces any template-derived workflow and pre-fills metadata/trigger fields the request does not specify explicitly. Validation errors include line/column references against a canonical pretty-printed echo of the supplied payload.
              */
@@ -8540,6 +9148,11 @@ export interface components {
              * @description When true (default for new triggers), the envelope sender must pass SPF or DMARC even on an open inbox (no allowlist); unauthenticated, spoofable mail is rejected. Set false to accept fully unauthenticated mail on an open inbox.
              */
             require_sender_auth?: boolean | null;
+            /**
+             * Run On Attachment Mismatch
+             * @description When true (default false), an email whose attachments don't fit what the agent expects still runs: files the agent can't take are left out and the problems are listed in the `email_attachment_issues` run metadata. When false, the run fails.
+             */
+            run_on_attachment_mismatch?: boolean | null;
         };
         /** UpdateAgentRequest */
         routers__api__agents__UpdateAgentRequest: {
@@ -8783,6 +9396,89 @@ export interface components {
             subscribed: boolean;
         };
         /**
+         * ContentAttachmentDetailResponse
+         * @description One attached file, with the text indexed from it.
+         */
+        routers__api__contents__ContentAttachmentDetailResponse: {
+            /**
+             * Content Type
+             * @description MIME type of the attached file.
+             */
+            content_type: string;
+            /**
+             * Created At
+             * @description When the file was first attached.
+             */
+            created_at: string;
+            /**
+             * File Withheld
+             * @description Why the file's bytes are not served, or null when they are: `blocked_by_governance_policy`, `redacted_by_governance_policy` (any text below is the redacted text), or `pending_screening`.
+             */
+            file_withheld: string | null;
+            /**
+             * Id
+             * @description The attachment's id, which the single-attachment endpoints take.
+             */
+            id: string;
+            /**
+             * Indexed
+             * @description Whether indexing the file for search was asked for.
+             */
+            indexed: boolean;
+            /**
+             * Indexing Error
+             * @description Why the file was not indexed, when `indexing_status` is `failed`.
+             */
+            indexing_error: string | null;
+            /**
+             * Indexing Status
+             * @description `pending`, `completed` or `failed`; null when indexing was not asked for. Search finds the file only when `completed`.
+             */
+            indexing_status: string | null;
+            /**
+             * Key
+             * @description The attachment's key, unique within the item.
+             */
+            key: string;
+            /**
+             * Metadata
+             * @description What is known about the file beyond its bytes. An image extracted from a PDF carries its `page_number`, and `page_render: true` when it is a render of the whole page. An image or video from a web page carries `source_url` (the address it was fetched from), `position` (its place among the media the page listed, from 0) and, when the page gave one, `alt_text`. Empty for most files. A retrieval metadata filter matches these keys, except `alt_text`, which is indexed as the attachment's text.
+             */
+            metadata: {
+                [key: string]: unknown;
+            };
+            /**
+             * Size Bytes
+             * @description Size of the attached file in bytes.
+             */
+            size_bytes: number;
+            /**
+             * Text Content
+             * @description The requested range of the text the file is indexed by; null when the file has no completed index or was indexed without text.
+             */
+            text_content: string | null;
+            /** Text Content End */
+            text_content_end: number;
+            /** Text Content Start */
+            text_content_start: number;
+            /** Text Content Total Length */
+            text_content_total_length: number;
+            /**
+             * Updated At
+             * @description When the attachment last changed.
+             */
+            updated_at: string;
+        };
+        /**
+         * ContentAttachmentsListResponse
+         * @description Response model for a content item's attachments.
+         */
+        routers__api__contents__ContentAttachmentsListResponse: {
+            /** Data */
+            data: components["schemas"]["ContentAttachmentResponse"][];
+            pagination: components["schemas"]["PaginationResponse"];
+        };
+        /**
          * ContentDetailResponse
          * @description Response model for content detail.
          */
@@ -8834,18 +9530,18 @@ export interface components {
             error: string | null;
             /**
              * Extracted Media Capped
-             * @description True when extraction stopped with media still unread, so the item references more media than was indexed and media search will not match anything past the cut. Two causes: a web page that ran out of the budget for fetching remote assets, or a container that could not be read to the end (a truncated or hostile archive). An uploaded document that reads cleanly is never capped, however much media it holds — there is no limit on that.
+             * @description True when extraction stopped with media still unread, so the item references more media than was attached and media search will not match anything past the cut. The cause is a web page that ran out of the budget for fetching remote assets or listed more media than is recorded, or a web page or document that could not be read to the end.
              * @default false
              */
             extracted_media_capped: boolean;
             /**
              * Extracted Media Count
-             * @description Number of embedded images / videos extracted from inside this item and indexed as their own chunks. There is no limit on this — a document contributes as many as it holds. Null when there is no media record for the item: the extraction pass has not run, does not apply to this container, or found nothing. Treat null as 'unknown', never as zero.
+             * @description Number of images / videos in this web page's main content, or of images inside this PDF or Office document, that were attached to the item on this source; a file over the per-file size limit, listed as a failed attachment, is not counted. Null when there is no media record for the item: the extraction pass has not run, does not apply to this container or this source's settings, or found nothing. Treat null as 'unknown', never as zero.
              */
             extracted_media_count?: number | null;
             /**
              * Extracted Media Limit
-             * @description The bound that was reached, when extracted_media_capped is true and the stop was a bound — a number of fetch attempts, or a number of seconds. Null when extraction was not capped, or when it stopped because the container could not be read rather than because a bound fired.
+             * @description The bound that was reached, when extracted_media_capped is true and the stop was a bound — a number of fetch attempts, of seconds, of bytes, or of media listed. Null when extraction was not capped, or when it stopped because the container could not be read rather than because a bound fired.
              */
             extracted_media_limit?: number | null;
             /**
@@ -8870,6 +9566,11 @@ export interface components {
              * @description Timestamp when the content was pulled.
              */
             pulled_at: string;
+            /**
+             * Skipped Attachments
+             * @description Parts of an email delivered to an email content source that were not stored as attachments of this item, each with the reason: displayed_in_body (an image the message body shows, such as a signature logo), over_cap (beyond the per-message attachment limit), no_filename, or undecodable. size_bytes is null for a part that was never decoded. Empty for every other item.
+             */
+            skipped_attachments?: components["schemas"]["SkippedAttachmentResponse"][];
             /**
              * Source Connection Content Version Id
              * @description ID of the source connection content version.
@@ -9602,7 +10303,7 @@ export interface components {
             content_version_id: string | null;
             /**
              * Embedder Warning
-             * @description Set when the file is non-text but the source's embedder is text-only — indexing will rely on OCR / transcription and may produce a FAILED row if no text can be extracted.
+             * @description Set when a file that is not text is indexed from its extracted text alone rather than embedded whole: the item is FAILED if no text can be extracted. Says so when the images inside a document are attached to the item and indexed as well.
              */
             embedder_warning?: string | null;
             /**
@@ -9819,6 +10520,11 @@ export interface components {
          * @description Per-mode rollup for evaluation activity.
          */
         schemas__v1__agent_evaluations__NonManualEvaluationModeStatResponse: {
+            /**
+             * Error
+             * @description Results whose evaluator returned no verdict.
+             */
+            error: number;
             /** Failed */
             failed: number;
             /** Failure Rate */
@@ -9841,6 +10547,11 @@ export interface components {
         schemas__v1__agent_evaluations__NonManualEvaluationSummaryResponse: {
             /** By Mode */
             by_mode: components["schemas"]["schemas__v1__agent_evaluations__NonManualEvaluationModeStatResponse"][];
+            /**
+             * Error
+             * @description Results whose evaluator returned no verdict.
+             */
+            error: number;
             /** Failed */
             failed: number;
             /** Failure Rate */
@@ -12250,6 +12961,58 @@ export interface operations {
             };
         };
     };
+    set_accepted_attachments_api_api_agents__agent_id__triggers__trigger_id__accepted_attachments_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
+            };
+            path: {
+                agent_id: string;
+                trigger_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetAcceptedAttachmentsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AcceptedAttachmentsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
+        };
+    };
     set_email_trigger_config_api_api_agents__agent_id__triggers__trigger_id__email_config_put: {
         parameters: {
             query?: never;
@@ -13936,6 +14699,239 @@ export interface operations {
                 content?: never;
             };
             /** @description The key's user is a member of the account but not an owner or administrator (`error.code` is `permission_denied`). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
+        };
+    };
+    list_content_attachments_api_contents__source_connection_content_version__attachments_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                limit?: number;
+            };
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
+            };
+            path: {
+                source_connection_content_version: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["routers__api__contents__ContentAttachmentsListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
+        };
+    };
+    get_content_attachment_api_contents__source_connection_content_version__attachments__attachment_id__get: {
+        parameters: {
+            query?: {
+                start?: number;
+                end?: number;
+            };
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
+            };
+            path: {
+                source_connection_content_version: string;
+                attachment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["routers__api__contents__ContentAttachmentDetailResponse"];
+                };
+            };
+            /** @description The account has no credits left (`error.code` is `insufficient_credits`). */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
+        };
+    };
+    list_content_attachment_embeddings_api_contents__source_connection_content_version__attachments__attachment_id__embeddings_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                limit?: number;
+            };
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
+            };
+            path: {
+                source_connection_content_version: string;
+                attachment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["routers__api__contents__ContentEmbeddingsListResponse"];
+                };
+            };
+            /** @description The account has no credits left (`error.code` is `insufficient_credits`). */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
+        };
+    };
+    get_content_attachment_file_api_contents__source_connection_content_version__attachments__attachment_id__file_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
+            };
+            path: {
+                source_connection_content_version: string;
+                attachment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The file's bytes. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                    "application/pdf": string;
+                    "audio/*": string;
+                    "image/*": string;
+                    "text/plain": string;
+                    "video/*": string;
+                };
+            };
+            /** @description The account has no credits left (`error.code` is `insufficient_credits`). */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The file is withheld; `error.code` says why. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -17837,6 +18833,58 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SourceContentStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
+        };
+    };
+    list_email_source_rejections_api_api_sources__source_connection_id__email_rejections_get: {
+        parameters: {
+            query?: {
+                /** @description Page number. */
+                page?: number;
+                /** @description Items per page. */
+                limit?: number;
+            };
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
+            };
+            path: {
+                source_connection_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailSourceRejectionListResponse"];
                 };
             };
             /** @description Validation Error */

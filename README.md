@@ -127,7 +127,7 @@ Leave `apiVersion` unset and the header is omitted, so the account's pinned
 baseline applies and responses keep their current shapes. Upgrading this package
 alone never changes the wire contract.
 
-Known versions are on `SeclaiApiVersion` (`V2026_07_01` through `V2026_10_03`,
+Known versions are on `SeclaiApiVersion` (`V2026_07_01` through `V2026_10_21`,
 plus `Default` and `Latest`), imported from `@seclai/sdk`. A version this release was
 **not** built against throws at construction: a newer version can reshape
 responses, and this client would decode them incorrectly rather than reject them.
@@ -173,9 +173,21 @@ default, so the same call can return fewer rows:
 - `setAutoBlockMode()` reports the account's full `total` by default, and the
   number of rows it returned after you opt in.
 
-**Later versions.** Each is cumulative. None changes a response shape this
-client decodes, but `2026-09-30` changes what a string you may be parsing
-contains:
+**Later versions.** Each is cumulative. Some change a value you may be reading,
+a request that used to succeed, or (from `2026-10-21`) which fields can be
+`null`:
+
+- `2026-09-30` and `2026-10-16` change what a string you may be parsing
+  contains — a run's `output`, and a run's `input` when it has uploads.
+- `2026-10-05` changes a value you may branch on: an item held for review
+  reports `content_status` `completed` instead of `failed`, so code that looks
+  for governance holds among `failed` items stops finding them. Check
+  `held_for_review` instead.
+- `2026-10-13` and `2026-10-19` reject with a 400 source settings that were
+  accepted before.
+- `2026-10-21` changes evaluation numbers you may be reading: an `error` result
+  no longer counts as `failed` or toward the rates, and `testDraftEvaluation()`
+  returns `null` `score` and `passed` for one.
 
 | Version | What it changes |
 | --- | --- |
@@ -184,12 +196,50 @@ contains:
 | `2026-09-28` | Agent-definition writes use the current file-list grammar: an omitted `attachments` keeps the stored list and `[]` means no files |
 | `2026-09-30` | **Breaks code that parses `output`.** A run's and a step's `output`, and a step's `input`, are the plain text; below this version an output that has files is a JSON manifest string (`{schema, text, attachments}`). Read files from `attachments`, which is populated on every version |
 | `2026-10-03` | A new LLM step written without `attachments` takes its parent's files, and a new retrieval step's matched media are its files |
+| `2026-10-05` | An item held for review by an Enforce governance policy reports `content_status` `completed` (with `held_for_review: true`) from `listSourceContents()` and `getSourceContentStatus()`. Below it the item reports `failed` with the hold as the `error` |
+| `2026-10-13` | `createSource()` and `updateSource()` reject a `media_types` value other than `images` or `video`, or any value on a source that is not a website or RSS feed, with a 400. Below it an unknown value is dropped |
+| `2026-10-16` | `uploadAgentInput()` accepts a file of any type and it is `ready` at once. Each step receives the file itself when its model reads that type, and its text otherwise; a run's `input` carries only a `# filename` heading per file. Below it only a fixed list of extensions is accepted and each file's extracted text is written into `input`, so poll `getAgentInputUploadStatus()` before running |
+| `2026-10-18` | A source's `document_images` defaults to `true` on every embedder. Below it it defaults to `false` on a text-only embedder |
+| `2026-10-19` | `createSource()` rejects `polling_max_items` on any source type but an RSS feed with a 400. Below it the value is stored |
+| `2026-10-21` | An evaluation result whose evaluator returned no verdict (`error`) is left out of `failed` and of `pass_rate` / `failure_rate` in `getNonManualEvaluationSummary()`, and `getEvaluationCriteriaSummary()` averages `average_score` over passed and failed results only. `testDraftEvaluation()` returns `score` and `passed` as `null` for an `error` result. Below it the summary counts `error` results in `failed` and the rates, `average_score` includes their stored scores, and the test draft returns `score` 0.5 and `passed: false`. The summary's `error` count is returned on every version |
 
 **`Latest` moves with the SDK.** `SeclaiApiVersion.Latest` is the newest version
 the installed release knows, so upgrading the package can opt a client that
 passes it into every version added since — `1.6.0` moved it from `2026-07-27` to
-`2026-10-03`, across the `2026-09-30` output change. Pass a dated constant such
-as `SeclaiApiVersion.V2026_07_27` to keep behaviour fixed across upgrades.
+`2026-10-03`, across the `2026-09-30` output change, and `1.7.0` moves it to
+`2026-10-21`, across the `2026-10-05` status change, the `2026-10-13` and
+`2026-10-19` source-setting rejections, the `2026-10-16` input change and the
+`2026-10-21` evaluation change. Pass a
+dated constant such as `SeclaiApiVersion.V2026_07_27` to keep behaviour fixed
+across upgrades.
+
+## Upgrading to 1.7
+
+Two type changes can stop existing code compiling. If you pass
+`SeclaiApiVersion.Latest`, it now sends `2026-10-21`; the table above lists
+what each version changes.
+
+**`testDraftEvaluation()` can return `null` scores.** When the evaluator
+returns no verdict, `status` is `error`. From API version `2026-10-21`, `score`
+and `passed` are then `null`. An account created after `2026-10-21` ships gets
+that version even without setting `apiVersion`. Check `status` before reading
+them, in JavaScript too; under `strictNullChecks` the type enforces it:
+
+<!-- sdksync:check -->
+```ts
+const result = await client.testDraftEvaluation("agent_id", { step_output: "...", pass_threshold: 0.7 });
+
+// 1.6 and earlier: console.log(result.score.toFixed(2), result.passed);
+if (result.status === "error") {
+  console.log("No verdict:", result.explanation);
+} else {
+  console.log(result.score.toFixed(2), result.passed); // number and boolean here
+}
+```
+
+**`InsufficientCreditsResponse` matches the 402 body.** Read the code at
+`error.code`, not `detail.error`. Code that cast a 402 body to this type threw
+on every real 402 before, so this only fixes it.
 
 ## Resources
 
@@ -294,6 +344,21 @@ for await (const event of client.runStreamingAgent(
 }
 ```
 
+Pass `include_reasoning: true` to also receive `stream_reasoning` events carrying
+the model's reasoning while it thinks. They are sent only for a
+`streaming_result` step whose author enabled `show_reasoning`, and reasoning is
+never part of `output`:
+
+<!-- sdksync:check -->
+```ts
+for await (const event of client.runStreamingAgent("agent_id", {
+  input: "Hello",
+  include_reasoning: true,
+})) {
+  if (event.event === "stream_reasoning") console.log(event.data);
+}
+```
+
 ### Polling
 
 For environments where SSE is not practical, poll for a completed run:
@@ -308,6 +373,7 @@ const result = await client.runAgentAndPoll(
 
 ### Agent input uploads
 
+<!-- sdksync:check -->
 ```ts
 // Discover which files (if any) the agent expects before staging uploads
 const refs = await client.getAgentAttachmentReferences("agent_id");
@@ -316,14 +382,26 @@ if (refs.requires_uploads) {
 }
 
 const upload = await client.uploadAgentInput("agent_id", {
-  file: new Uint8Array([...]),
+  file: new Uint8Array([/* file bytes */]),
   fileName: "input.pdf",
 });
-const status = await client.getAgentInputUploadStatus("agent_id", upload.upload_id);
+// From API version 2026-10-16 the upload is `ready` at once. Below it, poll
+// until `status` is `ready` before running.
+let status = await client.getAgentInputUploadStatus("agent_id", upload.id);
+while (status.status !== "ready") {
+  if (status.status === "failed") throw new Error(`Upload failed: ${status.error}`);
+  await new Promise((resolve) => setTimeout(resolve, 1_000));
+  status = await client.getAgentInputUploadStatus("agent_id", upload.id);
+}
+const run = await client.runAgent("agent_id", { input_upload_id: upload.id, priority: false });
 ```
+
+Only a `dynamic_input` agent takes uploads; any other agent rejects one with a
+400.
 
 ### Agent run attachments
 
+<!-- sdksync:check -->
 ```ts
 // Download a file emitted by a step in an agent run. The attachment_id is the
 // URL-safe-base64 storage_key surfaced in run output manifests / webhooks.
@@ -345,6 +423,31 @@ const config = await client.setEmailTriggerConfig("agent_id", "trigger_id", {
   queue_on_quota: false,        // park over-rate mail instead of failing it
 });
 console.log(config.email_addresses); // ["support.<accountID>@agent.seclai.com", ...]
+```
+
+Set `run_on_attachment_mismatch: true` to run an email whose attachments do not
+fit what the agent accepts: files it cannot take are left out and the problems
+are listed in the run's `email_attachment_issues` metadata. By default the run fails.
+
+### Accepted attachments
+
+Declare the input attachments a trigger accepts. A run's files are each assigned
+to one named slot before any step runs, and steps reference a slot as
+`{{agent.attachments.<name>}}`. The call replaces the whole declaration, and is
+refused with a 400 when the agent references a slot it leaves out. `min` defaults
+to 0. The same slots can be set as `accepted_attachments` on `createAgent()` and
+`updateAgentDefinition()`.
+
+<!-- sdksync:check -->
+```ts
+const agent = await client.getAgent("agent_id");
+const { accepted_attachments } = await client.setAcceptedAttachments("agent_id", agent.trigger_id!, {
+  accepted_attachments: [
+    { name: "invoice", content_types: ["application/pdf"], min: 1, max: 1 },
+    { name: "photos", content_types: ["image/*"], label: "Photos of the damage" },
+  ],
+});
+console.log(accepted_attachments.map((slot) => `${slot.name}: ${slot.min}..${slot.max ?? "any"}`));
 ```
 
 ### Agent email governance
@@ -394,8 +497,10 @@ const detail = await client.getEvaluationCriteria("criteria_id");
 await client.updateEvaluationCriteria("criteria_id", { ... });
 await client.deleteEvaluationCriteria("criteria_id");
 
-// Test a draft
-await client.testDraftEvaluation("agent_id", { criteria: { ... }, run_id: "..." });
+// Test a draft. Check status first: an "error" result has no verdict, and its
+// score and passed can be null.
+const draft = await client.testDraftEvaluation("agent_id", { step_output: "...", pass_threshold: 0.7 });
+if (draft.status !== "error") console.log(draft.score, draft.passed);
 
 // Results by criteria
 const results = await client.listEvaluationResults("criteria_id");
@@ -474,8 +579,39 @@ const batch = await client.listSourceContents("source_id", {
 console.log(batch.pagination.total, failed.data.map((item) => item.error));
 
 const one = await client.getSourceContentStatus("source_id", "cv_1");
-console.log(one.content_status);
+console.log(one.content_status, one.held_for_review);
 ```
+
+An item an Enforce governance policy blocked at import is held for review:
+`held_for_review` is `true` until a reviewer releases it. Its `content_status` is
+`completed` from API version `2026-10-05`, and `failed` with the hold as the
+`error` below it.
+
+An email source stores mail from `email_allowed_senders` only, and lists what it
+refused. Each entry names the sender and the reason, never the subject or body;
+adding a refused sender to `email_allowed_senders` helps only when `authenticated`
+is `true`. Listing rejections requires an account owner or administrator.
+
+<!-- sdksync:check -->
+```ts
+const inbox = await client.createSource({
+  name: "Newsletters",
+  source_type: "email",
+  email_allowed_senders: ["news@example.com", "example.org"],
+});
+console.log(inbox.email_address); // send mail here
+
+const rejections = await client.listEmailSourceRejections(inbox.id, { page: 1, limit: 50 });
+for (const r of rejections.data) console.log(r.from_address, r.reason, r.authenticated);
+
+// Index the images inside documents, and an RSS feed's enclosures
+await client.updateSource("source_id", { document_images: true, feed_attachments: ["enclosures"] });
+```
+
+A `cloud_drive` source takes `cloud_drive_connection_id` (from `listCloudDrives()`)
+on create, and `cloud_drive_folder_path`, `cloud_drive_path_pattern`,
+`cloud_drive_content_types` and `cloud_drive_max_file_mb` to choose which files
+it indexes.
 
 ### Cloud drives
 
@@ -565,6 +701,28 @@ await client.uploadFileToContent("content_id", {
   file: await readFile("updated.pdf"),
   fileName: "updated.pdf",
 });
+```
+
+A content item's attachments are the files an agent step, an email, a feed, a
+web page's media or a document's images added to it. Each says whether it is
+indexed for search and, if indexing failed, why. An email item's
+`skipped_attachments` (on `getContentDetail()`) lists the parts that were not
+stored, with the reason.
+
+<!-- sdksync:check -->
+```ts
+const attachments = await client.listContentAttachments("content_id", { limit: 50 });
+for (const att of attachments.data) {
+  console.log(att.id, att.content_type, att.indexed, att.indexing_error);
+}
+
+const att = await client.getContentAttachment("content_id", "attachment_id", { start: 0, end: 2000 });
+console.log(att.text_content, att.file_withheld);
+const vectors = await client.listContentAttachmentEmbeddings("content_id", "attachment_id");
+
+// Raw Response; 403 while the file is withheld (see `file_withheld`).
+const file = await client.downloadContentAttachment("content_id", "attachment_id");
+const bytes = new Uint8Array(await file.arrayBuffer());
 ```
 
 ### Solutions

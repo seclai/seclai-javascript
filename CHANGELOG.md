@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.7.0] - 2026-10-21
+
+### Changed
+
+- **Breaking:** Type `score` and `passed` on `TestDraftEvaluationResponse` as `number | null` and `boolean | null` when `status` is `error`. From `apiVersion` `2026-10-21`, which an account created after it ships gets even without setting `apiVersion`, an evaluator that returns no verdict sends them as `null`. Under `strictNullChecks`, code that reads them without first checking `status` no longer compiles: check `result.status !== "error"` before reading them, after which they are `number` and `boolean` again. See [Upgrading to 1.7](https://github.com/seclai/seclai-javascript#upgrading-to-17)
+- Sync the bundled OpenAPI spec and regenerate the types. Existing responses gain properties: `email_address`, `email_allowed_senders`, `feed_attachments`, `document_images` and the `cloud_drive_*` settings on `SourceResponse`, `trigger_id` on `AgentSummaryResponse`, `accepted_attachments` on `AgentAttachmentRefsApiResponse`, `email_run_on_attachment_mismatch` on `EmailTriggerConfigResponse`, `held_for_review` on `SourceContentStatusResponse`, `skipped_attachments` on `ContentDetailResponse`, `error` on `NonManualEvaluationSummaryResponse` and `NonManualEvaluationModeStatResponse`, and `status` on `TestDraftEvaluationResponse`
+- Move `SeclaiApiVersion.Latest` to `2026-10-21`. Nothing is sent unless `apiVersion` is set, so a client that passes `SeclaiApiVersion.Latest` now opts into the six versions added below: `2026-10-05` reports an item held for review by a governance policy as `content_status` `completed` instead of `failed`, so code that looks for holds among failed items must read `held_for_review`; `2026-10-13` rejects a `media_types` value other than `images` or `video`, or any value on a source that is not a website or RSS feed, on `createSource()` and `updateSource()` with a 400 where it was dropped; `2026-10-16` accepts an upload of any type as `ready` at once and stops writing its extracted text into a run's `input`; `2026-10-18` defaults a source's `document_images` to `true` on a text-only embedder; `2026-10-19` rejects `polling_max_items` on `createSource()` for any source but an RSS feed with a 400 where it was stored; and `2026-10-21` leaves an evaluation result whose evaluator returned no verdict (`error`) out of `failed` and the rates in `getNonManualEvaluationSummary()` and out of `average_score` in `getEvaluationCriteriaSummary()`, and returns its `score` and `passed` from `testDraftEvaluation()` as `null` instead of 0.5 and `false`
+
+### Added
+
+- Add `setAcceptedAttachments()` to declare the named input attachments a trigger accepts, and `accepted_attachments` on `createAgent()` and `updateAgentDefinition()`. A slot's server-defaulted `min` can be omitted: the slots are typed `AcceptedAttachmentSlotInput`, and the request `SetAcceptedAttachmentsInput`
+- Add `listContentAttachments()`, `getContentAttachment()`, `listContentAttachmentEmbeddings()` and `downloadContentAttachment()` for the files attached to a content item, with their indexing status, text and embeddings. `downloadContentAttachment()` takes a `signal`
+- Add `listEmailSourceRejections()` for the mail an email source refused
+- Add `include_reasoning` to the `runStreamingAgent()` request, to receive `stream_reasoning` events. It stays optional although the schema gives it a default. `runStreamingAgentAndWait()`, which returns no such events, does not take it and does not send one passed anyway
+- Accept the new source settings on `createSource()` and `updateSource()`: `email_allowed_senders`, `feed_attachments`, `document_images` and `cloud_drive_connection_id`, `cloud_drive_folder_path`, `cloud_drive_path_pattern`, `cloud_drive_content_types` and `cloud_drive_max_file_mb`, and `run_on_attachment_mismatch` on `setEmailTriggerConfig()`
+- Add the `SeclaiApiVersion` constants `V2026_10_05`, `V2026_10_13`, `V2026_10_16`, `V2026_10_18`, `V2026_10_19` and `V2026_10_21`, so those versions are accepted as `apiVersion`. The README lists what each one changes
+- Accept a `signal` on `downloadSourceExport()` and `downloadAgentRunAttachment()`
+- Add the type exports `AcceptedAttachmentSlot`, `AcceptedAttachmentSlotInput`, `AcceptedAttachmentsResponse`, `SetAcceptedAttachmentsRequest`, `SetAcceptedAttachmentsInput`, `ContentAttachmentResponse`, `ContentAttachmentsListResponse`, `ContentAttachmentDetailResponse`, `SkippedAttachmentResponse`, `SkippedAttachmentReason`, `EmailSourceRejectionResponse` and `EmailSourceRejectionListResponse`
+
+### Fixed
+
+- Correct `InsufficientCreditsResponse` and `InsufficientCreditsDetail` to the 402 body the API sends: the detail is under `error`, not `detail`, and its machine-readable code is `code`, not `error`. Code that cast a 402 body to this type and read `body.detail.error` threw on every real 402; read `body.error.code` instead
+
 ## [1.6.1] - 2026-10-05
 
 ### Changed
@@ -223,6 +246,7 @@ _Stable release. No functional changes since 0.0.1._
 
 _Initial release._
 
+[1.7.0]: https://github.com/seclai/seclai-javascript/releases/tag/1.7.0
 [1.6.1]: https://github.com/seclai/seclai-javascript/releases/tag/1.6.1
 [1.6.0]: https://github.com/seclai/seclai-javascript/releases/tag/1.6.0
 [1.5.0]: https://github.com/seclai/seclai-javascript/releases/tag/1.5.0
