@@ -213,6 +213,48 @@ passes it into every version added since — `1.6.0` moved it from `2026-07-27` 
 dated constant such as `SeclaiApiVersion.V2026_07_27` to keep behaviour fixed
 across upgrades.
 
+## Upgrading to 1.7
+
+Two type changes can stop existing code compiling. If you pass
+`SeclaiApiVersion.Latest`, it now sends `2026-10-21`; the table above lists
+what each version changes.
+
+**`testDraftEvaluation()` can return `null` scores.** When the evaluator
+returns no verdict, `status` is `error`. From API version `2026-10-21`, `score`
+and `passed` are then `null`. An account created after `2026-10-21` ships gets
+that version even without setting `apiVersion`. The type says so, so under
+`strictNullChecks` read them only after checking `status`:
+
+<!-- sdksync:check -->
+```ts
+const result = await client.testDraftEvaluation("agent_id", { step_output: "...", pass_threshold: 0.7 });
+
+// 1.6 and earlier: console.log(result.score.toFixed(2), result.passed);
+if (result.status === "error") {
+  console.log("No verdict:", result.explanation);
+} else {
+  console.log(result.score.toFixed(2), result.passed); // number and boolean here
+}
+```
+
+**`InsufficientCreditsResponse` matches the 402 body.** The code is at
+`error.code`, not `detail.error`. Code that cast a 402 body to this type threw
+on every real 402 before, so this only fixes it:
+
+```ts
+import { SeclaiAPIStatusError, type InsufficientCreditsResponse } from "@seclai/sdk";
+
+try {
+  await client.runAgent("agent_id", { input: "Hello", priority: false });
+} catch (err) {
+  if (err instanceof SeclaiAPIStatusError && err.statusCode === 402) {
+    // 1.6 and earlier: (JSON.parse(err.responseText ?? "{}") as InsufficientCreditsResponse).detail.error
+    const code = (JSON.parse(err.responseText ?? "{}") as InsufficientCreditsResponse).error.code;
+    console.log(code);
+  }
+}
+```
+
 ## Resources
 
 ### Identity
@@ -469,8 +511,10 @@ const detail = await client.getEvaluationCriteria("criteria_id");
 await client.updateEvaluationCriteria("criteria_id", { ... });
 await client.deleteEvaluationCriteria("criteria_id");
 
-// Test a draft
-await client.testDraftEvaluation("agent_id", { criteria: { ... }, run_id: "..." });
+// Test a draft. Check status first: an "error" result has no verdict, and its
+// score and passed can be null.
+const draft = await client.testDraftEvaluation("agent_id", { step_output: "...", pass_threshold: 0.7 });
+if (draft.status !== "error") console.log(draft.score, draft.passed);
 
 // Results by criteria
 const results = await client.listEvaluationResults("criteria_id");
