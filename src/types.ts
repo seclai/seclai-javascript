@@ -442,10 +442,14 @@ export type TestDraftEvaluationRequest = components["schemas"]["TestDraftEvaluat
  * verdict), `score` and `passed` are `null` with `apiVersion` `2026-10-21` or
  * later, and 0.5 and `false` below it; the spec documents only the latter.
  */
-export type TestDraftEvaluationResponse = Omit<components["schemas"]["TestDraftEvaluationResponse"], "score" | "passed"> & {
-  score: number | null;
-  passed: boolean | null;
-};
+export type TestDraftEvaluationResponse = Omit<
+  components["schemas"]["TestDraftEvaluationResponse"],
+  "status" | "score" | "passed"
+> &
+  (
+    | { status: Exclude<EvaluationStatus, "error">; score: number; passed: boolean }
+    | { status: "error"; score: number | null; passed: boolean | null }
+  );
 
 /** Paginated list of runs compatible with a specific evaluation criteria. */
 export type CompatibleRunListResponse = VersionedList<components["schemas"]["CompatibleRunListResponse"], "data">;

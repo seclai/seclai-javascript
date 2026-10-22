@@ -6,7 +6,7 @@
 
 - Sync the bundled OpenAPI spec and regenerate the types. Existing responses gain properties: `email_address`, `email_allowed_senders`, `feed_attachments`, `document_images` and the `cloud_drive_*` settings on `SourceResponse`, `trigger_id` on `AgentSummaryResponse`, `accepted_attachments` on `AgentAttachmentRefsApiResponse`, `email_run_on_attachment_mismatch` on `EmailTriggerConfigResponse`, `held_for_review` on `SourceContentStatusResponse`, `skipped_attachments` on `ContentDetailResponse`, `error` on `NonManualEvaluationSummaryResponse` and `NonManualEvaluationModeStatResponse`, and `status` on `TestDraftEvaluationResponse`
 - Move `SeclaiApiVersion.Latest` to `2026-10-21`. Nothing is sent unless `apiVersion` is set, so a client that passes `SeclaiApiVersion.Latest` now opts into the six versions added below: `2026-10-05` reports an item held for review by a governance policy as `content_status` `completed` instead of `failed`, so code that looks for holds among failed items must read `held_for_review`; `2026-10-13` rejects a `media_types` value other than `images` or `video`, or any value on a source that is not a website or RSS feed, on `createSource()` and `updateSource()` with a 400 where it was dropped; `2026-10-16` accepts an upload of any type as `ready` at once and stops writing its extracted text into a run's `input`; `2026-10-18` defaults a source's `document_images` to `true` on a text-only embedder; `2026-10-19` rejects `polling_max_items` on `createSource()` for any source but an RSS feed with a 400 where it was stored; and `2026-10-21` leaves an evaluation result whose evaluator returned no verdict (`error`) out of `failed` and the rates in `getNonManualEvaluationSummary()` and out of `average_score` in `getEvaluationCriteriaSummary()`, and returns its `score` and `passed` from `testDraftEvaluation()` as `null` instead of 0.5 and `false`
-- Type `score` and `passed` on `TestDraftEvaluationResponse` as `number | null` and `boolean | null`, as they are for an `error` result from `apiVersion` `2026-10-21`. Code that reads them as a plain number or boolean no longer compiles under `strictNullChecks`
+- Type `score` and `passed` on `TestDraftEvaluationResponse` as `number | null` and `boolean | null` when `status` is `error`, as they are from `apiVersion` `2026-10-21`. Code that reads them without first narrowing `status` away from `error` no longer compiles under `strictNullChecks`
 
 ### Added
 
@@ -21,7 +21,7 @@
 
 ### Fixed
 
-- Correct `InsufficientCreditsResponse` and `InsufficientCreditsDetail` to the 402 body the API sends: the detail is under `error`, not `detail`, and its machine-readable code is `code`, not `error`
+- Correct `InsufficientCreditsResponse` and `InsufficientCreditsDetail` to the 402 body the API sends: the detail is under `error`, not `detail`, and its machine-readable code is `code`, not `error`. Code that reads `detail.error` no longer compiles; it never found the code
 
 ## [1.6.1] - 2026-10-05
 
