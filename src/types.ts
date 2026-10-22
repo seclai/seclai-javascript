@@ -437,8 +437,15 @@ export type NonManualEvaluationModeStatResponse = components["schemas"]["schemas
 /** Request for testing a draft evaluation. */
 export type TestDraftEvaluationRequest = components["schemas"]["TestDraftEvaluationRequest"];
 
-/** Response from testing a draft evaluation. */
-export type TestDraftEvaluationResponse = components["schemas"]["TestDraftEvaluationResponse"];
+/**
+ * Response from testing a draft evaluation. When `status` is `error` (no
+ * verdict), `score` and `passed` are `null` with `apiVersion` `2026-10-21` or
+ * later, and 0.5 and `false` below it; the spec documents only the latter.
+ */
+export type TestDraftEvaluationResponse = Omit<components["schemas"]["TestDraftEvaluationResponse"], "score" | "passed"> & {
+  score: number | null;
+  passed: boolean | null;
+};
 
 /** Paginated list of runs compatible with a specific evaluation criteria. */
 export type CompatibleRunListResponse = VersionedList<components["schemas"]["CompatibleRunListResponse"], "data">;
@@ -840,7 +847,7 @@ export type DmarcFailingSourceResponse = components["schemas"]["DmarcFailingSour
 /** 402 envelope returned when an account has exhausted its credits. */
 export type InsufficientCreditsResponse = components["schemas"]["InsufficientCreditsResponse"];
 
-/** `detail` body of an {@link InsufficientCreditsResponse} (error code, message, and account id). */
+/** `error` body of an {@link InsufficientCreditsResponse} (`code`, message, and account id). */
 export type InsufficientCreditsDetail = components["schemas"]["InsufficientCreditsDetail"];
 
 // ─── Sources (enums) ─────────────────────────────────────────────────────────

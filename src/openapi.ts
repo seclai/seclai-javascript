@@ -269,6 +269,8 @@ export interface paths {
          *
          *     Returns total, passed, failed, error, and flagged counts alongside the
          *     average score, giving a quick overview of how the criteria is performing.
+         *     With ``2026-10-21`` or later, ``average_score`` averages only passed and failed
+         *     results; earlier versions average every stored score, ``error`` included.
          */
         get: operations["get_evaluation_summary_api_agents_evaluation_criteria__criteria_id__summary_get"];
         put?: never;
@@ -291,6 +293,11 @@ export interface paths {
          * @description Get an evaluation summary for API key clients.
          *
          *     Returns aggregated pass/fail/flagged counts and pass rates for each evaluation mode (eval_and_retry, sample_and_flag).
+         *
+         *     With ``2026-10-21`` or later, ``error`` results (the evaluator returned no
+         *     verdict) are left out of ``failed``, and the rates are over passed and
+         *     failed results. Earlier versions count them in ``failed`` and rate over
+         *     every result. ``error`` is returned on every version.
          *
          *     The ``agent_id`` scoping parameter is part of the ``2026-07-27`` changeset
          *     (opt in via the ``Seclai-Version`` header). Clients on the legacy baseline
@@ -847,6 +854,10 @@ export interface paths {
          *     Use this to interactively test evaluation prompts and expectation
          *     configurations while editing criteria.  The evaluation is a billed LLM
          *     call; only its result goes unrecorded.
+         *
+         *     ``status`` is ``error`` when the evaluator returned no verdict. With
+         *     ``Seclai-Version: 2026-10-21`` or later, ``score`` and ``passed`` are then
+         *     ``null``; earlier versions return ``score`` 0.5 and ``passed`` false.
          */
         post: operations["test_draft_evaluation_api_agents__agent_id__evaluation_criteria_test_draft_post"];
         delete?: never;
@@ -6504,7 +6515,7 @@ export interface components {
         EvaluationResultSummaryResponse: {
             /**
              * Average Score
-             * @description Mean score across all evaluated results, or null if none.
+             * @description Mean score of the final passed and failed results, or null if none. On /api before Seclai-Version 2026-10-21 it averages every final result's stored score, `error` included.
              */
             average_score?: number | null;
             /** Error */
@@ -7161,7 +7172,7 @@ export interface components {
         };
         /**
          * InsufficientCreditsDetail
-         * @description ``detail`` body for a 402 ``insufficient_credits`` response.
+         * @description ``error`` body of a 402 ``insufficient_credits`` response.
          */
         InsufficientCreditsDetail: {
             /**
@@ -7170,11 +7181,11 @@ export interface components {
              */
             account_id: string;
             /**
-             * Error
+             * Code
              * @description Stable machine-readable error code.
              * @constant
              */
-            error: "insufficient_credits";
+            code: "insufficient_credits";
             /**
              * Message
              * @description Human-readable explanation.
@@ -7184,9 +7195,11 @@ export interface components {
         /**
          * InsufficientCreditsResponse
          * @description 402 envelope returned when the account has exhausted its credits.
+         *
+         *     The wire shape ``http_exception_handler`` and ``insufficient_credits_exception_handler`` send.
          */
         InsufficientCreditsResponse: {
-            detail: components["schemas"]["InsufficientCreditsDetail"];
+            error: components["schemas"]["InsufficientCreditsDetail"];
         };
         JsonValue: unknown;
         /**
@@ -8537,6 +8550,8 @@ export interface components {
             passed: boolean;
             /** Score */
             score: number;
+            /** @description `passed`, `failed`, or `error` when the evaluator returned no verdict. */
+            status: components["schemas"]["EvaluationStatus"];
         };
         /** UnlinkResourcesRequest */
         UnlinkResourcesRequest: {
@@ -10505,6 +10520,11 @@ export interface components {
          * @description Per-mode rollup for evaluation activity.
          */
         schemas__v1__agent_evaluations__NonManualEvaluationModeStatResponse: {
+            /**
+             * Error
+             * @description Results whose evaluator returned no verdict.
+             */
+            error: number;
             /** Failed */
             failed: number;
             /** Failure Rate */
@@ -10527,6 +10547,11 @@ export interface components {
         schemas__v1__agent_evaluations__NonManualEvaluationSummaryResponse: {
             /** By Mode */
             by_mode: components["schemas"]["schemas__v1__agent_evaluations__NonManualEvaluationModeStatResponse"][];
+            /**
+             * Error
+             * @description Results whose evaluator returned no verdict.
+             */
+            error: number;
             /** Failed */
             failed: number;
             /** Failure Rate */

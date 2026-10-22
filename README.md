@@ -127,7 +127,7 @@ Leave `apiVersion` unset and the header is omitted, so the account's pinned
 baseline applies and responses keep their current shapes. Upgrading this package
 alone never changes the wire contract.
 
-Known versions are on `SeclaiApiVersion` (`V2026_07_01` through `V2026_10_19`,
+Known versions are on `SeclaiApiVersion` (`V2026_07_01` through `V2026_10_21`,
 plus `Default` and `Latest`), imported from `@seclai/sdk`. A version this release was
 **not** built against throws at construction: a newer version can reshape
 responses, and this client would decode them incorrectly rather than reject them.
@@ -173,9 +173,9 @@ default, so the same call can return fewer rows:
 - `setAutoBlockMode()` reports the account's full `total` by default, and the
   number of rows it returned after you opt in.
 
-**Later versions.** Each is cumulative. None changes a response shape this
-client decodes, but some change a value you may be reading or a request that
-used to succeed:
+**Later versions.** Each is cumulative. Some change a value you may be reading,
+a request that used to succeed, or (from `2026-10-21`) which fields can be
+`null`:
 
 - `2026-09-30` and `2026-10-16` change what a string you may be parsing
   contains — a run's `output`, and a run's `input` when it has uploads.
@@ -185,6 +185,9 @@ used to succeed:
   `held_for_review` instead.
 - `2026-10-13` and `2026-10-19` reject with a 400 source settings that were
   accepted before.
+- `2026-10-21` changes evaluation numbers you may be reading: an `error` result
+  no longer counts as `failed` or toward the rates, and `testDraftEvaluation()`
+  returns `null` `score` and `passed` for one.
 
 | Version | What it changes |
 | --- | --- |
@@ -198,13 +201,15 @@ used to succeed:
 | `2026-10-16` | `uploadAgentInput()` accepts a file of any type and it is `ready` at once. Each step receives the file itself when its model reads that type, and its text otherwise; a run's `input` carries only a `# filename` heading per file. Below it only a fixed list of extensions is accepted and each file's extracted text is written into `input`, so poll `getAgentInputUploadStatus()` before running |
 | `2026-10-18` | A source's `document_images` defaults to `true` on every embedder. Below it it defaults to `false` on a text-only embedder |
 | `2026-10-19` | `createSource()` rejects `polling_max_items` on any source type but an RSS feed with a 400. Below it the value is stored |
+| `2026-10-21` | An evaluation result whose evaluator returned no verdict (`error`) is left out of `failed` and of `pass_rate` / `failure_rate` in `getNonManualEvaluationSummary()`, and `getEvaluationCriteriaSummary()` averages `average_score` over passed and failed results only. `testDraftEvaluation()` returns `score` and `passed` as `null` for an `error` result. Below it the summary counts `error` results in `failed` and the rates, `average_score` includes their stored scores, and the test draft returns `score` 0.5 and `passed: false`. The summary's `error` count is returned on every version |
 
 **`Latest` moves with the SDK.** `SeclaiApiVersion.Latest` is the newest version
 the installed release knows, so upgrading the package can opt a client that
 passes it into every version added since — `1.6.0` moved it from `2026-07-27` to
 `2026-10-03`, across the `2026-09-30` output change, and `1.7.0` moves it to
-`2026-10-19`, across the `2026-10-05` status change, the `2026-10-13` and
-`2026-10-19` source-setting rejections and the `2026-10-16` input change. Pass a
+`2026-10-21`, across the `2026-10-05` status change, the `2026-10-13` and
+`2026-10-19` source-setting rejections, the `2026-10-16` input change and the
+`2026-10-21` evaluation change. Pass a
 dated constant such as `SeclaiApiVersion.V2026_07_27` to keep behaviour fixed
 across upgrades.
 

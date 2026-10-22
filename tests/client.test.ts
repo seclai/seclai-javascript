@@ -3058,7 +3058,7 @@ describe("API version constants", () => {
   test("a constant reaches the wire", async () => {
     const client = makeClient(
       (req) => {
-        expect(req.headers["seclai-version"]).toBe("2026-10-19");
+        expect(req.headers["seclai-version"]).toBe("2026-10-21");
         return jsonResponse({ data: [] });
       },
       { apiVersion: SeclaiApiVersion.Latest },
