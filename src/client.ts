@@ -189,7 +189,7 @@ import type {
   ListEvaluationRunsOptions,
   ListCompatibleRunsOptions,
   DateRangeOptions,
-  LastConversationOptions,
+  OffsetPageOptions,
   ListAlertsOptions,
   ListAlertConfigsOptions,
   ListOrganizationAlertPreferencesOptions,
@@ -1878,13 +1878,15 @@ export class Seclai {
   }
 
   /**
-   * Get a summary of non-manual evaluations across an agent's runs.
+   * Get a summary of non-manual evaluations, for one agent or the whole account.
    *
-   * @param agentId - Agent identifier.
-   * @param opts - Date range; the server defaults to the last 30 days.
+   * @param agentId - Agent identifier. Omit (pass `undefined`) for the account-wide summary.
+   * @param opts - Date range. `startDate` and `endDate` together set the range;
+   *   `startDate` alone runs from it through today; otherwise the last `days`
+   *   days apply (server default 30), and an `endDate` without `startDate` is ignored.
    */
   async getNonManualEvaluationSummary(
-    agentId: string,
+    agentId?: string,
     opts: DateRangeOptions = {},
   ): Promise<NonManualEvaluationSummaryResponse> {
     return (await this.request("GET", "/agents/evaluation-results/non-manual-summary", {
@@ -2011,7 +2013,7 @@ export class Seclai {
    * @param opts.offset - Rows to skip (default 0).
    */
   async listBlockedEmailSenders(
-    opts: { limit?: number; offset?: number } = {},
+    opts: OffsetPageOptions = {},
   ): Promise<BlockedEmailSenderListResponse> {
     return keyedList<BlockedEmailSenderListResponse>(
       await this.request("GET", "/agents/blocked-email-senders", {
@@ -2251,7 +2253,8 @@ export class Seclai {
    * Get stats for a memory bank.
    *
    * @param memoryBankId - Memory bank identifier.
-   * @param opts - Date range; the server defaults to the last 30 days.
+   * @param opts - Date range. Only `startDate` and `endDate` together replace
+   *   `days`; either one alone is ignored and the last `days` days apply (server default 30).
    */
   async getMemoryBankStats(memoryBankId: string, opts: DateRangeOptions = {}): Promise<unknown> {
     return await this.request("GET", `/memory_banks/${memoryBankId}/stats`, {
@@ -2318,9 +2321,9 @@ export class Seclai {
   /**
    * Get the last AI conversation for memory banks.
    *
-   * @param opts - How many turns to return and skip.
+   * @param opts - Turns to return (server default 5) and most-recent turns to skip (default 0).
    */
-  async getMemoryBankAiLastConversation(opts: LastConversationOptions = {}): Promise<MemoryBankLastConversationResponse> {
+  async getMemoryBankAiLastConversation(opts: OffsetPageOptions = {}): Promise<MemoryBankLastConversationResponse> {
     return (await this.request("GET", "/memory_banks/ai-assistant/last-conversation", {
       query: { limit: opts.limit, offset: opts.offset },
     })) as MemoryBankLastConversationResponse;
@@ -3394,9 +3397,11 @@ export class Seclai {
   /**
    * List model playground experiments.
    *
-   * @param opts - Optional filters and pagination.
+   * @param opts - Date range and offset paging. Only `startDate` and `endDate`
+   *   together replace `days`; either one alone is ignored and the last `days`
+   *   days apply (server default 30).
    */
-  async listExperiments(opts: { days?: number; startDate?: string; endDate?: string; limit?: number; offset?: number } = {}): Promise<ExperimentListResponse> {
+  async listExperiments(opts: DateRangeOptions & OffsetPageOptions = {}): Promise<ExperimentListResponse> {
     return keyedList<ExperimentListResponse>(
       await this.request("GET", "/models/playground/experiments", {
         query: { days: opts.days, start_date: opts.startDate, end_date: opts.endDate, limit: opts.limit, offset: opts.offset },
@@ -3764,9 +3769,9 @@ export class Seclai {
   /**
    * Get AI assistant memory bank conversation history.
    *
-   * @param opts - How many turns to return and skip.
+   * @param opts - Turns to return (server default 5) and most-recent turns to skip (default 0).
    */
-  async getAiAssistantMemoryBankHistory(opts: LastConversationOptions = {}): Promise<MemoryBankLastConversationResponse> {
+  async getAiAssistantMemoryBankHistory(opts: OffsetPageOptions = {}): Promise<MemoryBankLastConversationResponse> {
     return (await this.request("GET", "/ai-assistant/memory-bank/last-conversation", {
       query: { limit: opts.limit, offset: opts.offset },
     })) as MemoryBankLastConversationResponse;

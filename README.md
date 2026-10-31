@@ -127,7 +127,7 @@ Leave `apiVersion` unset and the header is omitted, so the account's pinned
 baseline applies and responses keep their current shapes. Upgrading this package
 alone never changes the wire contract.
 
-Known versions are on `SeclaiApiVersion` (`V2026_07_01` through `V2026_10_21`,
+Known versions are on `SeclaiApiVersion` (`V2026_07_01` through `V2026_10_28`,
 plus `Default` and `Latest`), imported from `@seclai/sdk`. A version this release was
 **not** built against throws at construction: a newer version can reshape
 responses, and this client would decode them incorrectly rather than reject them.
@@ -317,12 +317,16 @@ ones you leave out; `created_resources` reports what it made.
 <!-- sdksync:check -->
 ```ts
 const examples = await client.listAgentExamples({ query: "support", useCase: "customer_support", limit: 10 });
-console.log(examples.data, examples.pagination.total);
+const example = examples.data[0];
+console.log(example.key, example.title, examples.pagination.total);
+for (const slot of example.resources) {
+  console.log(slot.slot, slot.kind, slot.creatable); // what resource_bindings can bind
+}
 
 const agent = await client.createAgent({
   name: "Support triage",
-  agent_template: "support-triage",
-  resource_bindings: { knowledge_base: "kb_id" },
+  agent_template: example.key,
+  resource_bindings: { [example.resources[0].slot]: "kb_id" },
   create_missing_resources: true,
 });
 console.log(agent.created_resources); // { slot: resource_id } for each resource it created
@@ -563,8 +567,9 @@ const runResults = await client.listRunEvaluationResults("agent_id", "run_id");
 const agentResults = await client.listAgentEvaluationResults("agent_id", { status: "failed", step: "step_id" });
 const evalRuns = await client.listEvaluationRuns("agent_id", { timeFrom: "2026-10-01T00:00:00Z" });
 
-// Non-manual evaluation summary
+// Non-manual evaluation summary, for one agent or the whole account
 const nonManual = await client.getNonManualEvaluationSummary("agent_id", { days: 7 });
+const accountWide = await client.getNonManualEvaluationSummary(undefined, { startDate: "2026-10-01", endDate: "2026-10-31" });
 
 // Compatible runs for a criteria
 const compatible = await client.listCompatibleRuns("criteria_id", { startedAfter: "2026-10-01T00:00:00Z" });

@@ -80,7 +80,7 @@ export type {
   ListEvaluationRunsOptions,
   ListCompatibleRunsOptions,
   DateRangeOptions,
-  LastConversationOptions,
+  OffsetPageOptions,
   ListAlertsOptions,
   ListAlertConfigsOptions,
   ListOrganizationAlertPreferencesOptions,
@@ -94,6 +94,8 @@ export type {
   // Agents
   AgentListResponse,
   AgentExampleListResponse,
+  AgentExample,
+  AgentExampleResource,
   AgentDefinitionResponse,
   AgentExportResponse,
   AgentSummaryResponse,

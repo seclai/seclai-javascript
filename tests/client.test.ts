@@ -1951,6 +1951,17 @@ describe("Agent Evaluations — extended", () => {
     });
     await client.getNonManualEvaluationSummary("ag_1");
   });
+
+  test("getNonManualEvaluationSummary without agentId asks for the account-wide summary", async () => {
+    const client = makeClient((req) => {
+      const u = new URL(req.url);
+      expect(u.pathname).toBe("/agents/evaluation-results/non-manual-summary");
+      expect(u.searchParams.has("agent_id")).toBe(false);
+      expect(u.searchParams.get("start_date")).toBe("2026-10-01");
+      return jsonResponse({ by_mode: [] });
+    });
+    await client.getNonManualEvaluationSummary(undefined, { startDate: "2026-10-01" });
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -3989,5 +4000,66 @@ describe("Query filters", () => {
       return jsonResponse({ data: [], pagination: { page: 1, limit: 20, total: 0, pages: 0, has_next: false, has_prev: false } });
     });
     await call(client);
+  });
+});
+
+describe("Request types", () => {
+  // openapi-typescript marks a property that declares a `default` as required.
+  // For a schema only ever sent as a request body that is wrong, so src/types.ts
+  // wraps each such alias in WithServerDefaults<…, "key" | …>. This lists the
+  // keys from the spec, so a new server default fails here rather than shipping
+  // a request type that forces callers to send it.
+  test("request types leave server-defaulted fields optional", () => {
+    const spec = JSON.parse(
+      readFileSync(new URL("../openapi/seclai.openapi.json", import.meta.url), "utf8"),
+    );
+    const types = readFileSync(new URL("../src/types.ts", import.meta.url), "utf8");
+    const schemas: Record<string, any> = spec.components.schemas;
+
+    const reach = (node: unknown, into: Set<string>): void => {
+      if (Array.isArray(node)) return node.forEach((n) => reach(n, into));
+      if (!node || typeof node !== "object") return;
+      const ref = (node as { $ref?: string }).$ref;
+      if (ref?.startsWith("#/components/schemas/")) {
+        const name = ref.slice("#/components/schemas/".length);
+        if (!into.has(name)) {
+          into.add(name);
+          reach(schemas[name], into);
+        }
+      }
+      Object.values(node).forEach((n) => reach(n, into));
+    };
+    const requests = new Set<string>();
+    const responses = new Set<string>();
+    for (const ops of Object.values<any>(spec.paths)) {
+      for (const op of Object.values<any>(ops)) {
+        if (!op || typeof op !== "object") continue;
+        reach(op.requestBody, requests);
+        for (const [code, r] of Object.entries<any>(op.responses ?? {})) {
+          if (code.startsWith("2")) reach(r, responses);
+        }
+      }
+    }
+
+    const missing: string[] = [];
+    for (const name of requests) {
+      if (responses.has(name)) continue;
+      const schema = schemas[name];
+      const required = new Set<string>(schema.required ?? []);
+      const defaulted = Object.entries<any>(schema.properties ?? {})
+        .filter(([k, v]) => "default" in v && !required.has(k))
+        .map(([k]) => k);
+      if (defaulted.length === 0) continue;
+      const ref = `components["schemas"]["${name}"]`;
+      if (!types.includes(ref)) continue; // not exported as a request type
+      if (types.includes(`Partial<${ref}>`)) continue;
+      const wrapped = types.match(
+        new RegExp(`WithServerDefaults<${ref.replace(/[[\]"]/g, "\\$&")},\\s*([^>]+)>`),
+      );
+      for (const key of defaulted) {
+        if (!wrapped || !wrapped[1].includes(`"${key}"`)) missing.push(`${name}.${key}`);
+      }
+    }
+    expect(missing).toEqual([]);
   });
 });
