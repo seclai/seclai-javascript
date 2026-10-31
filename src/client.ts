@@ -178,6 +178,23 @@ import type {
   UpdateSolutionRequest,
   UpdateSourceBody,
   UploadAgentInputApiResponse,
+  AgentExampleListResponse,
+  ListAgentExamplesOptions,
+  SetSlackTriggerConfigRequest,
+  SlackTriggerConfigResponse,
+  ListSolutionsOptions,
+  ListMemoryBanksOptions,
+  ListEvaluationResultsOptions,
+  ListAgentEvaluationResultsOptions,
+  ListEvaluationRunsOptions,
+  ListCompatibleRunsOptions,
+  DateRangeOptions,
+  LastConversationOptions,
+  ListAlertsOptions,
+  ListAlertConfigsOptions,
+  ListOrganizationAlertPreferencesOptions,
+  ListModelAlertsOptions,
+  ModelRecommendationsOptions,
 } from "./types";
 
 /** Default API base URL (can be overridden with `baseUrl` or `SECLAI_API_URL`). */
@@ -915,6 +932,21 @@ export class Seclai {
     return (await this.request("GET", "/agents", {
       query: { page: opts.page, limit: opts.limit },
     })) as AgentListResponse;
+  }
+
+  /**
+   * List the agent gallery: example agents to start from.
+   *
+   * Pass an entry's `key` as `agent_template` to {@link createAgent}, with
+   * `resource_bindings` for the resources it needs.
+   *
+   * @param opts - Text search, use-case filter and pagination.
+   * @returns A page of gallery entries.
+   */
+  async listAgentExamples(opts: ListAgentExamplesOptions = {}): Promise<AgentExampleListResponse> {
+    return (await this.request("GET", "/agents/examples", {
+      query: { query: opts.query, use_case: opts.useCase, page: opts.page, limit: opts.limit },
+    })) as AgentExampleListResponse;
   }
 
   /**
@@ -1735,12 +1767,22 @@ export class Seclai {
    * List evaluation results for a specific criteria.
    *
    * @param criteriaId - Criteria identifier.
-   * @param opts - Pagination options.
+   * @param opts - Pagination, status, flag and time-range filters.
    */
-  async listEvaluationResults(criteriaId: string, opts: ListOptions = {}): Promise<EvaluationResultListResponse> {
+  async listEvaluationResults(
+    criteriaId: string,
+    opts: ListEvaluationResultsOptions = {},
+  ): Promise<EvaluationResultListResponse> {
     return keyedList<EvaluationResultListResponse>(
       await this.request("GET", `/agents/evaluation-criteria/${criteriaId}/results`, {
-        query: { page: opts.page, limit: opts.limit },
+        query: {
+          page: opts.page,
+          limit: opts.limit,
+          status: opts.status,
+          flagged_only: opts.flaggedOnly,
+          time_from: opts.timeFrom,
+          time_to: opts.timeTo,
+        },
       }),
       "data",
       PAGE_COUNTERS,
@@ -1762,12 +1804,12 @@ export class Seclai {
    * List runs compatible with a specific evaluation criteria.
    *
    * @param criteriaId - Criteria identifier.
-   * @param opts - Pagination options.
+   * @param opts - Pagination and a `startedAfter` filter.
    */
-  async listCompatibleRuns(criteriaId: string, opts: ListOptions = {}): Promise<CompatibleRunListResponse> {
+  async listCompatibleRuns(criteriaId: string, opts: ListCompatibleRunsOptions = {}): Promise<CompatibleRunListResponse> {
     return keyedList<CompatibleRunListResponse>(
       await this.request("GET", `/agents/evaluation-criteria/${criteriaId}/compatible-runs`, {
-        query: { page: opts.page, limit: opts.limit },
+        query: { page: opts.page, limit: opts.limit, started_after: opts.startedAfter },
       }),
       "data",
       PAGE_COUNTERS,
@@ -1789,12 +1831,23 @@ export class Seclai {
    * List all evaluation results for an agent.
    *
    * @param agentId - Agent identifier.
-   * @param opts - Pagination options.
+   * @param opts - Pagination, status, step, flag and time-range filters.
    */
-  async listAgentEvaluationResults(agentId: string, opts: ListOptions = {}): Promise<EvaluationResultWithCriteriaListResponse> {
+  async listAgentEvaluationResults(
+    agentId: string,
+    opts: ListAgentEvaluationResultsOptions = {},
+  ): Promise<EvaluationResultWithCriteriaListResponse> {
     return keyedList<EvaluationResultWithCriteriaListResponse>(
       await this.request("GET", `/agents/${agentId}/evaluation-results`, {
-        query: { page: opts.page, limit: opts.limit },
+        query: {
+          page: opts.page,
+          limit: opts.limit,
+          status: opts.status,
+          step: opts.step,
+          flagged_only: opts.flaggedOnly,
+          time_from: opts.timeFrom,
+          time_to: opts.timeTo,
+        },
       }),
       "data",
       PAGE_COUNTERS,
@@ -1805,12 +1858,19 @@ export class Seclai {
    * List evaluation run summaries for an agent.
    *
    * @param agentId - Agent identifier.
-   * @param opts - Pagination options.
+   * @param opts - Pagination, status, step and time-range filters.
    */
-  async listEvaluationRuns(agentId: string, opts: ListOptions = {}): Promise<EvaluationRunSummaryListResponse> {
+  async listEvaluationRuns(agentId: string, opts: ListEvaluationRunsOptions = {}): Promise<EvaluationRunSummaryListResponse> {
     return keyedList<EvaluationRunSummaryListResponse>(
       await this.request("GET", `/agents/${agentId}/evaluation-runs`, {
-        query: { page: opts.page, limit: opts.limit },
+        query: {
+          page: opts.page,
+          limit: opts.limit,
+          status: opts.status,
+          step: opts.step,
+          time_from: opts.timeFrom,
+          time_to: opts.timeTo,
+        },
       }),
       "data",
       PAGE_COUNTERS,
@@ -1821,10 +1881,14 @@ export class Seclai {
    * Get a summary of non-manual evaluations across an agent's runs.
    *
    * @param agentId - Agent identifier.
+   * @param opts - Date range; the server defaults to the last 30 days.
    */
-  async getNonManualEvaluationSummary(agentId: string): Promise<NonManualEvaluationSummaryResponse> {
+  async getNonManualEvaluationSummary(
+    agentId: string,
+    opts: DateRangeOptions = {},
+  ): Promise<NonManualEvaluationSummaryResponse> {
     return (await this.request("GET", "/agents/evaluation-results/non-manual-summary", {
-      query: { agent_id: agentId },
+      query: { agent_id: agentId, days: opts.days, start_date: opts.startDate, end_date: opts.endDate },
     })) as NonManualEvaluationSummaryResponse;
   }
 
@@ -1853,6 +1917,32 @@ export class Seclai {
     return (await this.request("PUT", `/agents/${agentId}/triggers/${triggerId}/email-config`, {
       json: body,
     })) as EmailTriggerConfigResponse;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Agent Slack Triggers
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Configure an agent's `SLACK_COMMAND` trigger, which people run from Slack
+   * with `/seclai` or the message shortcut.
+   *
+   * Sets the Slack connection, form, channels, reply visibility and conversation
+   * settings. Omitted fields are left unchanged.
+   *
+   * @param agentId - Agent identifier.
+   * @param triggerId - Trigger identifier.
+   * @param body - The fields to set.
+   * @returns The trigger's full Slack config, including any `missing_scopes`.
+   */
+  async setSlackTriggerConfig(
+    agentId: string,
+    triggerId: string,
+    body: SetSlackTriggerConfigRequest,
+  ): Promise<SlackTriggerConfigResponse> {
+    return (await this.request("PUT", `/agents/${agentId}/triggers/${triggerId}/slack-config`, {
+      json: body,
+    })) as SlackTriggerConfigResponse;
   }
 
   /**
@@ -2092,13 +2182,13 @@ export class Seclai {
   /**
    * List memory banks.
    *
-   * @param opts - Pagination and sorting options.
+   * @param opts - Pagination, sorting and a `type` filter.
    * @returns Paginated list of memory banks.
    */
-  async listMemoryBanks(opts: SortableListOptions = {}): Promise<MemoryBankListResponse> {
+  async listMemoryBanks(opts: ListMemoryBanksOptions = {}): Promise<MemoryBankListResponse> {
     return keyedList<MemoryBankListResponse>(
       await this.request("GET", "/memory_banks", {
-        query: { page: opts.page, limit: opts.limit, sort: opts.sort, order: opts.order },
+        query: { page: opts.page, limit: opts.limit, sort: opts.sort, order: opts.order, type: opts.type },
       }),
       "memory_banks",
       PAGE_COUNTERS,
@@ -2161,9 +2251,12 @@ export class Seclai {
    * Get stats for a memory bank.
    *
    * @param memoryBankId - Memory bank identifier.
+   * @param opts - Date range; the server defaults to the last 30 days.
    */
-  async getMemoryBankStats(memoryBankId: string): Promise<unknown> {
-    return await this.request("GET", `/memory_banks/${memoryBankId}/stats`);
+  async getMemoryBankStats(memoryBankId: string, opts: DateRangeOptions = {}): Promise<unknown> {
+    return await this.request("GET", `/memory_banks/${memoryBankId}/stats`, {
+      query: { days: opts.days, start_date: opts.startDate, end_date: opts.endDate },
+    });
   }
 
   /**
@@ -2224,9 +2317,13 @@ export class Seclai {
 
   /**
    * Get the last AI conversation for memory banks.
+   *
+   * @param opts - How many turns to return and skip.
    */
-  async getMemoryBankAiLastConversation(): Promise<MemoryBankLastConversationResponse> {
-    return (await this.request("GET", "/memory_banks/ai-assistant/last-conversation")) as MemoryBankLastConversationResponse;
+  async getMemoryBankAiLastConversation(opts: LastConversationOptions = {}): Promise<MemoryBankLastConversationResponse> {
+    return (await this.request("GET", "/memory_banks/ai-assistant/last-conversation", {
+      query: { limit: opts.limit, offset: opts.offset },
+    })) as MemoryBankLastConversationResponse;
   }
 
   /**
@@ -2710,12 +2807,12 @@ export class Seclai {
   /**
    * List solutions.
    *
-   * @param opts - Pagination and sorting options.
+   * @param opts - Pagination, sorting and a name `search`.
    * @returns Paginated list of solutions.
    */
-  async listSolutions(opts: SortableListOptions = {}): Promise<SolutionListResponse> {
+  async listSolutions(opts: ListSolutionsOptions = {}): Promise<SolutionListResponse> {
     return (await this.request("GET", "/solutions", {
-      query: { page: opts.page, limit: opts.limit, sort: opts.sort, order: opts.order },
+      query: { page: opts.page, limit: opts.limit, sort: opts.sort, order: opts.order, search: opts.search },
     })) as SolutionListResponse;
   }
 
@@ -2936,10 +3033,12 @@ export class Seclai {
 
   /**
    * List governance AI conversations.
+   *
+   * @param opts - `limit`: how many conversations (the server defaults to 20).
    */
-  async listGovernanceAiConversations(): Promise<GovernanceConversationResponse[]> {
+  async listGovernanceAiConversations(opts: { limit?: number } = {}): Promise<GovernanceConversationResponse[]> {
     return listItems<GovernanceConversationResponse>(
-      await this.request("GET", "/governance/ai-assistant/conversations"),
+      await this.request("GET", "/governance/ai-assistant/conversations", { query: { limit: opts.limit } }),
     );
   }
 
@@ -2972,13 +3071,21 @@ export class Seclai {
    * @param opts - Pagination and filter options.
    * @returns Paginated list of alerts.
    */
-  async listAlerts(opts: ListOptions & { status?: string; severity?: string } = {}): Promise<AlertListResponse> {
+  async listAlerts(opts: ListAlertsOptions = {}): Promise<AlertListResponse> {
     // `severity` is deliberately not forwarded: GET /alerts declares no such
     // filter, so it never filtered anything, and sending it is a 422 once
     // `apiVersion` is 2026-07-27 or later. Accepted and dropped so existing
     // call sites keep working.
     return (await this.request("GET", "/alerts", {
-      query: { page: opts.page, limit: opts.limit, status: opts.status },
+      query: {
+        page: opts.page,
+        limit: opts.limit,
+        status: opts.status,
+        agent_id: opts.agentId,
+        source_connection_id: opts.sourceConnectionId,
+        time_from: opts.timeFrom,
+        time_to: opts.timeTo,
+      },
     })) as AlertListResponse;
   }
 
@@ -3042,9 +3149,17 @@ export class Seclai {
    * `configs` and `total` are populated on every API version; `data` and
    * `pagination` are also present once `apiVersion` is 2026-07-27 or later.
    */
-  async listAlertConfigs(opts: ListOptions = {}): Promise<AlertConfigListResponse> {
+  async listAlertConfigs(opts: ListAlertConfigsOptions = {}): Promise<AlertConfigListResponse> {
     return keyedList<AlertConfigListResponse>(
-      await this.request("GET", "/alerts/configs", { query: { page: opts.page, limit: opts.limit } }),
+      await this.request("GET", "/alerts/configs", {
+        query: {
+          page: opts.page,
+          limit: opts.limit,
+          agent_id: opts.agentId,
+          source_connection_id: opts.sourceConnectionId,
+          scope: opts.scope,
+        },
+      }),
       "configs",
       ["total"],
     );
@@ -3094,10 +3209,16 @@ export class Seclai {
 
   /**
    * List organization alert preferences.
+   *
+   * @param opts - Organization filter, and whether to include default subscriptions.
    */
-  async listOrganizationAlertPreferences(): Promise<OrganizationAlertPreferenceListResponse> {
+  async listOrganizationAlertPreferences(
+    opts: ListOrganizationAlertPreferencesOptions = {},
+  ): Promise<OrganizationAlertPreferenceListResponse> {
     return keyedList<OrganizationAlertPreferenceListResponse>(
-      await this.request("GET", "/alerts/organization-preferences/list"),
+      await this.request("GET", "/alerts/organization-preferences/list", {
+        query: { organization_id: opts.organizationId, include_defaults: opts.includeDefaults },
+      }),
       "preferences",
       ["total"],
     );
@@ -3129,15 +3250,17 @@ export class Seclai {
   /**
    * List model alerts.
    *
-   * @param opts - Pagination options.
+   * @param opts - Pagination, an agent filter and `unreadOnly`.
    */
-  async listModelAlerts(opts: ListOptions = {}): Promise<ModelAlertListResponse> {
+  async listModelAlerts(opts: ListModelAlertsOptions = {}): Promise<ModelAlertListResponse> {
     // The endpoint declares limit/offset, not page, so `page` was ignored and
     // every page after the first returned page 1.
     const limit = opts.limit ?? 50;
     const offset = opts.page && opts.page > 1 ? (opts.page - 1) * limit : undefined;
     return keyedList<ModelAlertListResponse>(
-      await this.request("GET", "/models/alerts", { query: { offset, limit: opts.limit } }),
+      await this.request("GET", "/models/alerts", {
+        query: { offset, limit: opts.limit, agent_id: opts.agentId, unread_only: opts.unreadOnly },
+      }),
       "alerts",
       ["total"],
     );
@@ -3170,9 +3293,21 @@ export class Seclai {
    * Get model recommendations.
    *
    * @param modelId - Model identifier.
+   * @param opts - Capabilities and limits a recommended model must have.
    */
-  async getModelRecommendations(modelId: string): Promise<ModelRecommendationsResponse> {
-    return (await this.request("GET", `/models/${modelId}/recommendations`)) as ModelRecommendationsResponse;
+  async getModelRecommendations(
+    modelId: string,
+    opts: ModelRecommendationsOptions = {},
+  ): Promise<ModelRecommendationsResponse> {
+    return (await this.request("GET", `/models/${modelId}/recommendations`, {
+      query: {
+        require_tool_use: opts.requireToolUse,
+        require_structured_output: opts.requireStructuredOutput,
+        require_thinking: opts.requireThinking,
+        min_context_tokens: opts.minContextTokens,
+        min_output_tokens: opts.minOutputTokens,
+      },
+    })) as ModelRecommendationsResponse;
   }
 
   /**
@@ -3628,9 +3763,13 @@ export class Seclai {
 
   /**
    * Get AI assistant memory bank conversation history.
+   *
+   * @param opts - How many turns to return and skip.
    */
-  async getAiAssistantMemoryBankHistory(): Promise<MemoryBankLastConversationResponse> {
-    return (await this.request("GET", "/ai-assistant/memory-bank/last-conversation")) as MemoryBankLastConversationResponse;
+  async getAiAssistantMemoryBankHistory(opts: LastConversationOptions = {}): Promise<MemoryBankLastConversationResponse> {
+    return (await this.request("GET", "/ai-assistant/memory-bank/last-conversation", {
+      query: { limit: opts.limit, offset: opts.offset },
+    })) as MemoryBankLastConversationResponse;
   }
 
   /**

@@ -49,6 +49,12 @@ export type OrganizationInfoResponse = components["schemas"]["OrganizationInfoRe
 /** Paginated list of agents. */
 export type AgentListResponse = components["schemas"]["routers__api__agents__AgentListResponse"];
 
+/**
+ * A page of the agent gallery. Each entry's `key` goes in `agent_template` on
+ * {@link CreateAgentRequest}, with `resource_bindings` for the resources it needs.
+ */
+export type AgentExampleListResponse = components["schemas"]["AgentExampleListResponse"];
+
 /** Full agent configuration including definition and metadata. */
 export type AgentDefinitionResponse = components["schemas"]["AgentDefinitionResponse"];
 
@@ -66,11 +72,25 @@ export type AgentSummaryResponse = components["schemas"]["AgentSummaryResponse"]
  */
 export type CreateAgentRequest = Omit<
   components["schemas"]["routers__api__agents__CreateAgentRequest"],
-  "accepted_attachments"
-> & { accepted_attachments?: AcceptedAttachmentSlotInput[] | null };
+  "accepted_attachments" | "create_missing_resources"
+> & {
+  accepted_attachments?: AcceptedAttachmentSlotInput[] | null;
+  /**
+   * With `agent_template`, create any resource the template needs that
+   * `resource_bindings` does not bind. Defaults to `false`.
+   */
+  create_missing_resources?: boolean;
+};
 
-/** Request body for updating an agent. */
-export type UpdateAgentRequest = components["schemas"]["routers__api__agents__UpdateAgentRequest"];
+/**
+ * Request body for updating an agent. Every field is optional.
+ *
+ * To remove a run or credit limit, send its `set_max_*` flag as `true` and omit
+ * the matching `max_*` field. The `set_*` flags and `apply_import_run_limits`
+ * default to `false` on the server; the generated schema marks them required
+ * only because they declare a default.
+ */
+export type UpdateAgentRequest = Partial<components["schemas"]["routers__api__agents__UpdateAgentRequest"]>;
 
 /**
  * Request body for updating an agent definition (steps, model, etc.).
@@ -150,6 +170,27 @@ export type SetEmailTriggerConfigRequest = components["schemas"]["routers__api__
 
 /** An `EMAIL_RECEIVED` trigger's resolved email address(es) and inbound-handling config. */
 export type EmailTriggerConfigResponse = components["schemas"]["EmailTriggerConfigResponse"];
+
+// ─── Agent Slack Triggers ────────────────────────────────────────────────────
+
+/**
+ * Request body for configuring a `SLACK_COMMAND` trigger.
+ *
+ * Every field is optional, and an omitted field is left unchanged.
+ */
+export type SetSlackTriggerConfigRequest = components["schemas"]["SetSlackTriggerConfigApiRequest"];
+
+/** A `SLACK_COMMAND` trigger's Slack connection, form, channels and conversation settings. */
+export type SlackTriggerConfigResponse = components["schemas"]["SlackTriggerConfigApiResponse"];
+
+/** Where a Slack trigger runs within its scope: `everywhere` or `channel_opt_in`. */
+export type SlackTriggerActivation = components["schemas"]["SlackTriggerActivation"];
+
+/** Which channels a Slack trigger covers: `selected_channels` or `bot_channels`. */
+export type SlackTriggerScope = components["schemas"]["SlackTriggerScope"];
+
+/** Who sees a Slack trigger's reply: `channel` or `private`. */
+export type SlackReplyVisibility = components["schemas"]["SlackReplyVisibility"];
 
 // ─── Agent Email Governance ──────────────────────────────────────────────────
 
@@ -532,6 +573,15 @@ export type CreateSourceBody = components["schemas"]["CreateSourceBody"];
 /** Request body for updating a source. */
 export type UpdateSourceBody = components["schemas"]["UpdateSourceBody"];
 
+/** What a source does when it reaches `max_credits_per_period`: `stop` or `delete`. */
+export type SpendCapAction = components["schemas"]["SpendCapAction"];
+
+/**
+ * Which entries a `delete` spend cap removes first: `oldest_added`,
+ * `oldest_published` or `largest_first`.
+ */
+export type SpendCapDeleteOrder = components["schemas"]["SpendCapDeleteOrder"];
+
 /** Upload response for file uploads to a source. */
 export type FileUploadResponse = components["schemas"]["routers__api__sources__FileUploadResponse"];
 
@@ -890,4 +940,143 @@ export interface SortableListOptions extends ListOptions {
   sort?: string;
   /** Sort order. */
   order?: "asc" | "desc";
+}
+
+/** Filters for {@link Seclai.listAgentExamples}. */
+export interface ListAgentExamplesOptions extends ListOptions {
+  /** Words every matching example must contain. */
+  query?: string;
+  /** Only examples for this use case. */
+  useCase?: string;
+}
+
+/** Filters for {@link Seclai.listSolutions}. */
+export interface ListSolutionsOptions extends SortableListOptions {
+  /** Keep solutions whose name contains this text (case-insensitive). */
+  search?: string;
+}
+
+/** Filters for {@link Seclai.listMemoryBanks}. */
+export interface ListMemoryBanksOptions extends SortableListOptions {
+  /** Keep only one bank type: `conversation` or `general`. */
+  type?: string;
+}
+
+/** Filters for {@link Seclai.listEvaluationResults}. */
+export interface ListEvaluationResultsOptions extends ListOptions {
+  /** Keep only one result status. */
+  status?: string;
+  /** Keep only flagged results. Defaults to `false`. */
+  flaggedOnly?: boolean;
+  /** Earliest result time, ISO 8601. */
+  timeFrom?: string;
+  /** Latest result time, ISO 8601. */
+  timeTo?: string;
+}
+
+/** Filters for {@link Seclai.listAgentEvaluationResults}. */
+export interface ListAgentEvaluationResultsOptions extends ListEvaluationResultsOptions {
+  /** Keep only results for this agent step. */
+  step?: string;
+}
+
+/** Filters for {@link Seclai.listEvaluationRuns}. */
+export interface ListEvaluationRunsOptions extends ListOptions {
+  /** Keep only one status. */
+  status?: string;
+  /** Keep only runs for this agent step. */
+  step?: string;
+  /** Earliest time, ISO 8601. */
+  timeFrom?: string;
+  /** Latest time, ISO 8601. */
+  timeTo?: string;
+}
+
+/** Filters for {@link Seclai.listCompatibleRuns}. */
+export interface ListCompatibleRunsOptions extends ListOptions {
+  /** Only runs started after this time, ISO 8601. */
+  startedAfter?: string;
+}
+
+/**
+ * Date range for {@link Seclai.getNonManualEvaluationSummary} and
+ * {@link Seclai.getMemoryBankStats}. `startDate` and `endDate` take precedence
+ * over `days` when given.
+ */
+export interface DateRangeOptions {
+  /** Days back from today. The server defaults to 30. */
+  days?: number;
+  /** First day, `YYYY-MM-DD`. */
+  startDate?: string;
+  /** Last day, `YYYY-MM-DD`. */
+  endDate?: string;
+}
+
+/** Paging for the AI-assistant last-conversation methods. */
+export interface LastConversationOptions {
+  /** Most turns to return. The server defaults to 5. */
+  limit?: number;
+  /** Most-recent turns to skip. The server defaults to 0. */
+  offset?: number;
+}
+
+/** Filters for {@link Seclai.listAlerts}. */
+export interface ListAlertsOptions extends ListOptions {
+  /** Keep only one alert status. */
+  status?: string;
+  /**
+   * Accepted for compatibility and never sent: `GET /alerts` has no severity
+   * filter.
+   *
+   * @deprecated The API has no severity filter; this never filtered anything.
+   */
+  severity?: string;
+  /** Keep only alerts for this agent. */
+  agentId?: string;
+  /** Keep only alerts for this source connection. */
+  sourceConnectionId?: string;
+  /** Earliest alert time, ISO 8601. */
+  timeFrom?: string;
+  /** Latest alert time, ISO 8601. */
+  timeTo?: string;
+}
+
+/** Filters for {@link Seclai.listAlertConfigs}. */
+export interface ListAlertConfigsOptions extends ListOptions {
+  /** Keep only configs for this agent. */
+  agentId?: string;
+  /** Keep only configs for this source connection. */
+  sourceConnectionId?: string;
+  /** `source` lists the account-level source alert configs. */
+  scope?: string;
+}
+
+/** Filters for {@link Seclai.listOrganizationAlertPreferences}. */
+export interface ListOrganizationAlertPreferencesOptions {
+  /** Keep only one organization's preferences. */
+  organizationId?: string;
+  /** Also list the default subscription for every alert type. Defaults to `false`. */
+  includeDefaults?: boolean;
+}
+
+/** Filters for {@link Seclai.listModelAlerts}. */
+export interface ListModelAlertsOptions extends ListOptions {
+  /** Keep only alerts for this agent. */
+  agentId?: string;
+  /** Keep only unread alerts. Defaults to `false`. */
+  unreadOnly?: boolean;
+}
+
+/** Requirements for {@link Seclai.getModelRecommendations}. */
+export interface ModelRecommendationsOptions {
+  /** Only models that support tool use. */
+  requireToolUse?: boolean;
+  /** Only models that support structured output. */
+  requireStructuredOutput?: boolean;
+  /** Only models that support thinking. */
+  requireThinking?: boolean;
+  /** Smallest acceptable context window, in tokens. */
+  minContextTokens?: number;
+  /** Smallest acceptable output limit, in tokens. */
+  minOutputTokens?: number;
 }

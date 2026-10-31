@@ -188,6 +188,8 @@ a request that used to succeed, or (from `2026-10-21`) which fields can be
 - `2026-10-21` changes evaluation numbers you may be reading: an `error` result
   no longer counts as `failed` or toward the rates, and `testDraftEvaluation()`
   returns `null` `score` and `passed` for one.
+- `2026-10-28` changes what an `if_else` or `switch` step's `output` contains.
+  Read the arm it took from the step's `decision`, which is set on every version.
 
 | Version | What it changes |
 | --- | --- |
@@ -202,6 +204,7 @@ a request that used to succeed, or (from `2026-10-21`) which fields can be
 | `2026-10-18` | A source's `document_images` defaults to `true` on every embedder. Below it it defaults to `false` on a text-only embedder |
 | `2026-10-19` | `createSource()` rejects `polling_max_items` on any source type but an RSS feed with a 400. Below it the value is stored |
 | `2026-10-21` | An evaluation result whose evaluator returned no verdict (`error`) is left out of `failed` and of `pass_rate` / `failure_rate` in `getNonManualEvaluationSummary()`, and `getEvaluationCriteriaSummary()` averages `average_score` over passed and failed results only. `testDraftEvaluation()` returns `score` and `passed` as `null` for an `error` result. Below it the summary counts `error` results in `failed` and the rates, `average_score` includes their stored scores, and the test draft returns `score` 0.5 and `passed: false`. The summary's `error` count is returned on every version |
+| `2026-10-28` | An `if_else` or `switch` step's `output` is the result of the arm it took, or its input when that arm is empty or it took none. Below it the `output` is a `{"branch": ...}` marker naming the arm, with no `attachments`. The step's `decision` names the arm on every version |
 
 **`Latest` moves with the SDK.** `SeclaiApiVersion.Latest` is the newest version
 the installed release knows, so upgrading the package can opt a client that
@@ -209,7 +212,8 @@ passes it into every version added since — `1.6.0` moved it from `2026-07-27` 
 `2026-10-03`, across the `2026-09-30` output change, and `1.7.0` moves it to
 `2026-10-21`, across the `2026-10-05` status change, the `2026-10-13` and
 `2026-10-19` source-setting rejections, the `2026-10-16` input change and the
-`2026-10-21` evaluation change. Pass a
+`2026-10-21` evaluation change, and `1.8.0` moves it to `2026-10-28`,
+across the `if_else` / `switch` step-output change. Pass a
 dated constant such as `SeclaiApiVersion.V2026_07_27` to keep behaviour fixed
 across upgrades.
 
@@ -270,6 +274,10 @@ const fetched = await client.getAgent("agent_id");
 const updated = await client.updateAgent("agent_id", { name: "Renamed" });
 await client.deleteAgent("agent_id");
 
+// Run and credit limits. To remove one, send its set_max_* flag and omit the value.
+await client.updateAgent("agent_id", { max_runs_per_hour: 60, max_credits_per_period: 500 });
+await client.updateAgent("agent_id", { set_max_runs_per_hour: true });
+
 // Pause / resume — a disabled agent stops firing from every trigger path
 const callers = await client.getAgentCallers("agent_id"); // live agents calling this one
 await client.disableAgent("agent_id"); // 409 if any caller above is still live
@@ -297,6 +305,27 @@ const imported = await client.createAgent({
   entity_remap,
 });
 // `imported.import_warnings` lists any items that couldn't be applied.
+```
+
+### Agent examples
+
+The agent gallery lists example agents to start from. Pass an entry's `key` as
+`agent_template` to `createAgent()`. Bind each resource the template needs with
+`resource_bindings`, or set `create_missing_resources` to have the API create the
+ones you leave out; `created_resources` reports what it made.
+
+<!-- sdksync:check -->
+```ts
+const examples = await client.listAgentExamples({ query: "support", useCase: "customer_support", limit: 10 });
+console.log(examples.data, examples.pagination.total);
+
+const agent = await client.createAgent({
+  name: "Support triage",
+  agent_template: "support-triage",
+  resource_bindings: { knowledge_base: "kb_id" },
+  create_missing_resources: true,
+});
+console.log(agent.created_resources); // { slot: resource_id } for each resource it created
 ```
 
 ### Agent runs
@@ -429,6 +458,28 @@ Set `run_on_attachment_mismatch: true` to run an email whose attachments do not
 fit what the agent accepts: files it cannot take are left out and the problems
 are listed in the run's `email_attachment_issues` metadata. By default the run fails.
 
+### Agent Slack triggers
+
+Configure an agent's `SLACK_COMMAND` trigger, which people run from Slack with
+`/seclai` or the message shortcut. Omitted fields are left unchanged.
+
+<!-- sdksync:check -->
+```ts
+const slack = await client.setSlackTriggerConfig("agent_id", "trigger_id", {
+  scope: "selected_channels",    // or "bot_channels"
+  channel_ids: ["C0123456789"],
+  activation: "everywhere",      // or "channel_opt_in"
+  visibility: "private",         // or "channel"
+  allow_dms: true,
+  turns_enabled: true,           // let people keep the conversation going
+  max_turns: 5,
+  form: [{ key: "ticket", label: "Ticket ID", type: "short_text", required: true }],
+});
+console.log(slack.missing_scopes); // Slack scopes the connection lacks for optional features
+```
+
+Each form value reaches the run as `{{metadata.<key>}}`.
+
 ### Accepted attachments
 
 Declare the input attachments a trigger accepts. A run's files are each assigned
@@ -503,18 +554,20 @@ const draft = await client.testDraftEvaluation("agent_id", { step_output: "...",
 if (draft.status !== "error") console.log(draft.score, draft.passed);
 
 // Results by criteria
-const results = await client.listEvaluationResults("criteria_id");
+const results = await client.listEvaluationResults("criteria_id", { flaggedOnly: true, timeFrom: "2026-10-01T00:00:00Z" });
 const summary = await client.getEvaluationCriteriaSummary("criteria_id");
 await client.createEvaluationResult("criteria_id", { ... });
 
 // Results by run
 const runResults = await client.listRunEvaluationResults("agent_id", "run_id");
+const agentResults = await client.listAgentEvaluationResults("agent_id", { status: "failed", step: "step_id" });
+const evalRuns = await client.listEvaluationRuns("agent_id", { timeFrom: "2026-10-01T00:00:00Z" });
 
 // Non-manual evaluation summary
-const nonManual = await client.getNonManualEvaluationSummary("agent_id");
+const nonManual = await client.getNonManualEvaluationSummary("agent_id", { days: 7 });
 
 // Compatible runs for a criteria
-const compatible = await client.listCompatibleRuns("criteria_id");
+const compatible = await client.listCompatibleRuns("criteria_id", { startedAfter: "2026-10-01T00:00:00Z" });
 ```
 
 ### Knowledge bases
@@ -530,14 +583,14 @@ await client.deleteKnowledgeBase("kb_id");
 ### Memory banks
 
 ```ts
-const banks = await client.listMemoryBanks();
+const banks = await client.listMemoryBanks({ type: "conversation" });
 const bank = await client.createMemoryBank({ name: "Chat Memory", type: "conversation" });
 const fetched = await client.getMemoryBank("mb_id");
 await client.updateMemoryBank("mb_id", { name: "Renamed" });
 await client.deleteMemoryBank("mb_id");
 
 // Stats & compaction
-const stats = await client.getMemoryBankStats("mb_id");
+const stats = await client.getMemoryBankStats("mb_id", { startDate: "2026-10-01", endDate: "2026-10-31" });
 await client.compactMemoryBank("mb_id");
 
 // Test compaction
@@ -550,7 +603,7 @@ const agents = await client.getAgentsUsingMemoryBank("mb_id");
 
 // AI assistant
 const suggestion = await client.generateMemoryBankConfig({ user_input: "..." });
-const history = await client.getMemoryBankAiLastConversation();
+const history = await client.getMemoryBankAiLastConversation({ limit: 5 });
 await client.acceptMemoryBankAiSuggestion("conv_id", { ... });
 
 // Source management
@@ -565,6 +618,21 @@ const source = await client.createSource({ name: "My Source", ... });
 const fetched = await client.getSource("source_id");
 await client.updateSource("source_id", { name: "Renamed" });
 await client.deleteSource("source_id");
+```
+
+A spend limit caps the credits a source may commit per billing period. When it is
+reached, `stop` refuses new uploads and email, and `delete` removes entries in
+`spend_cap_delete_order` to make room. Send `null` to remove the limit.
+
+<!-- sdksync:check -->
+```ts
+const capped = await client.updateSource("source_id", {
+  max_credits_per_period: 1000,
+  spend_cap_action: "delete",
+  spend_cap_delete_order: "oldest_published",
+});
+console.log(capped.spend_cap_reached);
+await client.updateSource("source_id", { max_credits_per_period: null });
 ```
 
 Indexing status of a source's content, keyed by the `content_version_id` the
@@ -728,7 +796,7 @@ const bytes = new Uint8Array(await file.arrayBuffer());
 ### Solutions
 
 ```ts
-const solutions = await client.listSolutions();
+const solutions = await client.listSolutions({ search: "billing" });
 const sol = await client.createSolution({ name: "My Solution" });
 const fetched = await client.getSolution("solution_id");
 await client.updateSolution("solution_id", { name: "Renamed" });
@@ -761,7 +829,7 @@ await client.markSolutionConversationTurn("solution_id", "conversation_id", { ..
 
 ```ts
 const plan = await client.generateGovernanceAiPlan({ user_input: "Add a toxicity policy" });
-const convs = await client.listGovernanceAiConversations();
+const convs = await client.listGovernanceAiConversations({ limit: 10 });
 await client.acceptGovernanceAiPlan("conversation_id");
 await client.declineGovernanceAiPlan("conversation_id");
 ```
@@ -769,7 +837,7 @@ await client.declineGovernanceAiPlan("conversation_id");
 ### Alerts
 
 ```ts
-const alerts = await client.listAlerts({ status: "active" });
+const alerts = await client.listAlerts({ status: "active", agentId: "agent_id", timeFrom: "2026-10-01T00:00:00Z" });
 const alert = await client.getAlert("alert_id");
 await client.changeAlertStatus("alert_id", { status: "resolved" });
 await client.addAlertComment("alert_id", { text: "Investigating" });
@@ -779,14 +847,14 @@ await client.subscribeToAlert("alert_id");
 await client.unsubscribeFromAlert("alert_id");
 
 // Alert configs
-const configs = await client.listAlertConfigs();
+const configs = await client.listAlertConfigs({ agentId: "agent_id" });
 await client.createAlertConfig({ ... });
 await client.getAlertConfig("config_id");
 await client.updateAlertConfig("config_id", { ... });
 await client.deleteAlertConfig("config_id");
 
 // Organization preferences
-const prefs = await client.listOrganizationAlertPreferences();
+const prefs = await client.listOrganizationAlertPreferences({ includeDefaults: true });
 await client.updateOrganizationAlertPreference("org_id", "alert_type", { ... });
 ```
 
@@ -807,11 +875,11 @@ const embedders = await client.listEmbeddingModels({ supportsInputMedia: "image"
 const rerankers = await client.listRerankerModels();
 console.log(embedders.models, embedders.default_model_type, rerankers.models);
 
-const alerts = await client.listModelAlerts();
+const alerts = await client.listModelAlerts({ unreadOnly: true });
 await client.markModelAlertRead("alert_id");
 await client.markAllModelAlertsRead();
 const unread = await client.getUnreadModelAlertCount();
-const recs = await client.getModelRecommendations("model_id");
+const recs = await client.getModelRecommendations("model_id", { requireToolUse: true, minContextTokens: 100_000 });
 
 // Model playground experiments
 const experiment = await client.createExperiment({ model_ids: ["model_id"], prompt: "..." });
