@@ -1,9 +1,0 @@
-node_modules
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-dist
-build
-.DS_Store
-.version-backup.json
-.README.md.bak
