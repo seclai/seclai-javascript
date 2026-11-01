@@ -9,6 +9,15 @@
  */
 import type { components } from "./openapi";
 
+/**
+ * `T` with the keys `K` optional. openapi-typescript marks every property that
+ * declares a `default` as required, which is right for a response (the server
+ * always sends it) and wrong for a request body (the server fills it in). Apply
+ * this to a request type's server-defaulted keys only; the test
+ * "request types leave server-defaulted fields optional" lists them from the spec.
+ */
+type WithServerDefaults<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
+
 // ─── General ─────────────────────────────────────────────────────────────────
 
 /** JSON-serializable values accepted/returned by the SDK's low-level `request()` method. */
@@ -49,6 +58,73 @@ export type OrganizationInfoResponse = components["schemas"]["OrganizationInfoRe
 /** Paginated list of agents. */
 export type AgentListResponse = components["schemas"]["routers__api__agents__AgentListResponse"];
 
+/**
+ * A page of the agent gallery. Each entry's `key` goes in `agent_template` on
+ * {@link CreateAgentRequest}, with `resource_bindings` for the resources it needs.
+ */
+export type AgentExampleListResponse = Omit<components["schemas"]["AgentExampleListResponse"], "data"> & {
+  data: AgentExample[];
+};
+
+/**
+ * A resource an {@link AgentExample} needs: bind it in `resource_bindings` under
+ * `slot`, or let `create_missing_resources` create it when `creatable`.
+ */
+export interface AgentExampleResource {
+  /** Slot name, the key in `resource_bindings`. */
+  slot: string;
+  /** Resource kind: knowledge_base, memory_bank, source_connection, mcp_client or cloud_drive_connection. */
+  kind: string;
+  /** Display name of the slot. */
+  label: string;
+  /** What the slot is used for. */
+  description: string;
+  /** The id that stands for this resource in `definition`. */
+  placeholder: string;
+  /** Whether `create_missing_resources` can create it. When false it must be bound to an existing resource. */
+  creatable: boolean;
+  /** For a memory_bank slot, the bank type a bound bank must have. */
+  memory_bank_type: string | null;
+  /** Whether the steps in `definition` name this slot. */
+  named_in_definition: boolean;
+  /** Whether the entry's trigger names this slot; it applies only when the agent keeps the entry's trigger type. */
+  named_in_trigger: boolean;
+  /** Slots whose creation uses this one. */
+  named_in_create_of: string[];
+}
+
+/**
+ * One agent gallery entry from {@link Seclai.listAgentExamples}. Pass `key` as
+ * `agent_template` on {@link CreateAgentRequest}.
+ *
+ * Typed by hand: the spec declares the list's items without a schema.
+ */
+export interface AgentExample {
+  /** Pass as `agent_template` when creating an agent. */
+  key: string;
+  title: string;
+  summary: string;
+  use_cases: string[];
+  tags: string[];
+  /** Other `agent_template` values that create this entry. */
+  aliases: string[];
+  /** A request to the AI assistant that describes this agent. */
+  prompt: string;
+  /** The trigger type the entry is built for. */
+  trigger_type: string;
+  /** The date the entry was added to the gallery, `YYYY-MM-DD`. */
+  created_at: string;
+  /** The template_input trigger's input, when the entry sets one. */
+  trigger_input: string | null;
+  /** The template_input trigger's schedules, applied on create when the trigger type is the entry's own. */
+  schedules: Record<string, unknown>[];
+  /** The trigger's declared attachment slots. Empty when the entry declares none. */
+  accepted_attachments: Record<string, unknown>[];
+  resources: AgentExampleResource[];
+  /** The agent definition, naming each resource by its placeholder. */
+  definition: Record<string, unknown>;
+}
+
 /** Full agent configuration including definition and metadata. */
 export type AgentDefinitionResponse = components["schemas"]["AgentDefinitionResponse"];
 
@@ -65,12 +141,21 @@ export type AgentSummaryResponse = components["schemas"]["AgentSummaryResponse"]
  * server-defaulted `min` can be omitted.
  */
 export type CreateAgentRequest = Omit<
-  components["schemas"]["routers__api__agents__CreateAgentRequest"],
+  WithServerDefaults<components["schemas"]["routers__api__agents__CreateAgentRequest"], "create_missing_resources">,
   "accepted_attachments"
-> & { accepted_attachments?: AcceptedAttachmentSlotInput[] | null };
+> & {
+  accepted_attachments?: AcceptedAttachmentSlotInput[] | null;
+};
 
-/** Request body for updating an agent. */
-export type UpdateAgentRequest = components["schemas"]["routers__api__agents__UpdateAgentRequest"];
+/**
+ * Request body for updating an agent. Every field is optional.
+ *
+ * To remove a run or credit limit, send its `set_max_*` flag as `true` and omit
+ * the matching `max_*` field. The `set_*` flags and `apply_import_run_limits`
+ * default to `false` on the server; the generated schema marks them required
+ * only because they declare a default.
+ */
+export type UpdateAgentRequest = Partial<components["schemas"]["routers__api__agents__UpdateAgentRequest"]>;
 
 /**
  * Request body for updating an agent definition (steps, model, etc.).
@@ -151,6 +236,27 @@ export type SetEmailTriggerConfigRequest = components["schemas"]["routers__api__
 /** An `EMAIL_RECEIVED` trigger's resolved email address(es) and inbound-handling config. */
 export type EmailTriggerConfigResponse = components["schemas"]["EmailTriggerConfigResponse"];
 
+// ─── Agent Slack Triggers ────────────────────────────────────────────────────
+
+/**
+ * Request body for configuring a `SLACK_COMMAND` trigger.
+ *
+ * Every field is optional, and an omitted field is left unchanged.
+ */
+export type SetSlackTriggerConfigRequest = components["schemas"]["SetSlackTriggerConfigApiRequest"];
+
+/** A `SLACK_COMMAND` trigger's Slack connection, form, channels and conversation settings. */
+export type SlackTriggerConfigResponse = components["schemas"]["SlackTriggerConfigApiResponse"];
+
+/** Where a Slack trigger runs within its scope: `everywhere` or `channel_opt_in`. */
+export type SlackTriggerActivation = components["schemas"]["SlackTriggerActivation"];
+
+/** Which channels a Slack trigger covers: `selected_channels` or `bot_channels`. */
+export type SlackTriggerScope = components["schemas"]["SlackTriggerScope"];
+
+/** Who sees a Slack trigger's reply: `channel` or `private`. */
+export type SlackReplyVisibility = components["schemas"]["SlackReplyVisibility"];
+
 // ─── Agent Email Governance ──────────────────────────────────────────────────
 
 /** A recipient's opt-out from an account's agent emails (one agent, or account-wide). */
@@ -160,7 +266,7 @@ export type AgentEmailOptOutResponse = components["schemas"]["AgentEmailOptOutRe
 export type AgentEmailOptOutListResponse = VersionedList<components["schemas"]["AgentEmailOptOutListResponse"], "items">;
 
 /** Request body for blocking an inbound email sender or domain. */
-export type BlockEmailSenderRequest = components["schemas"]["BlockEmailSenderRequest"];
+export type BlockEmailSenderRequest = WithServerDefaults<components["schemas"]["BlockEmailSenderRequest"], "match_type">;
 
 /** A single blocked inbound email sender. */
 export type BlockedEmailSenderResponse = components["schemas"]["BlockedEmailSenderResponse"];
@@ -192,16 +298,10 @@ export type ResumeInboundResponse = components["schemas"]["ResumeInboundResponse
 // ─── Agent Runs ──────────────────────────────────────────────────────────────
 
 /** Request body for starting an agent run. */
-export type AgentRunRequest = components["schemas"]["AgentRunRequest"];
+export type AgentRunRequest = WithServerDefaults<components["schemas"]["AgentRunRequest"], "priority">;
 
-/**
- * Request body for starting an agent run in streaming mode (SSE).
- *
- * `include_reasoning` has a server-side default of `false` and stays optional —
- * the generated type marks it required only because the schema declares a default.
- */
-export type AgentRunStreamRequest = Omit<components["schemas"]["AgentRunStreamRequest"], "include_reasoning"> &
-  Partial<Pick<components["schemas"]["AgentRunStreamRequest"], "include_reasoning">>;
+/** Request body for starting an agent run in streaming mode (SSE). `include_reasoning` defaults to `false`. */
+export type AgentRunStreamRequest = WithServerDefaults<components["schemas"]["AgentRunStreamRequest"], "include_reasoning">;
 
 /** Response body describing an agent run. */
 export type AgentRunResponse = components["schemas"]["AgentRunResponse"];
@@ -222,7 +322,7 @@ export type AgentRunFileResponse = components["schemas"]["AgentRunFileResponse"]
 export type AgentRunToolCallResponse = components["schemas"]["AgentRunToolCallResponse"];
 
 /** Search request for agent runs (traces). */
-export type AgentTraceSearchRequest = components["schemas"]["routers__api__agents__AgentTraceSearchRequest"];
+export type AgentTraceSearchRequest = WithServerDefaults<components["schemas"]["routers__api__agents__AgentTraceSearchRequest"], "top_n">;
 
 /** Search response containing matching agent runs. */
 export type AgentTraceSearchResponse = components["schemas"]["AgentTraceSearchResponse"];
@@ -247,7 +347,7 @@ export type AttachmentRefsSourceApiSummary = components["schemas"]["AttachmentRe
 // ─── Agent Steps AI Assistant ────────────────────────────────────────────────
 
 /** Request body for generating agent workflow steps via AI. */
-export type GenerateAgentStepsRequest = components["schemas"]["GenerateAgentStepsRequest"];
+export type GenerateAgentStepsRequest = WithServerDefaults<components["schemas"]["GenerateAgentStepsRequest"], "mode">;
 
 /** Response containing AI-generated agent workflow steps. */
 export type GenerateAgentStepsResponse = components["schemas"]["GenerateAgentStepsResponse"];
@@ -375,7 +475,7 @@ export type EvaluationCriteriaListResponse = {
 };
 
 /** Request body for creating evaluation criteria. */
-export type CreateEvaluationCriteriaRequest = components["schemas"]["CreateEvaluationCriteriaRequest"];
+export type CreateEvaluationCriteriaRequest = WithServerDefaults<components["schemas"]["CreateEvaluationCriteriaRequest"], "enabled" | "pass_threshold">;
 
 /** Request body for updating evaluation criteria. */
 export type UpdateEvaluationCriteriaRequest = components["schemas"]["UpdateEvaluationCriteriaRequest"];
@@ -387,7 +487,7 @@ export type EvaluationResultResponse = components["schemas"]["EvaluationResultRe
 export type EvaluationResultListResponse = VersionedList<components["schemas"]["EvaluationResultListResponse"], "data">;
 
 /** Request body for creating a manual evaluation result. */
-export type CreateEvaluationResultRequest = components["schemas"]["CreateEvaluationResultRequest"];
+export type CreateEvaluationResultRequest = WithServerDefaults<components["schemas"]["CreateEvaluationResultRequest"], "flagged" | "retry_count" | "retry_triggered">;
 
 /** Summary of evaluation results for a criteria. */
 export type EvaluationResultSummaryResponse = components["schemas"]["EvaluationResultSummaryResponse"];
@@ -435,7 +535,7 @@ export type NonManualEvaluationSummaryResponse = components["schemas"]["schemas_
 export type NonManualEvaluationModeStatResponse = components["schemas"]["schemas__v1__agent_evaluations__NonManualEvaluationModeStatResponse"];
 
 /** Request for testing a draft evaluation. */
-export type TestDraftEvaluationRequest = components["schemas"]["TestDraftEvaluationRequest"];
+export type TestDraftEvaluationRequest = WithServerDefaults<components["schemas"]["TestDraftEvaluationRequest"], "pass_threshold">;
 
 /**
  * Response from testing a draft evaluation. When `status` is `error` (no
@@ -480,7 +580,7 @@ export type MemoryBankListResponse = VersionedList<components["schemas"]["Memory
 export type MemoryBankResponse = components["schemas"]["MemoryBankResponseModel"];
 
 /** Request body for creating a memory bank. */
-export type CreateMemoryBankBody = components["schemas"]["CreateMemoryBankBody"];
+export type CreateMemoryBankBody = WithServerDefaults<components["schemas"]["CreateMemoryBankBody"], "mode" | "strip_quoted_reply_chains" | "type">;
 
 /** Request body for updating a memory bank. */
 export type UpdateMemoryBankBody = components["schemas"]["UpdateMemoryBankBody"];
@@ -504,13 +604,13 @@ export type MemoryBankLastConversationResponse = components["schemas"]["routers_
 export type MemoryBankConversationTurnResponse = components["schemas"]["routers__api__memory_banks__MemoryBankConversationTurnResponse"];
 
 /** Compaction test request for memory banks. */
-export type TestCompactionRequest = components["schemas"]["TestCompactionRequest"];
+export type TestCompactionRequest = WithServerDefaults<components["schemas"]["TestCompactionRequest"], "entry_count">;
 
 /** Compaction test response. */
 export type CompactionTestResponse = components["schemas"]["CompactionTestResponseModel"];
 
 /** Standalone compaction test request. */
-export type StandaloneTestCompactionRequest = components["schemas"]["StandaloneTestCompactionRequest"];
+export type StandaloneTestCompactionRequest = WithServerDefaults<components["schemas"]["StandaloneTestCompactionRequest"], "bank_type" | "entry_count">;
 
 /** Compaction evaluation model result. */
 export type CompactionEvaluationModel = components["schemas"]["CompactionEvaluationModel"];
@@ -532,14 +632,23 @@ export type CreateSourceBody = components["schemas"]["CreateSourceBody"];
 /** Request body for updating a source. */
 export type UpdateSourceBody = components["schemas"]["UpdateSourceBody"];
 
+/** What a source does when it reaches `max_credits_per_period`: `stop` or `delete`. */
+export type SpendCapAction = components["schemas"]["SpendCapAction"];
+
+/**
+ * Which entries a `delete` spend cap removes first: `oldest_added`,
+ * `oldest_published` or `largest_first`.
+ */
+export type SpendCapDeleteOrder = components["schemas"]["SpendCapDeleteOrder"];
+
 /** Upload response for file uploads to a source. */
 export type FileUploadResponse = components["schemas"]["routers__api__sources__FileUploadResponse"];
 
 /** Request body for uploading inline text to a source. */
-export type InlineTextUploadRequest = components["schemas"]["InlineTextUploadRequest"];
+export type InlineTextUploadRequest = WithServerDefaults<components["schemas"]["InlineTextUploadRequest"], "content_type">;
 
 /** Request body for replacing content with inline text. */
-export type InlineTextReplaceRequest = components["schemas"]["InlineTextReplaceRequest"];
+export type InlineTextReplaceRequest = WithServerDefaults<components["schemas"]["InlineTextReplaceRequest"], "content_type">;
 
 /** One content item's indexing status within a source. */
 export type SourceContentStatusResponse = components["schemas"]["SourceContentStatusResponse"];
@@ -651,7 +760,7 @@ export type SolutionResponse = components["schemas"]["routers__api__solutions__S
 export type SolutionSummaryResponse = components["schemas"]["SolutionSummaryResponse"];
 
 /** Request body for creating a solution. */
-export type CreateSolutionRequest = components["schemas"]["CreateSolutionRequest"];
+export type CreateSolutionRequest = WithServerDefaults<components["schemas"]["CreateSolutionRequest"], "description">;
 
 /** Request body for updating a solution. */
 export type UpdateSolutionRequest = components["schemas"]["UpdateSolutionRequest"];
@@ -681,7 +790,7 @@ export type AiAssistantGenerateRequest = components["schemas"]["routers__api__so
 export type AiAssistantGenerateResponse = components["schemas"]["AiAssistantGenerateResponse"];
 
 /** AI assistant accept request for solutions. */
-export type AiAssistantAcceptRequest = components["schemas"]["routers__api__solutions__AiAssistantAcceptRequest"];
+export type AiAssistantAcceptRequest = WithServerDefaults<components["schemas"]["routers__api__solutions__AiAssistantAcceptRequest"], "confirm_deletions">;
 
 /** AI assistant accept response for solutions. */
 export type AiAssistantAcceptResponse = components["schemas"]["AiAssistantAcceptResponse"];
@@ -723,7 +832,7 @@ export type GovernanceAppliedActionResponse = components["schemas"]["AppliedActi
 // ─── Alerts ──────────────────────────────────────────────────────────────────
 
 /** Request body for creating an alert config. */
-export type CreateAlertConfigRequest = components["schemas"]["CreateAlertConfigRequest"];
+export type CreateAlertConfigRequest = WithServerDefaults<components["schemas"]["CreateAlertConfigRequest"], "distribution_type" | "enabled">;
 
 /** Request body for updating an alert config. */
 export type UpdateAlertConfigRequest = components["schemas"]["UpdateAlertConfigRequest"];
@@ -796,7 +905,7 @@ export type VariantCategoryResponse = components["schemas"]["VariantCategoryResp
 export type VariantOptionResponse = components["schemas"]["VariantOptionResponse"];
 
 /** Request body for creating a model playground experiment. */
-export type PlaygroundCreateRequest = components["schemas"]["PlaygroundCreateRequest"];
+export type PlaygroundCreateRequest = WithServerDefaults<components["schemas"]["PlaygroundCreateRequest"], "evaluation_complexity" | "evaluation_mode" | "include_step_output_in_evaluation" | "system_prompt">;
 
 /**
  * Input type for {@link SeclaiClient.createExperiment}.
@@ -810,7 +919,7 @@ export type CreateExperimentInput = Pick<PlaygroundCreateRequest, "model_ids" | 
 // ─── Email Domains ───────────────────────────────────────────────────────────
 
 /** Request body for adding a vanity or custom agent-email domain. */
-export type AddEmailDomainRequest = components["schemas"]["AddEmailDomainRequest"];
+export type AddEmailDomainRequest = WithServerDefaults<components["schemas"]["AddEmailDomainRequest"], "delegated">;
 
 /**
  * Input type for {@link Seclai.addEmailDomain}.
@@ -890,4 +999,134 @@ export interface SortableListOptions extends ListOptions {
   sort?: string;
   /** Sort order. */
   order?: "asc" | "desc";
+}
+
+/** Filters for {@link Seclai.listAgentExamples}. */
+export interface ListAgentExamplesOptions extends ListOptions {
+  /** Words every matching example must contain. */
+  query?: string;
+  /** Only examples for this use case. */
+  useCase?: string;
+}
+
+/** Filters for {@link Seclai.listSolutions}. */
+export interface ListSolutionsOptions extends SortableListOptions {
+  /** Keep solutions whose name contains this text (case-insensitive). */
+  search?: string;
+}
+
+/** Filters for {@link Seclai.listMemoryBanks}. */
+export interface ListMemoryBanksOptions extends SortableListOptions {
+  /** Keep only one bank type. */
+  type?: "conversation" | "general" | (string & {});
+}
+
+/** Filters for {@link Seclai.listEvaluationResults}. */
+export interface ListEvaluationResultsOptions extends ListOptions {
+  /** Keep only one result status. */
+  status?: string;
+  /** Keep only flagged results. Defaults to `false`. */
+  flaggedOnly?: boolean;
+  /** Earliest result time, ISO 8601. */
+  timeFrom?: string;
+  /** Latest result time, ISO 8601. */
+  timeTo?: string;
+}
+
+/** Filters for {@link Seclai.listAgentEvaluationResults}. */
+export interface ListAgentEvaluationResultsOptions extends ListEvaluationResultsOptions {
+  /** Keep only results for this agent step. */
+  step?: string;
+}
+
+/** Filters for {@link Seclai.listEvaluationRuns}: those of {@link ListAgentEvaluationResultsOptions} except `flaggedOnly`. */
+export type ListEvaluationRunsOptions = Omit<ListAgentEvaluationResultsOptions, "flaggedOnly">;
+
+/** Filters for {@link Seclai.listCompatibleRuns}. */
+export interface ListCompatibleRunsOptions extends ListOptions {
+  /** Only runs started after this time, ISO 8601. */
+  startedAfter?: string;
+}
+
+/**
+ * Date range for {@link Seclai.getNonManualEvaluationSummary},
+ * {@link Seclai.getMemoryBankStats} and {@link Seclai.listExperiments}. Each
+ * endpoint combines the dates with `days` its own way; see the method.
+ */
+export interface DateRangeOptions {
+  /** Days back from today. The server defaults to 30. */
+  days?: number;
+  /** First day, `YYYY-MM-DD`. */
+  startDate?: string;
+  /** Last day, `YYYY-MM-DD`. */
+  endDate?: string;
+}
+
+/** Offset paging. Each method documents its server defaults and bounds. */
+export interface OffsetPageOptions {
+  /** Most items to return. */
+  limit?: number;
+  /** Items to skip. */
+  offset?: number;
+}
+
+/** Filters for {@link Seclai.listAlerts}. */
+export interface ListAlertsOptions extends ListOptions {
+  /** Keep only one alert status. */
+  status?: string;
+  /**
+   * Accepted for compatibility and never sent: `GET /alerts` has no severity
+   * filter.
+   *
+   * @deprecated The API has no severity filter; this never filtered anything.
+   */
+  severity?: string;
+  /** Keep only alerts for this agent. */
+  agentId?: string;
+  /** Keep only alerts for this source connection. */
+  sourceConnectionId?: string;
+  /** Earliest alert time, ISO 8601. */
+  timeFrom?: string;
+  /** Latest alert time, ISO 8601. */
+  timeTo?: string;
+}
+
+/** Filters for {@link Seclai.listAlertConfigs}. */
+export interface ListAlertConfigsOptions extends ListOptions {
+  /** Keep only configs for this agent. */
+  agentId?: string;
+  /** Keep only configs for this source connection. */
+  sourceConnectionId?: string;
+  /** `source` lists the account-level source alert configs. */
+  scope?: "source" | (string & {});
+}
+
+/** Filters for {@link Seclai.listOrganizationAlertPreferences}. */
+export interface ListOrganizationAlertPreferencesOptions {
+  /** Keep only one organization's preferences. */
+  organizationId?: string;
+  /** Also list the default subscription for every alert type. Defaults to `false`. */
+  includeDefaults?: boolean;
+}
+
+/** Filters for {@link Seclai.listModelAlerts}. */
+export interface ListModelAlertsOptions extends ListOptions {
+  /** Keep only alerts for this agent. */
+  agentId?: string;
+  /** Keep only unread alerts. Defaults to `false`. */
+  unreadOnly?: boolean;
+}
+
+/** Requirements for {@link Seclai.getModelRecommendations}. */
+export interface ModelRecommendationsOptions {
+  /** Only models that support tool use. */
+  requireToolUse?: boolean;
+  /** Only models that support structured output. */
+  requireStructuredOutput?: boolean;
+  /** Only models that support thinking. */
+  requireThinking?: boolean;
+  /** Smallest acceptable context window, in tokens. */
+  minContextTokens?: number;
+  /** Smallest acceptable output limit, in tokens. */
+  minOutputTokens?: number;
 }

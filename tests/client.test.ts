@@ -1951,6 +1951,17 @@ describe("Agent Evaluations — extended", () => {
     });
     await client.getNonManualEvaluationSummary("ag_1");
   });
+
+  test("getNonManualEvaluationSummary without agentId asks for the account-wide summary", async () => {
+    const client = makeClient((req) => {
+      const u = new URL(req.url);
+      expect(u.pathname).toBe("/agents/evaluation-results/non-manual-summary");
+      expect(u.searchParams.has("agent_id")).toBe(false);
+      expect(u.searchParams.get("start_date")).toBe("2026-10-01");
+      return jsonResponse({ by_mode: [] });
+    });
+    await client.getNonManualEvaluationSummary(undefined, { startDate: "2026-10-01" });
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2457,6 +2468,96 @@ describe("Agent Email Triggers", () => {
       { name: "A", trigger_type: "dynamic_input", accepted_attachments: [{ name: "doc" }] },
       { expected_change_id: "chg_1", definition: {}, accepted_attachments: [{ name: "doc" }] },
     ]);
+  });
+});
+
+describe("Agent Slack Triggers", () => {
+  test("setSlackTriggerConfig sends PUT /agents/:id/triggers/:tid/slack-config", async () => {
+    const client = makeClient((req) => {
+      const u = new URL(req.url);
+      expect(req.method).toBe("PUT");
+      expect(u.pathname).toBe("/agents/ag_1/triggers/tr_1/slack-config");
+      expect(u.search).toBe("");
+      expect(JSON.parse(req.bodyText!)).toEqual({
+        scope: "selected_channels",
+        channel_ids: ["C1", "C2"],
+        visibility: "private",
+        turns_enabled: true,
+        max_turns: 5,
+      });
+      return jsonResponse({
+        trigger_id: "tr_1",
+        agent_id: "ag_1",
+        mcp_client_id: null,
+        slack_team_id: "T1",
+        form: [],
+        scope: "selected_channels",
+        allow_dms: false,
+        activation: "everywhere",
+        visibility: "private",
+        start_without_form: false,
+        turns_enabled: true,
+        turns_anyone: false,
+        max_turns: 5,
+        include_invoker_email: false,
+        notify_failure_after_answer: false,
+        channel_ids: ["C1", "C2"],
+        missing_scopes: ["users:read.email"],
+      });
+    });
+    const config = await client.setSlackTriggerConfig("ag_1", "tr_1", {
+      scope: "selected_channels",
+      channel_ids: ["C1", "C2"],
+      visibility: "private",
+      turns_enabled: true,
+      max_turns: 5,
+    });
+    expect(config.channel_ids).toEqual(["C1", "C2"]);
+    expect(config.missing_scopes).toEqual(["users:read.email"]);
+  });
+
+  test("setSlackTriggerConfig sends only the fields given", async () => {
+    const client = makeClient((req) => {
+      expect(JSON.parse(req.bodyText!)).toEqual({ allow_dms: true });
+      return jsonResponse({ trigger_id: "tr_1", allow_dms: true });
+    });
+    await client.setSlackTriggerConfig("ag_1", "tr_1", { allow_dms: true });
+  });
+});
+
+describe("Agent Examples", () => {
+  test("listAgentExamples sends GET /agents/examples with its filters", async () => {
+    const client = makeClient((req) => {
+      const u = new URL(req.url);
+      expect(req.method).toBe("GET");
+      expect(u.pathname).toBe("/agents/examples");
+      expect(Object.fromEntries(u.searchParams)).toEqual({
+        query: "support inbox",
+        use_case: "customer_support",
+        page: "2",
+        limit: "10",
+      });
+      return jsonResponse({
+        data: [{ key: "support-triage" }],
+        pagination: { page: 2, limit: 10, total: 11, pages: 2, has_next: false, has_prev: true },
+      });
+    });
+    const res = await client.listAgentExamples({
+      query: "support inbox",
+      useCase: "customer_support",
+      page: 2,
+      limit: 10,
+    });
+    expect(res.data).toEqual([{ key: "support-triage" }]);
+    expect(res.pagination.total).toBe(11);
+  });
+
+  test("listAgentExamples sends no query without options", async () => {
+    const client = makeClient((req) => {
+      expect(new URL(req.url).search).toBe("");
+      return jsonResponse({ data: [], pagination: { page: 1, limit: 20, total: 0, pages: 0, has_next: false, has_prev: false } });
+    });
+    await client.listAgentExamples();
   });
 });
 
@@ -3058,7 +3159,7 @@ describe("API version constants", () => {
   test("a constant reaches the wire", async () => {
     const client = makeClient(
       (req) => {
-        expect(req.headers["seclai-version"]).toBe("2026-10-21");
+        expect(req.headers["seclai-version"]).toBe("2026-10-28");
         return jsonResponse({ data: [] });
       },
       { apiVersion: SeclaiApiVersion.Latest },
@@ -3763,5 +3864,202 @@ describe("Header edge cases from untyped callers", () => {
           defaultHeaders: { "Seclai-Version": "2026-07-27", "seclai-version": "2099-01-01" },
         }),
     ).toThrow("defaultHeaders['seclai-version']");
+  });
+});
+
+
+describe("Query filters", () => {
+  type Row = [string, string, (c: Seclai) => Promise<unknown>, Record<string, string>];
+  const rows: Row[] = [
+    [
+      "listEvaluationResults",
+      "/agents/evaluation-criteria/c1/results",
+      (c) =>
+        c.listEvaluationResults("c1", {
+          status: "completed",
+          flaggedOnly: true,
+          timeFrom: "2026-10-01T00:00:00Z",
+          timeTo: "2026-10-31T00:00:00Z",
+        }),
+      { status: "completed", flagged_only: "true", time_from: "2026-10-01T00:00:00Z", time_to: "2026-10-31T00:00:00Z" },
+    ],
+    [
+      "listCompatibleRuns",
+      "/agents/evaluation-criteria/c1/compatible-runs",
+      (c) => c.listCompatibleRuns("c1", { startedAfter: "2026-10-01T00:00:00Z" }),
+      { started_after: "2026-10-01T00:00:00Z" },
+    ],
+    [
+      "listAgentEvaluationResults",
+      "/agents/a1/evaluation-results",
+      (c) =>
+        c.listAgentEvaluationResults("a1", {
+          status: "failed",
+          step: "s1",
+          flaggedOnly: false,
+          timeFrom: "2026-10-01",
+          timeTo: "2026-10-02",
+        }),
+      { status: "failed", step: "s1", flagged_only: "false", time_from: "2026-10-01", time_to: "2026-10-02" },
+    ],
+    [
+      "listEvaluationRuns",
+      "/agents/a1/evaluation-runs",
+      (c) => c.listEvaluationRuns("a1", { status: "completed", step: "s1", timeFrom: "2026-10-01", timeTo: "2026-10-02" }),
+      { status: "completed", step: "s1", time_from: "2026-10-01", time_to: "2026-10-02" },
+    ],
+    [
+      "getNonManualEvaluationSummary",
+      "/agents/evaluation-results/non-manual-summary",
+      (c) => c.getNonManualEvaluationSummary("a1", { days: 7, startDate: "2026-10-01", endDate: "2026-10-07" }),
+      { agent_id: "a1", days: "7", start_date: "2026-10-01", end_date: "2026-10-07" },
+    ],
+    [
+      "getAiAssistantMemoryBankHistory",
+      "/ai-assistant/memory-bank/last-conversation",
+      (c) => c.getAiAssistantMemoryBankHistory({ limit: 3, offset: 2 }),
+      { limit: "3", offset: "2" },
+    ],
+    [
+      "listAlerts",
+      "/alerts",
+      (c) =>
+        c.listAlerts({
+          agentId: "a1",
+          sourceConnectionId: "s1",
+          timeFrom: "2026-10-01T00:00:00Z",
+          timeTo: "2026-10-02T00:00:00Z",
+        }),
+      { agent_id: "a1", source_connection_id: "s1", time_from: "2026-10-01T00:00:00Z", time_to: "2026-10-02T00:00:00Z" },
+    ],
+    [
+      "listAlertConfigs",
+      "/alerts/configs",
+      (c) => c.listAlertConfigs({ agentId: "a1", sourceConnectionId: "s1", scope: "source" }),
+      { agent_id: "a1", source_connection_id: "s1", scope: "source" },
+    ],
+    [
+      "listOrganizationAlertPreferences",
+      "/alerts/organization-preferences/list",
+      (c) => c.listOrganizationAlertPreferences({ organizationId: "o1", includeDefaults: true }),
+      { organization_id: "o1", include_defaults: "true" },
+    ],
+    [
+      "listGovernanceAiConversations",
+      "/governance/ai-assistant/conversations",
+      (c) => c.listGovernanceAiConversations({ limit: 5 }),
+      { limit: "5" },
+    ],
+    ["listMemoryBanks", "/memory_banks", (c) => c.listMemoryBanks({ type: "general" }), { type: "general" }],
+    [
+      "getMemoryBankAiLastConversation",
+      "/memory_banks/ai-assistant/last-conversation",
+      (c) => c.getMemoryBankAiLastConversation({ limit: 4, offset: 1 }),
+      { limit: "4", offset: "1" },
+    ],
+    [
+      "getMemoryBankStats",
+      "/memory_banks/mb1/stats",
+      (c) => c.getMemoryBankStats("mb1", { days: 14, startDate: "2026-10-01", endDate: "2026-10-14" }),
+      { days: "14", start_date: "2026-10-01", end_date: "2026-10-14" },
+    ],
+    [
+      "listModelAlerts",
+      "/models/alerts",
+      (c) => c.listModelAlerts({ agentId: "a1", unreadOnly: true }),
+      { agent_id: "a1", unread_only: "true" },
+    ],
+    [
+      "getModelRecommendations",
+      "/models/m1/recommendations",
+      (c) =>
+        c.getModelRecommendations("m1", {
+          requireToolUse: true,
+          requireStructuredOutput: false,
+          requireThinking: true,
+          minContextTokens: 100000,
+          minOutputTokens: 8000,
+        }),
+      {
+        require_tool_use: "true",
+        require_structured_output: "false",
+        require_thinking: "true",
+        min_context_tokens: "100000",
+        min_output_tokens: "8000",
+      },
+    ],
+    ["listSolutions", "/solutions", (c) => c.listSolutions({ search: "billing" }), { search: "billing" }],
+  ];
+
+  test.each(rows)("%s sends its filters as snake_case query keys", async (_name, path, call, query) => {
+    const client = makeClient((req) => {
+      const u = new URL(req.url);
+      expect(req.method).toBe("GET");
+      expect(u.pathname).toBe(path);
+      expect(Object.fromEntries(u.searchParams)).toEqual(query);
+      return jsonResponse({ data: [], pagination: { page: 1, limit: 20, total: 0, pages: 0, has_next: false, has_prev: false } });
+    });
+    await call(client);
+  });
+});
+
+describe("Request types", () => {
+  // openapi-typescript marks a property that declares a `default` as required.
+  // For a schema only ever sent as a request body that is wrong, so src/types.ts
+  // wraps each such alias in WithServerDefaults<…, "key" | …>. This lists the
+  // keys from the spec, so a new server default fails here rather than shipping
+  // a request type that forces callers to send it.
+  test("request types leave server-defaulted fields optional", () => {
+    const spec = JSON.parse(
+      readFileSync(new URL("../openapi/seclai.openapi.json", import.meta.url), "utf8"),
+    );
+    const types = readFileSync(new URL("../src/types.ts", import.meta.url), "utf8");
+    const schemas: Record<string, any> = spec.components.schemas;
+
+    const reach = (node: unknown, into: Set<string>): void => {
+      if (Array.isArray(node)) return node.forEach((n) => reach(n, into));
+      if (!node || typeof node !== "object") return;
+      const ref = (node as { $ref?: string }).$ref;
+      if (ref?.startsWith("#/components/schemas/")) {
+        const name = ref.slice("#/components/schemas/".length);
+        if (!into.has(name)) {
+          into.add(name);
+          reach(schemas[name], into);
+        }
+      }
+      Object.values(node).forEach((n) => reach(n, into));
+    };
+    const requests = new Set<string>();
+    const responses = new Set<string>();
+    for (const ops of Object.values<any>(spec.paths)) {
+      for (const op of Object.values<any>(ops)) {
+        if (!op || typeof op !== "object") continue;
+        reach(op.requestBody, requests);
+        for (const [code, r] of Object.entries<any>(op.responses ?? {})) {
+          if (code.startsWith("2")) reach(r, responses);
+        }
+      }
+    }
+
+    const missing: string[] = [];
+    for (const name of requests) {
+      if (responses.has(name)) continue;
+      const schema = schemas[name];
+      const required = new Set<string>(schema.required ?? []);
+      const defaulted = Object.entries<any>(schema.properties ?? {})
+        .filter(([k, v]) => "default" in v && !required.has(k))
+        .map(([k]) => k);
+      if (defaulted.length === 0) continue;
+      const ref = `components["schemas"]["${name}"]`;
+      if (!types.includes(ref)) continue; // not exported as a request type
+      if (types.includes(`Partial<${ref}>`)) continue;
+      const wrapped = types.match(
+        new RegExp(`WithServerDefaults<${ref.replace(/[[\]"]/g, "\\$&")},\\s*([^>]+)>`),
+      );
+      for (const key of defaulted) {
+        if (!wrapped || !wrapped[1].includes(`"${key}"`)) missing.push(`${name}.${key}`);
+      }
+    }
+    expect(missing).toEqual([]);
   });
 });

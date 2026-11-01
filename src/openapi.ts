@@ -27,11 +27,11 @@ export interface paths {
          *     Trigger types:
          *     - `dynamic_input`: triggered via API with user-provided input
          *     - `template_input`: triggered via API with a predefined template
-         *     - `schedule`: triggered on a schedule
-         *     - `new_content`: triggered when new content arrives
          *     - `email_received`: a virtual email inbox; runs when mail arrives at the agent's address. Configure the alias/allowlist with `PUT /agents/{agent_id}/triggers/{trigger_id}/email-config`, using the `trigger_id` this response returns.
          *
-         *     Templates: `blank`, `retrieval_example`, `simple_qa`, `summarizer`, `json_extractor`, `content_change_notifier`, `scheduled_report`, `webhook_pipeline`
+         *     Starting from the agent gallery:
+         *     - Pass a `key` from `GET /agents/examples` as `agent_template`, or `blank` for an empty agent.
+         *     - Bind the template's resource slots to existing resources with `resource_bindings`, or set `create_missing_resources` to have the creatable ones created.
          *
          *     Importing an existing agent:
          *     - Pass `agent_definition` with the JSON shape produced by `GET /agents/{id}/export`. The full extras suite (alert_configs, evaluation_criteria, governance_policies, schedules, solutions) is applied; items that don't resolve in this account are reported in the response's `import_warnings` array.
@@ -314,6 +314,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/agents/examples": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List agent gallery examples
+         * @description List the agent gallery: example agents to start from, searchable by text and filterable by use case. Pass an entry's `key` as `agent_template` on POST /agents, with `resource_bindings` for the resources it needs.
+         */
+        get: operations["list_agent_examples_api_agents_examples_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/agents/inbound-email-rejections": {
         parameters: {
             query?: never;
@@ -508,11 +528,13 @@ export interface paths {
         get: operations["get_agent_metadata_api_agents__agent_id__get"];
         /**
          * Update agent metadata
-         * @description Update an agent's name, description, evaluation settings, and model lifecycle settings.
+         * @description Update an agent's name, description, evaluation settings, model lifecycle settings and run limits.
          *
          *     Evaluation settings: `evaluation_mode` ('output_expectation', 'eval_and_retry', 'sample_and_flag'), `default_evaluation_tier` ('fast', 'balanced', 'thorough'), `max_retries`, `retry_on_failure`, `sampling_config`.
          *
          *     Model lifecycle settings: `prompt_model_auto_upgrade_strategy` ('none', 'early_adopter', 'middle_of_road', 'cautious_adopter'), `prompt_model_auto_rollback_enabled`, `prompt_model_auto_rollback_triggers` (list of 'agent_eval_fail', 'governance_flag', 'governance_block', 'agent_run_failed').
+         *
+         *     Run limits (each must be greater than 0; pass the paired `set_<name>: true` with the value omitted to remove one): `max_credits_per_run`, `max_credits_per_period`, `max_runs_per_hour`, `max_runs_per_day`, `max_runs_total`. A runs-per-hour or per-day value above the plan's run quota is rejected with 400.
          *
          *     Replacing the workflow from an export:
          *     - Pass `agent_definition` with the JSON shape produced by `GET /agents/{id}/export`. Update only touches the workflow + agent metadata — alert_configs, evaluation_criteria, governance_policies, schedules, and solution links from the imported file are NOT applied (use the dedicated endpoints for those, or `POST /agents` to import as a new agent).
@@ -1143,6 +1165,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/agents/{agent_id}/triggers/{trigger_id}/slack-config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Configure a SLACK_COMMAND trigger
+         * @description Set the Slack connection, form, channels, visibility and conversation settings of an agent's SLACK_COMMAND trigger, which people run from Slack with `/seclai` or the message shortcut. Omitted fields are left unchanged.
+         *
+         *     Auth & scoping: requires `X-API-Key` header or OAuth Bearer token; the trigger must belong to an agent in the key's account.
+         */
+        put: operations["set_slack_trigger_config_api_api_agents__agent_id__triggers__trigger_id__slack_config_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/agents/{agent_id}/upload-input": {
         parameters: {
             query?: never;
@@ -1430,7 +1474,7 @@ export interface paths {
          * @description Create a new alert configuration.
          *
          *     Agent alert types: run_failed, consecutive_failures, error_rate_spike, run_burst, slow_run, credits_low_threshold, credits_runout_prediction, credits_usage_spike, non_manual_eval_failed, non_manual_eval_flagged, governance_flagged, governance_blocked, model_newer_available, model_deprecated, model_sunset.
-         *     Source alert types: pull_failed, consecutive_pull_failures, pull_error_rate_spike.
+         *     Source alert types: pull_failed, consecutive_pull_failures, pull_error_rate_spike, source_spend_limit_reached (needs source_connection_id).
          *
          *     Distribution types: owner, owner_admins, selected_members. Organization accounts are normalized to owner_admins.
          *
@@ -3481,6 +3525,8 @@ export interface paths {
          * @description Update a content source's configuration. Only provided fields are changed; omitted fields are left unchanged.
          *
          *     System-managed sources only allow `retention_days` updates.
+         *
+         *     A source with a spend limit that reaches it refuses new content with a 402 `source_spend_limit_reached` (`spend_cap_action: stop`), or deletes entries to make room (`delete`); a `delete` source whose spend already fills the limit refuses new content too.
          */
         put: operations["update_source_api_sources__source_connection_id__put"];
         /**
@@ -4160,6 +4206,12 @@ export interface components {
          * @enum {string}
          */
         AgentEvaluationTier: "fast" | "balanced" | "thorough";
+        /** AgentExampleListResponse */
+        AgentExampleListResponse: {
+            /** Data */
+            data: unknown[];
+            pagination: components["schemas"]["PaginationResponse"];
+        };
         /**
          * AgentExportResponse
          * @description Portable JSON snapshot of an agent definition.
@@ -4167,7 +4219,7 @@ export interface components {
         AgentExportResponse: {
             /**
              * Agent
-             * @description Agent metadata and full definition. Keys: name, description, schema_version, definition, default_evaluation_tier, evaluation_mode, sampling_config, max_retries, retry_on_failure, prompt_model_auto_upgrade_strategy, prompt_model_auto_rollback_enabled, prompt_model_auto_rollback_triggers, created_at, updated_at.
+             * @description Agent metadata and full definition. Keys: name, description, schema_version, definition, default_evaluation_tier, evaluation_mode, sampling_config, max_retries, retry_on_failure, prompt_model_auto_upgrade_strategy, prompt_model_auto_rollback_enabled, prompt_model_auto_rollback_triggers, max_credits_per_run, max_credits_per_period, max_runs_per_hour, max_runs_per_day, max_runs_total, created_at, updated_at.
              */
             agent: {
                 [key: string]: unknown;
@@ -4438,6 +4490,11 @@ export interface components {
              */
             credits_used: number;
             /**
+             * Decision
+             * @description The arm an `if_else` or `switch` step took: `then` or `else`, or the case name or `else`. Null for other step types, until the step has decided, and when a `switch` took no arm.
+             */
+            decision?: string | null;
+            /**
              * Duration Seconds
              * @description Duration of the step attempt in seconds.
              */
@@ -4454,7 +4511,7 @@ export interface components {
             input: string | null;
             /**
              * Output
-             * @description Output text produced by the step, if any; its files are in `attachments`.  Below `Seclai-Version: 2026-09-30`, the manifest JSON when the step output files and is not a `for_each`.
+             * @description Output text produced by the step, if any; its files are in `attachments`.  Below `Seclai-Version: 2026-09-30`, the manifest JSON when the step output files and is not a `for_each`.  For an `if_else` or `switch`, the result of the arm it took (its input when that arm is empty or it took none); below `Seclai-Version: 2026-10-28`, the `{"branch": ...}` marker naming that arm, with no `attachments`.
              */
             output: string | null;
             /**
@@ -4599,6 +4656,13 @@ export interface components {
              */
             created_at: string;
             /**
+             * Created Resources
+             * @description On a create from an `agent_template`: {slot: resource_id} for each resource `create_missing_resources` created.
+             */
+            created_resources?: {
+                [key: string]: string;
+            } | null;
+            /**
              * Default Evaluation Tier
              * @description Default evaluation tier: fast, balanced, or thorough.
              */
@@ -4641,11 +4705,36 @@ export interface components {
              */
             import_warnings?: components["schemas"]["ImportSkipResponse"][] | null;
             /**
+             * Max Credits Per Period
+             * @description Credit limit per billing period; null when none.
+             */
+            max_credits_per_period?: number | null;
+            /**
+             * Max Credits Per Run
+             * @description Credit limit per run; null when none.
+             */
+            max_credits_per_run?: number | null;
+            /**
              * Max Retries
              * @description Max retries for eval_and_retry mode.
              * @default 3
              */
             max_retries: number;
+            /**
+             * Max Runs Per Day
+             * @description Runs per day limit; null when none.
+             */
+            max_runs_per_day?: number | null;
+            /**
+             * Max Runs Per Hour
+             * @description Runs per hour limit; null when none.
+             */
+            max_runs_per_hour?: number | null;
+            /**
+             * Max Runs Total
+             * @description Limit on runs in total; null when none.
+             */
+            max_runs_total?: number | null;
             /**
              * Name
              * @description Agent name.
@@ -4681,6 +4770,11 @@ export interface components {
             sampling_config?: {
                 [key: string]: unknown;
             } | null;
+            /**
+             * Solution Id
+             * @description On a create from an `agent_template` that created resources: the solution grouping the agent with them.
+             */
+            solution_id?: string | null;
             /**
              * Trigger Id
              * @description ID of the agent's trigger, for the `/agents/{agent_id}/triggers/{trigger_id}/…` endpoints such as `accepted-attachments` and `email-config`.
@@ -6164,7 +6258,7 @@ export interface components {
             id: string;
             /**
              * Reason
-             * @description Why it was refused: sender_not_allowed, unauthenticated_sender, unreadable_from, sender_blocked, spam, virus, unsafe_content, rate_limited, account_not_chargeable or empty_message; or, for a message the source received before, what became of the earlier one: repeat_stored, repeat_held, repeat_deleted or repeat_in_progress.
+             * @description Why it was refused: sender_not_allowed, unauthenticated_sender, unreadable_from, sender_blocked, spam, virus, unsafe_content, rate_limited, account_not_chargeable, spend_limit_reached or empty_message; or, for a message the source received before, what became of the earlier one: repeat_stored, repeat_held, repeat_deleted or repeat_in_progress.
              */
             reason: string;
             /**
@@ -7873,7 +7967,7 @@ export interface components {
         SetAcceptedAttachmentsRequest: {
             /**
              * Accepted Attachments
-             * @description The input attachments the trigger accepts; ``null`` accepts any files (one attachment named ``files``). Only ``dynamic_input`` and ``email_received`` triggers take files.
+             * @description The input attachments the trigger accepts; ``null`` accepts any files (one attachment named ``files``). Only ``dynamic_input``, ``email_received`` and ``slack_command`` triggers take files.
              */
             accepted_attachments: components["schemas"]["AcceptedAttachmentSlot"][] | null;
         };
@@ -7884,6 +7978,54 @@ export interface components {
         SetAutoBlockModeRequest: {
             /** Mode */
             mode: string;
+        };
+        /**
+         * SetSlackTriggerConfigApiRequest
+         * @description Omitted fields are left unchanged.
+         */
+        SetSlackTriggerConfigApiRequest: {
+            /** @description `everywhere` in scope, or `channel_opt_in`. */
+            activation?: components["schemas"]["SlackTriggerActivation"] | null;
+            /**
+             * Allow Dms
+             * @description Runnable in the app's own DMs.
+             */
+            allow_dms?: boolean | null;
+            /** Channel Ids */
+            channel_ids?: string[] | null;
+            /**
+             * Form
+             * @description Form fields `{key, label, type, required, hint, choices, max_length}`. `type`: short_text, long_text, number, single_choice, multi_choice, yes_no, date, slack_user or slack_channel. Each value reaches the run as `{{metadata.<key>}}`.
+             */
+            form?: {
+                [key: string]: unknown;
+            }[] | null;
+            /** Include Invoker Email */
+            include_invoker_email?: boolean | null;
+            /**
+             * Input
+             * @description The trigger's input template. Each `{{metadata.<key>}}` in it must be a form field key or a platform key; it is checked together with `form`.
+             */
+            input?: string | null;
+            /** Max Turns */
+            max_turns?: number | null;
+            /**
+             * Mcp Client Id
+             * @description The account's connected Slack (Bot) MCP client.
+             */
+            mcp_client_id?: string | null;
+            /** Notify Failure After Answer */
+            notify_failure_after_answer?: boolean | null;
+            /** @description `selected_channels` (see `channel_ids`) or `bot_channels`. */
+            scope?: components["schemas"]["SlackTriggerScope"] | null;
+            /** Start Without Form */
+            start_without_form?: boolean | null;
+            /** Turns Anyone */
+            turns_anyone?: boolean | null;
+            /** Turns Enabled */
+            turns_enabled?: boolean | null;
+            /** @description `channel`, or `private` (replies in the person's DM). */
+            visibility?: components["schemas"]["SlackReplyVisibility"] | null;
         };
         /**
          * SkippedAttachmentReason
@@ -7913,6 +8055,69 @@ export interface components {
              */
             size_bytes: number | null;
         };
+        /**
+         * SlackReplyVisibility
+         * @enum {string}
+         */
+        SlackReplyVisibility: "channel" | "private";
+        /**
+         * SlackTriggerActivation
+         * @enum {string}
+         */
+        SlackTriggerActivation: "everywhere" | "channel_opt_in";
+        /** SlackTriggerConfigApiResponse */
+        SlackTriggerConfigApiResponse: {
+            /** Activation */
+            activation: string;
+            /**
+             * Agent Id
+             * Format: uuid
+             */
+            agent_id: string;
+            /** Allow Dms */
+            allow_dms: boolean;
+            /** Channel Ids */
+            channel_ids: string[];
+            /** Form */
+            form: {
+                [key: string]: unknown;
+            }[];
+            /** Include Invoker Email */
+            include_invoker_email: boolean;
+            /** Max Turns */
+            max_turns: number | null;
+            /** Mcp Client Id */
+            mcp_client_id: string | null;
+            /**
+             * Missing Scopes
+             * @description Scopes the Slack connection lacks for optional features.
+             */
+            missing_scopes: string[];
+            /** Notify Failure After Answer */
+            notify_failure_after_answer: boolean;
+            /** Scope */
+            scope: string;
+            /** Slack Team Id */
+            slack_team_id: string | null;
+            /** Start Without Form */
+            start_without_form: boolean;
+            /**
+             * Trigger Id
+             * Format: uuid
+             */
+            trigger_id: string;
+            /** Turns Anyone */
+            turns_anyone: boolean;
+            /** Turns Enabled */
+            turns_enabled: boolean;
+            /** Visibility */
+            visibility: string;
+        };
+        /**
+         * SlackTriggerScope
+         * @enum {string}
+         */
+        SlackTriggerScope: "selected_channels" | "bot_channels";
         /** SolutionSourceConnectionResponse */
         SolutionSourceConnectionResponse: {
             /**
@@ -8079,7 +8284,7 @@ export interface components {
             extracted_media_limit?: number | null;
             /**
              * Held For Review
-             * @description An ENFORCE governance policy blocked this item at import. It is held for review and is not retrievable: resolving its blocking evaluations releases it into the source, and it is purged when the hold window ends.
+             * @description An ENFORCE governance policy blocked this item at import. It is held for review and is not retrievable: resolving its blocking evaluations releases it into the source; left unresolved, it is purged when the hold window ends.
              * @default false
              */
             held_for_review: boolean;
@@ -8104,8 +8309,13 @@ export interface components {
              */
             pulled_at: string;
             /**
+             * Release Waiting Reason
+             * @description Set on a held item review approved whose release was refused: why it waits, the account being unable to pay for it or the source's spend limit having no room for it. Its release is retried; null until one is refused.
+             */
+            release_waiting_reason?: string | null;
+            /**
              * Source Connection Content Version Id
-             * @description ID to pass to `GET /contents/{id}`. `null` until the item has finished indexing — an item that is still processing, or that failed, has no retrievable content and keeps this `null`.
+             * @description ID to pass to `GET /contents/{id}`. `null` while the item has no retrievable content.
              */
             source_connection_content_version_id: string | null;
             /**
@@ -8314,6 +8524,11 @@ export interface components {
             /** @description Index mode for custom_index sources: fast_and_cheap, balanced, slow_and_thorough, or custom. */
             index_mode?: components["schemas"]["SourceIndexMode"] | null;
             /**
+             * Max Credits Per Period
+             * @description The source's spend limit: credits it may commit per billing period. Null when it has none.
+             */
+            max_credits_per_period?: number | null;
+            /**
              * Media Types
              * @description Media kinds in a web page's main content that are attached to the page's item and indexed (subset of ['images', 'video']). On a website or RSS source 'images' also covers the images inside PDF, DOCX, PPTX and XLSX files.
              */
@@ -8365,6 +8580,22 @@ export interface components {
              */
             source_type: string;
             /**
+             * @description What the source does once it reaches its spend limit.
+             * @default stop
+             */
+            spend_cap_action: components["schemas"]["SpendCapAction"];
+            /**
+             * @description Which entries a `delete` spend limit removes first.
+             * @default oldest_added
+             */
+            spend_cap_delete_order: components["schemas"]["SpendCapDeleteOrder"];
+            /**
+             * Spend Cap Reached
+             * @description True while the spend limit refuses uploads and email to this source.
+             * @default false
+             */
+            spend_cap_reached: boolean;
+            /**
              * System Managed
              * @description Indicates if this source is automatically managed by the system (e.g., agent traces).
              * @default false
@@ -8381,6 +8612,17 @@ export interface components {
              */
             url: string | null;
         };
+        /**
+         * SpendCapAction
+         * @enum {string}
+         */
+        SpendCapAction: "stop" | "delete";
+        /**
+         * SpendCapDeleteOrder
+         * @description Which entries a DELETE cap removes first.
+         * @enum {string}
+         */
+        SpendCapDeleteOrder: "oldest_added" | "oldest_published" | "largest_first";
         /**
          * StandaloneTestCompactionRequest
          * @description Request body for testing a compaction prompt *without* an existing bank.
@@ -8794,6 +9036,11 @@ export interface components {
              */
             feed_attachments?: string[] | null;
             /**
+             * Max Credits Per Period
+             * @description Spend limit: the credits this source may commit per billing period — what the account was charged for it this period plus the storage of what it holds until the period ends. Send null to remove the limit; omit to leave it unchanged.
+             */
+            max_credits_per_period?: number | null;
+            /**
              * Media Types
              * @description Media kinds in a web page's main content to attach to the page's item and index, on a website or RSS source. Subset of ['images', 'video']. From `Seclai-Version: 2026-10-13` any other value, and any kind on another source type, is refused with a 400; older versions drop an unknown value and store the rest. A kind the source's embedder cannot index is stored and not indexed (see `supported_input_media` on GET /models/embedders). [] attaches no media from web pages. 'images' also covers the images inside PDF, DOCX, PPTX and XLSX files. Applies to pages and documents added after it changes.
              */
@@ -8813,6 +9060,10 @@ export interface components {
              * @description New retention period in days — content older than this is deleted permanently. Send null to clear the window: content is then kept indefinitely. Omit the field to leave it unchanged.
              */
             retention_days?: number | null;
+            /** @description Once the limit is reached: `stop` refuses new content; `delete` deletes entries, in `spend_cap_delete_order`, to make room, and refuses new content as `stop` does once spend already fills the limit. Deleting does not return credits already spent. */
+            spend_cap_action?: components["schemas"]["SpendCapAction"] | null;
+            /** @description Which entries `delete` removes first: `oldest_added`, `oldest_published` or `largest_first`. */
+            spend_cap_delete_order?: components["schemas"]["SpendCapDeleteOrder"] | null;
         };
         /** UploadAgentInputApiResponse */
         UploadAgentInputApiResponse: {
@@ -9072,9 +9323,15 @@ export interface components {
             } | null;
             /**
              * Agent Template
-             * @description Template to initialize the agent from. Values: blank, retrieval_example, simple_qa, summarizer, json_extractor, content_change_notifier, scheduled_report, webhook_pipeline.
+             * @description Agent gallery entry to start from: a `key` from GET /agents/examples, or `blank`. The keys retrieval_example and simple_qa remain accepted for their gallery entries.
              */
             agent_template?: string | null;
+            /**
+             * Create Missing Resources
+             * @description For an `agent_template`: create each creatable resource slot left out of `resource_bindings`, and group the agent with them in a new solution. When false, an unbound slot the template needs is an error.
+             * @default false
+             */
+            create_missing_resources: boolean;
             /**
              * Description
              * @description Optional description.
@@ -9093,11 +9350,17 @@ export interface components {
              */
             name: string;
             /**
-             * Trigger Type
-             * @description Trigger type: dynamic_input, template_input, schedule, new_content, email_received.
-             * @default dynamic_input
+             * Resource Bindings
+             * @description For an `agent_template`: the existing resource to use for each of the template's resource slots, as {slot: resource_id}. GET /agents/examples lists each template's slots.
              */
-            trigger_type: string;
+            resource_bindings?: {
+                [key: string]: string;
+            } | null;
+            /**
+             * Trigger Type
+             * @description Defaults to dynamic_input, or to the template's own trigger type for an `agent_template` without `agent_definition`.
+             */
+            trigger_type?: string | null;
         };
         /**
          * GovernancePolicyRefResponse
@@ -9164,6 +9427,12 @@ export interface components {
                 [key: string]: unknown;
             } | null;
             /**
+             * Apply Import Run Limits
+             * @description With `agent_definition`, also replace the agent's run limits with the payload's (a null there removes a limit). Off by default: the agent keeps its limits.
+             * @default false
+             */
+            apply_import_run_limits: boolean;
+            /**
              * Default Evaluation Tier
              * @description Default evaluation tier: 'fast', 'balanced', or 'thorough'.
              */
@@ -9186,10 +9455,35 @@ export interface components {
              */
             evaluation_mode?: string | null;
             /**
+             * Max Credits Per Period
+             * @description Credit limit per billing period of the paying account: once reached, runs stop at their next step and new runs are refused.
+             */
+            max_credits_per_period?: number | null;
+            /**
+             * Max Credits Per Run
+             * @description Credit limit per run: a run that reaches it is stopped before its next step.
+             */
+            max_credits_per_run?: number | null;
+            /**
              * Max Retries
              * @description Max retries for eval_and_retry mode (1-10).
              */
             max_retries?: number | null;
+            /**
+             * Max Runs Per Day
+             * @description Runs per day; at most the plan's run quota.
+             */
+            max_runs_per_day?: number | null;
+            /**
+             * Max Runs Per Hour
+             * @description Runs per hour; at most the plan's run quota.
+             */
+            max_runs_per_hour?: number | null;
+            /**
+             * Max Runs Total
+             * @description Runs in total; once reached, new runs are refused.
+             */
+            max_runs_total?: number | null;
             /**
              * Name
              * @description New name for the agent.
@@ -9225,6 +9519,36 @@ export interface components {
              * @default false
              */
             set_default_evaluation_tier: boolean;
+            /**
+             * Set Max Credits Per Period
+             * @description When true and max_credits_per_period is omitted, removes the limit.
+             * @default false
+             */
+            set_max_credits_per_period: boolean;
+            /**
+             * Set Max Credits Per Run
+             * @description When true and max_credits_per_run is omitted, removes the limit.
+             * @default false
+             */
+            set_max_credits_per_run: boolean;
+            /**
+             * Set Max Runs Per Day
+             * @description When true and max_runs_per_day is omitted, removes the limit.
+             * @default false
+             */
+            set_max_runs_per_day: boolean;
+            /**
+             * Set Max Runs Per Hour
+             * @description When true and max_runs_per_hour is omitted, removes the limit.
+             * @default false
+             */
+            set_max_runs_per_hour: boolean;
+            /**
+             * Set Max Runs Total
+             * @description When true and max_runs_total is omitted, removes the limit.
+             * @default false
+             */
+            set_max_runs_total: boolean;
             /**
              * Set Prompt Model Auto Rollback Triggers
              * @description When true and prompt_model_auto_rollback_triggers is omitted, clears the list to null (revert to system defaults).
@@ -11368,6 +11692,60 @@ export interface operations {
             };
         };
     };
+    list_agent_examples_api_agents_examples_get: {
+        parameters: {
+            query?: {
+                /** @description Words every match must contain. */
+                query?: string | null;
+                /** @description Only entries for this use case. */
+                use_case?: string | null;
+                /** @description Page number */
+                page?: number;
+                /** @description Items per page */
+                limit?: number;
+            };
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentExampleListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
+        };
+    };
     list_inbound_email_rejections_api_api_agents_inbound_email_rejections_get: {
         parameters: {
             query?: {
@@ -13041,6 +13419,58 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EmailTriggerConfigResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
+        };
+    };
+    set_slack_trigger_config_api_api_agents__agent_id__triggers__trigger_id__slack_config_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
+            };
+            path: {
+                agent_id: string;
+                trigger_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetSlackTriggerConfigApiRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SlackTriggerConfigApiResponse"];
                 };
             };
             /** @description Validation Error */

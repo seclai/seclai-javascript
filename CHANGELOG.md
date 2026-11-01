@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.8.0] - 2026-10-31
+
+### Changed
+
+- Sync the bundled OpenAPI spec and regenerate the types. Existing responses gain properties: `decision` on `AgentRunStepResponse`, `created_resources`, `solution_id` and the run and credit limits `max_runs_total`, `max_runs_per_day`, `max_runs_per_hour`, `max_credits_per_run` and `max_credits_per_period` on `AgentSummaryResponse`, `max_credits_per_period`, `spend_cap_action`, `spend_cap_delete_order` and `spend_cap_reached` on `SourceResponse`, and `release_waiting_reason` on `SourceContentStatusResponse`
+- Move `SeclaiApiVersion.Latest` to `2026-10-28`. Nothing is sent unless `apiVersion` is set, so a client that passes `SeclaiApiVersion.Latest` now opts into `2026-10-28`: an `if_else` or `switch` step's `output` is the result of the arm it took, where it was a `{"branch": ...}` marker naming the arm. Read the arm from the step's new `decision`, which is set on every version
+- Mark `severity` on `listAlerts()` deprecated. It has never been sent, because `GET /alerts` has no severity filter
+
+### Added
+
+- Add `listAgentExamples()` for the agent gallery, searchable with `query` and filterable by `useCase`, returning typed `AgentExample` entries with the `resources` each needs, and accept `agent_template` entries from it on `createAgent()` with `resource_bindings` and `create_missing_resources`
+- Add `setSlackTriggerConfig()` to configure an agent's `SLACK_COMMAND` trigger: its Slack connection, form, channels, activation, reply visibility and conversation settings
+- Accept the run and credit limits on `updateAgent()`: `max_runs_total`, `max_runs_per_day`, `max_runs_per_hour`, `max_credits_per_run` and `max_credits_per_period`, a `set_max_*` flag for each to remove it, and `apply_import_run_limits`
+- Accept a spend limit on `updateSource()`: `max_credits_per_period`, `spend_cap_action` and `spend_cap_delete_order`
+- Accept the query filters the API declares and no method sent: `status`, `flaggedOnly`, `timeFrom` and `timeTo` on `listEvaluationResults()` and `listAgentEvaluationResults()`, which also takes `step`; `status`, `step`, `timeFrom` and `timeTo` on `listEvaluationRuns()`; `startedAfter` on `listCompatibleRuns()`; `days`, `startDate` and `endDate` on `getNonManualEvaluationSummary()` and `getMemoryBankStats()` (each method documents how the dates combine with `days`); `limit` and `offset` on `getMemoryBankAiLastConversation()` and `getAiAssistantMemoryBankHistory()`; `agentId`, `sourceConnectionId`, `timeFrom` and `timeTo` on `listAlerts()`; `agentId`, `sourceConnectionId` and `scope` on `listAlertConfigs()`; `organizationId` and `includeDefaults` on `listOrganizationAlertPreferences()`; `limit` on `listGovernanceAiConversations()`; `type` on `listMemoryBanks()`; `agentId` and `unreadOnly` on `listModelAlerts()`; `requireToolUse`, `requireStructuredOutput`, `requireThinking`, `minContextTokens` and `minOutputTokens` on `getModelRecommendations()`; and `search` on `listSolutions()`
+- Let `getNonManualEvaluationSummary()` omit `agentId` for the account-wide summary
+- Add the `SeclaiApiVersion.V2026_10_28` constant, so that version is accepted as `apiVersion`
+- Add the type exports `AgentExampleListResponse`, `AgentExample`, `AgentExampleResource`, `SetSlackTriggerConfigRequest`, `SlackTriggerConfigResponse`, `SlackTriggerActivation`, `SlackTriggerScope`, `SlackReplyVisibility`, `SpendCapAction` and `SpendCapDeleteOrder`, and the option types `ListAgentExamplesOptions`, `ListEvaluationResultsOptions`, `ListAgentEvaluationResultsOptions`, `ListEvaluationRunsOptions`, `ListCompatibleRunsOptions`, `DateRangeOptions`, `OffsetPageOptions`, `ListAlertsOptions`, `ListAlertConfigsOptions`, `ListOrganizationAlertPreferencesOptions`, `ListMemoryBanksOptions`, `ListModelAlertsOptions`, `ModelRecommendationsOptions` and `ListSolutionsOptions`
+
+### Fixed
+
+- Make every field of `UpdateAgentRequest` optional. `updateAgent()` required `set_default_evaluation_tier`, `set_prompt_model_auto_rollback_triggers` and `set_sampling_config`, which the server defaults to `false`, so `updateAgent(id, { name })` did not compile
+- Make server-defaulted fields optional on the request types that required them, so a call can leave them to the server: `description` on `CreateSolutionRequest` (`createSolution({ name })` did not compile), `priority` on `AgentRunRequest`, `enabled` and `distribution_type` on `CreateAlertConfigRequest`, `mode`, `type` and `strip_quoted_reply_chains` on `CreateMemoryBankBody`, `enabled` and `pass_threshold` on `CreateEvaluationCriteriaRequest`, `flagged`, `retry_count` and `retry_triggered` on `CreateEvaluationResultRequest`, `content_type` on `InlineTextUploadRequest` and `InlineTextReplaceRequest`, `entry_count` on `TestCompactionRequest`, `entry_count` and `bank_type` on `StandaloneTestCompactionRequest`, `match_type` on `BlockEmailSenderRequest`, `delegated` on `AddEmailDomainRequest`, `mode` on `GenerateAgentStepsRequest`, `pass_threshold` on `TestDraftEvaluationRequest`, `top_n` on `AgentTraceSearchRequest`, `confirm_deletions` on `AiAssistantAcceptRequest`, and the playground settings on `PlaygroundCreateRequest`. Response types are unchanged
+
 ## [1.7.0] - 2026-10-21
 
 ### Changed
@@ -246,6 +270,7 @@ _Stable release. No functional changes since 0.0.1._
 
 _Initial release._
 
+[1.8.0]: https://github.com/seclai/seclai-javascript/releases/tag/1.8.0
 [1.7.0]: https://github.com/seclai/seclai-javascript/releases/tag/1.7.0
 [1.6.1]: https://github.com/seclai/seclai-javascript/releases/tag/1.6.1
 [1.6.0]: https://github.com/seclai/seclai-javascript/releases/tag/1.6.0

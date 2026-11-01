@@ -72,6 +72,20 @@ export type {
   PaginationResponse,
   ListOptions,
   SortableListOptions,
+  ListAgentExamplesOptions,
+  ListSolutionsOptions,
+  ListMemoryBanksOptions,
+  ListEvaluationResultsOptions,
+  ListAgentEvaluationResultsOptions,
+  ListEvaluationRunsOptions,
+  ListCompatibleRunsOptions,
+  DateRangeOptions,
+  OffsetPageOptions,
+  ListAlertsOptions,
+  ListAlertConfigsOptions,
+  ListOrganizationAlertPreferencesOptions,
+  ListModelAlertsOptions,
+  ModelRecommendationsOptions,
 
   // Identity
   MeResponse,
@@ -79,6 +93,9 @@ export type {
 
   // Agents
   AgentListResponse,
+  AgentExampleListResponse,
+  AgentExample,
+  AgentExampleResource,
   AgentDefinitionResponse,
   AgentExportResponse,
   AgentSummaryResponse,
@@ -96,6 +113,13 @@ export type {
   // Agent Email Triggers
   SetEmailTriggerConfigRequest,
   EmailTriggerConfigResponse,
+
+  // Agent Slack Triggers
+  SetSlackTriggerConfigRequest,
+  SlackTriggerConfigResponse,
+  SlackTriggerActivation,
+  SlackTriggerScope,
+  SlackReplyVisibility,
 
   // Agent Email Governance
   AgentEmailOptOutResponse,
@@ -216,6 +240,8 @@ export type {
   SourceConnectionResponse,
   CreateSourceBody,
   UpdateSourceBody,
+  SpendCapAction,
+  SpendCapDeleteOrder,
   FileUploadResponse,
   InlineTextUploadRequest,
   InlineTextReplaceRequest,
