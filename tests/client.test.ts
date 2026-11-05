@@ -10,7 +10,7 @@ import {
   SeclaiStreamingError,
   SeclaiApiVersion,
 } from "../src/index";
-import type { SetAcceptedAttachmentsRequest } from "../src/index";
+import type { SetAcceptedAttachmentsRequest, SetMetadataKeysRequest, SetSlackTriggerConfigRequest } from "../src/index";
 import { parseIni, isTokenValid } from "../src/auth";
 
 type RecordedRequest = {
@@ -538,6 +538,29 @@ describe("Knowledge Bases", () => {
       return jsonResponse({ id: "kb_1" });
     });
     await client.getKnowledgeBase("kb_1");
+  });
+
+  test("getKnowledgeBaseMetadataKeyStats sends GET /knowledge_bases/:id/metadata-key-stats", async () => {
+    const client = makeClient((req) => {
+      const u = new URL(req.url);
+      expect(req.method).toBe("GET");
+      expect(u.pathname).toBe("/knowledge_bases/kb_1/metadata-key-stats");
+      expect(u.search).toBe("");
+      expect(req.bodyText).toBeUndefined();
+      return jsonResponse({
+        knowledge_base_id: "kb_1",
+        windows: [
+          {
+            window: "all_time",
+            since: null,
+            total_items: 3,
+            keys: [{ key: "author", items: 2, distinct_values: 1, top_values: [{ value: "Ada", items: 2 }] }],
+          },
+        ],
+      });
+    });
+    const stats = await client.getKnowledgeBaseMetadataKeyStats("kb_1");
+    expect(stats.windows[0]!.keys[0]!.top_values[0]!.value).toBe("Ada");
   });
 
   test("updateKnowledgeBase sends PUT /knowledge_bases/:id", async () => {
@@ -2471,6 +2494,67 @@ describe("Agent Email Triggers", () => {
   });
 });
 
+describe("Agent Trigger Metadata Keys", () => {
+  const keysResponse = {
+    agent_id: "ag_1",
+    trigger_id: "tr_1",
+    accepts_any_source_key: false,
+    declarable_keys: [{ key: "email_from", origin: "system", always_present: true }],
+    metadata_keys: [{ key: "customer_id", origin: "custom", required: true }],
+    warnings: [],
+  };
+
+  test("getMetadataKeys sends GET /agents/:id/triggers/:tid/metadata-keys", async () => {
+    const client = makeClient((req) => {
+      const u = new URL(req.url);
+      expect(req.method).toBe("GET");
+      expect(u.pathname).toBe("/agents/ag_1/triggers/tr_1/metadata-keys");
+      expect(u.search).toBe("");
+      expect(req.bodyText).toBeUndefined();
+      return jsonResponse(keysResponse);
+    });
+    const res = await client.getMetadataKeys("ag_1", "tr_1");
+    expect(res.declarable_keys[0]!.origin).toBe("system");
+    expect(res.metadata_keys[0]!.key).toBe("customer_id");
+  });
+
+  test("setMetadataKeys sends PUT /agents/:id/triggers/:tid/metadata-keys with the declaration", async () => {
+    const client = makeClient((req) => {
+      const u = new URL(req.url);
+      expect(req.method).toBe("PUT");
+      expect(u.pathname).toBe("/agents/ag_1/triggers/tr_1/metadata-keys");
+      expect(u.search).toBe("");
+      expect(JSON.parse(req.bodyText!)).toEqual({
+        metadata_keys: [
+          { key: "customer_id", origin: "custom", required: true },
+          { key: "region", origin: "custom" },
+        ],
+      });
+      return jsonResponse({ ...keysResponse, warnings: ["Caller agent no longer fits"] });
+    });
+    // `required` is server-defaulted, so a key without it must typecheck.
+    const res = await client.setMetadataKeys("ag_1", "tr_1", {
+      metadata_keys: [
+        { key: "customer_id", origin: "custom", required: true },
+        { key: "region", origin: "custom" },
+      ],
+    });
+    expect(res.warnings).toEqual(["Caller agent no longer fits"]);
+  });
+
+  test("SetMetadataKeysRequest accepts a key without required, and an empty declaration", async () => {
+    const bodies: unknown[] = [];
+    const client = makeClient((req) => {
+      bodies.push(JSON.parse(req.bodyText!));
+      return jsonResponse({ ...keysResponse, metadata_keys: [] });
+    });
+    const body: SetMetadataKeysRequest = { metadata_keys: [{ key: "source_url", origin: "source" }] };
+    await client.setMetadataKeys("ag_1", "tr_1", body);
+    await client.setMetadataKeys("ag_1", "tr_1", { metadata_keys: [] });
+    expect(bodies).toEqual([{ metadata_keys: [{ key: "source_url", origin: "source" }] }, { metadata_keys: [] }]);
+  });
+});
+
 describe("Agent Slack Triggers", () => {
   test("setSlackTriggerConfig sends PUT /agents/:id/triggers/:tid/slack-config", async () => {
     const client = makeClient((req) => {
@@ -2522,6 +2606,25 @@ describe("Agent Slack Triggers", () => {
       return jsonResponse({ trigger_id: "tr_1", allow_dms: true });
     });
     await client.setSlackTriggerConfig("ag_1", "tr_1", { allow_dms: true });
+  });
+
+  test("setSlackTriggerConfig sends alias and returns it", async () => {
+    const client = makeClient((req) => {
+      expect(JSON.parse(req.bodyText!)).toEqual({ alias: "support" });
+      return jsonResponse({ trigger_id: "tr_1", alias: "support" });
+    });
+    const config = await client.setSlackTriggerConfig("ag_1", "tr_1", { alias: "support" });
+    expect(config.alias).toBe("support");
+  });
+
+  test("SetSlackTriggerConfigRequest still accepts the deprecated input", async () => {
+    // Released in 1.8.0; the API now ignores it, but callers passing it must keep compiling.
+    const body: SetSlackTriggerConfigRequest = { input: "{{slack.text}}", alias: "support" };
+    const client = makeClient((req) => {
+      expect(JSON.parse(req.bodyText!)).toEqual({ input: "{{slack.text}}", alias: "support" });
+      return jsonResponse({ trigger_id: "tr_1", alias: "support" });
+    });
+    await client.setSlackTriggerConfig("ag_1", "tr_1", body);
   });
 });
 
@@ -3159,7 +3262,7 @@ describe("API version constants", () => {
   test("a constant reaches the wire", async () => {
     const client = makeClient(
       (req) => {
-        expect(req.headers["seclai-version"]).toBe("2026-10-28");
+        expect(req.headers["seclai-version"]).toBe("2026-11-04");
         return jsonResponse({ data: [] });
       },
       { apiVersion: SeclaiApiVersion.Latest },

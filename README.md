@@ -127,7 +127,7 @@ Leave `apiVersion` unset and the header is omitted, so the account's pinned
 baseline applies and responses keep their current shapes. Upgrading this package
 alone never changes the wire contract.
 
-Known versions are on `SeclaiApiVersion` (`V2026_07_01` through `V2026_10_28`,
+Known versions are on `SeclaiApiVersion` (`V2026_07_01` through `V2026_11_04`,
 plus `Default` and `Latest`), imported from `@seclai/sdk`. A version this release was
 **not** built against throws at construction: a newer version can reshape
 responses, and this client would decode them incorrectly rather than reject them.
@@ -190,6 +190,9 @@ a request that used to succeed, or (from `2026-10-21`) which fields can be
   returns `null` `score` and `passed` for one.
 - `2026-10-28` changes what an `if_else` or `switch` step's `output` contains.
   Read the arm it took from the step's `decision`, which is set on every version.
+- `2026-11-02` refuses an agent write that references a metadata key no trigger
+  declares, where older versions declare the key for you.
+- `2026-11-04` rejects with a 400 evaluation settings that were accepted before.
 
 | Version | What it changes |
 | --- | --- |
@@ -205,6 +208,8 @@ a request that used to succeed, or (from `2026-10-21`) which fields can be
 | `2026-10-19` | `createSource()` rejects `polling_max_items` on any source type but an RSS feed with a 400. Below it the value is stored |
 | `2026-10-21` | An evaluation result whose evaluator returned no verdict (`error`) is left out of `failed` and of `pass_rate` / `failure_rate` in `getNonManualEvaluationSummary()`, and `getEvaluationCriteriaSummary()` averages `average_score` over passed and failed results only. `testDraftEvaluation()` returns `score` and `passed` as `null` for an `error` result. Below it the summary counts `error` results in `failed` and the rates, `average_score` includes their stored scores, and the test draft returns `score` 0.5 and `passed: false`. The summary's `error` count is returned on every version |
 | `2026-10-28` | An `if_else` or `switch` step's `output` is the result of the arm it took, or its input when that arm is empty or it took none. Below it the `output` is a `{"branch": ...}` marker naming the arm, with no `attachments`. The step's `decision` names the arm on every version |
+| `2026-11-02` | `updateAgentDefinition()`, and `updateAgent()` when it sets `sampling_config`, refuse a definition or sampling rule that references a metadata key no trigger declares, with a 400 and a 422 respectively. Declare the key first with `setMetadataKeys()`. An `agent_definition` import through `createAgent()` or `updateAgent()` is not refused and still declares the keys it reads. Below it each such key is declared on the trigger as optional |
+| `2026-11-04` | `createEvaluationResult()` rejects `retry_triggered: true` and `updateAgent()` rejects `evaluation_mode` `eval_and_retry` with a 400: evaluations never retry a step. `createEvaluationCriteria()`, and `updateEvaluationCriteria()` when it changes `step_id`, reject a `step_id` that does not name a `display_result` or `streaming_result` step with a 400. Below it `eval_and_retry` is stored as `sample_and_flag` |
 
 **`Latest` moves with the SDK.** `SeclaiApiVersion.Latest` is the newest version
 the installed release knows, so upgrading the package can opt a client that
@@ -212,8 +217,10 @@ passes it into every version added since — `1.6.0` moved it from `2026-07-27` 
 `2026-10-03`, across the `2026-09-30` output change, and `1.7.0` moves it to
 `2026-10-21`, across the `2026-10-05` status change, the `2026-10-13` and
 `2026-10-19` source-setting rejections, the `2026-10-16` input change and the
-`2026-10-21` evaluation change, and `1.8.0` moves it to `2026-10-28`,
-across the `if_else` / `switch` step-output change. Pass a
+`2026-10-21` evaluation change, `1.8.0` moves it to `2026-10-28`,
+across the `if_else` / `switch` step-output change, and `1.9.0` moves it to
+`2026-11-04`, across the `2026-11-02` undeclared-metadata-key refusal and the
+`2026-11-04` evaluation-setting rejections. Pass a
 dated constant such as `SeclaiApiVersion.V2026_07_27` to keep behaviour fixed
 across upgrades.
 
@@ -404,6 +411,9 @@ const result = await client.runAgentAndPoll(
 );
 ```
 
+A run's answer can be ready before its last step finishes: once
+`result_reported_at` is set on `getAgentRun()`, `output` holds the answer.
+
 ### Agent input uploads
 
 <!-- sdksync:check -->
@@ -465,11 +475,15 @@ are listed in the run's `email_attachment_issues` metadata. By default the run f
 ### Agent Slack triggers
 
 Configure an agent's `SLACK_COMMAND` trigger, which people run from Slack with
-`/seclai` or the message shortcut. Omitted fields are left unchanged.
+`/seclai <alias>` or the message shortcut. Omitted fields are left unchanged.
+`alias` is generated from the agent's name when not set; the text after the alias,
+or the message the shortcut was used on, is the run's input. `input` is
+deprecated and ignored by the API.
 
 <!-- sdksync:check -->
 ```ts
 const slack = await client.setSlackTriggerConfig("agent_id", "trigger_id", {
+  alias: "support",              // people run `/seclai support`
   scope: "selected_channels",    // or "bot_channels"
   channel_ids: ["C0123456789"],
   activation: "everywhere",      // or "channel_opt_in"
@@ -503,6 +517,30 @@ const { accepted_attachments } = await client.setAcceptedAttachments("agent_id",
   ],
 });
 console.log(accepted_attachments.map((slot) => `${slot.name}: ${slot.min}..${slot.max ?? "any"}`));
+```
+
+### Trigger metadata keys
+
+Declare the run metadata keys a trigger provides, which steps reference as
+`{{metadata.<key>}}`. `system` and `source` keys are written by the platform;
+`custom` keys are sent by the caller or set on the trigger, and only a `custom`
+key can be `required` (default `false`): a caller-started run without it is
+refused. The call replaces the whole declaration, and is refused with a 400 when
+the agent references a key no trigger of its branch declares.
+
+<!-- sdksync:check -->
+```ts
+const agent = await client.getAgent("agent_id");
+const current = await client.getMetadataKeys("agent_id", agent.trigger_id!);
+console.log(current.declarable_keys.map((k) => `${k.key} (${k.origin})`));
+
+const updated = await client.setMetadataKeys("agent_id", agent.trigger_id!, {
+  metadata_keys: [
+    { key: "customer_id", origin: "custom", required: true },
+    { key: "region", origin: "custom" },
+  ],
+});
+console.log(updated.warnings); // agents whose `call_agent` mapping no longer fits
 ```
 
 ### Agent email governance
@@ -583,6 +621,17 @@ const kb = await client.createKnowledgeBase({ name: "Docs KB" });
 const fetched = await client.getKnowledgeBase("kb_id");
 await client.updateKnowledgeBase("kb_id", { name: "Renamed KB" });
 await client.deleteKnowledgeBase("kb_id");
+```
+
+See which item-metadata keys a knowledge base's content carries, for all time
+and the last 30 and 7 days:
+
+<!-- sdksync:check -->
+```ts
+const stats = await client.getKnowledgeBaseMetadataKeyStats("kb_id");
+for (const w of stats.windows) {
+  console.log(w.window, w.total_items, w.keys.map((k) => `${k.key}: ${k.items}`));
+}
 ```
 
 ### Memory banks

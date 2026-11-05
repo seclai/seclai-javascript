@@ -196,7 +196,8 @@ export interface paths {
          *
          *     Accepts a partial update – only the fields included in the request body
          *     are modified.  Use this to toggle enabled/disabled, change the
-         *     evaluation prompt, adjust retries, or rename the criteria.
+         *     evaluation prompt, or rename the criteria. From Seclai-Version 2026-11-04 a
+         *     changed `step_id` must name a `display_result` or `streaming_result` step.
          */
         patch: operations["update_evaluation_criteria_api_agents_evaluation_criteria__criteria_id__patch"];
         trace?: never;
@@ -247,7 +248,8 @@ export interface paths {
          *
          *     Use this endpoint to push results from external test harnesses, CI/CD
          *     pipelines, or custom evaluation logic.  Each result is linked to an
-         *     agent run and optionally a specific step run.
+         *     agent run and optionally a specific step run. From Seclai-Version 2026-11-04
+         *     `retry_triggered: true` returns 400: evaluations never retry a step.
          */
         post: operations["create_evaluation_result_api_agents_evaluation_criteria__criteria_id__results_post"];
         delete?: never;
@@ -292,7 +294,7 @@ export interface paths {
          * Get Non Manual Evaluation Summary
          * @description Get an evaluation summary for API key clients.
          *
-         *     Returns aggregated pass/fail/flagged counts and pass rates for each evaluation mode (eval_and_retry, sample_and_flag).
+         *     Returns aggregated pass/fail/flagged counts and pass rates for each automatic evaluation mode.
          *
          *     With ``2026-10-21`` or later, ``error`` results (the evaluator returned no
          *     verdict) are left out of ``failed``, and the rates are over passed and
@@ -530,9 +532,9 @@ export interface paths {
          * Update agent metadata
          * @description Update an agent's name, description, evaluation settings, model lifecycle settings and run limits.
          *
-         *     Evaluation settings: `evaluation_mode` ('output_expectation', 'eval_and_retry', 'sample_and_flag'), `default_evaluation_tier` ('fast', 'balanced', 'thorough'), `max_retries`, `retry_on_failure`, `sampling_config`.
+         *     Evaluation settings: `evaluation_mode` ('output_expectation', 'sample_and_flag'; see the field), `default_evaluation_tier` ('fast', 'balanced', 'thorough'), `sampling_config`. `max_retries` and `retry_on_failure` are accepted and have no effect.
          *
-         *     Model lifecycle settings: `prompt_model_auto_upgrade_strategy` ('none', 'early_adopter', 'middle_of_road', 'cautious_adopter'), `prompt_model_auto_rollback_enabled`, `prompt_model_auto_rollback_triggers` (list of 'agent_eval_fail', 'governance_flag', 'governance_block', 'agent_run_failed').
+         *     Model lifecycle settings: `prompt_model_auto_upgrade_strategy` ('none', 'early_adopter', 'middle_of_road', 'cautious_adopter'), `prompt_model_auto_rollback_enabled`, `prompt_model_auto_rollback_triggers` (list of 'governance_flag', 'governance_block', 'agent_run_failed'; 'agent_eval_fail' never fires, and in the list keeps a run with a failed evaluation from being a rollback target).
          *
          *     Run limits (each must be greater than 0; pass the paired `set_<name>: true` with the value omitted to remove one): `max_credits_per_run`, `max_credits_per_period`, `max_runs_per_hour`, `max_runs_per_day`, `max_runs_total`. A runs-per-hour or per-day value above the plan's run quota is rejected with 400.
          *
@@ -722,8 +724,7 @@ export interface paths {
          *     - `prompt_call`: Call an LLM with a prompt template
          *     - `retrieval`: Search a knowledge base
          *     - `regex_replace`: Reshape text via ordered regex find/replace rules
-         *     - `gate`: Evaluate conditions, stop or continue child execution
-         *     - `retry`: Re-execute from a target ancestor step (for quality-control loops; pair with a `gate` step for conditional retrying. Fields: `target_step_id` (ancestor step ID), `max_retries` (1–10))
+         *     - `repeat_until`: Run a body (`body[]`) again until its `conditions` match the iteration's verdict or `max_iterations` (1–1000, default 3) is reached. Fields: `conditions`, `match`, optional `verdict_template`, `output` (`last` or `all`), `fail_when_max_reached`
          *     - `evaluate_step`: Score a selected previous step output and emit JSON with `score`, `passed`, and `pass_threshold` (fields: `target_step_id`, `evaluation_prompt`, `pass_threshold`, optional `evaluation_tier`, optional `expectation_config`)
          *     - `extract_data`: Progressively read and analyze large input
          *     - `extract_content`: Extract structured data (JSON, HTML, XML)
@@ -737,13 +738,13 @@ export interface paths {
          *     - `write_content_attachment`: Write a file-backed attachment to content (optionally indexed for retrieval; content-triggered agents only. Fields: `attachment_key`, `content`, `content_type`, `indexed`)
          *     - `load_content_attachment`: Load a previously written attachment (content-triggered agents only. Fields: `attachment_key`)
          *     - `load_content`: Load the full text body of a source document (typically used with content-triggered agents; can also load by explicit `content_version_id`. Fields: `content_version_id` optional)
-         *     - `streaming_result`: Stream LLM tokens in real-time via SSE (must be a direct child of `prompt_call`; requires `dynamic_input` or `template_input` trigger; `priority: true` enables real-time streaming). To stream **and** return a schema-validated payload, add a sibling branch `extract_content` (`expected_format: "json"` + `json_schema`) → `display_result` under the same `prompt_call` — a `display_result` takes precedence over the stream regardless of which finishes first, so its validated output becomes the run's result while the tokens act as a progress channel
+         *     - `streaming_result`: Stream LLM tokens in real-time via SSE (must be a direct child of `prompt_call`; requires `dynamic_input` or `template_input` trigger; `priority: true` enables real-time streaming). An agent has at most one `streaming_result` or `display_result`; saving refuses a second
          *     - `display_result`: Show output to the user
          *     - `join`: Merge parallel branches
          *     - `merge`: Combine multiple inputs into a single templated output
          *     - `text`: Static text literal
          *     - `for_each`: Iterate a body over a list of items (body lives in `body[]`)
-         *     - `if_else`: Conditional dispatch. Evaluates `conditions` (same shape as `gate`) and runs `then_steps` on match, otherwise the optional `else_steps`. The chosen branch's output flows to the if_else step's own `child_steps` (post-branch continuation chain). **`display_result` and `streaming_result` are not allowed inside `then_steps` / `else_steps`** — end each branch with a content-producing step (e.g. `text`, `prompt_call`) and place the single `display_result` in `child_steps`.
+         *     - `if_else`: Conditional dispatch. Evaluates `conditions` and runs `then_steps` on match, otherwise the optional `else_steps`. The chosen branch's output flows to the if_else step's own `child_steps` (post-branch continuation chain). **`display_result` and `streaming_result` are not allowed inside `then_steps` / `else_steps`** — end each branch with a content-producing step (e.g. `text`, `prompt_call`) and place the single `display_result` in `child_steps`.
          *     - `switch`: Single-discriminator dispatch. Renders `discriminator` (default `{{input}}`) and routes to the first matching `cases[]` entry (equality by default; pass a list in `match` for `$in` semantics) or to `else_steps` when nothing matches. The chosen case's output flows to the switch step's own `child_steps`. **`display_result` and `streaming_result` are not allowed inside `cases[].steps` or `else_steps`** — end each case with a content-producing step and place the single `display_result` in `child_steps`.
          *
          *     Auth & scoping:
@@ -756,11 +757,11 @@ export interface paths {
          *
          *     Uses **optimistic locking**: provide `expected_change_id` from the last `GET /agents/{agent_id}/definition`. Returns `409 Conflict` if the definition was modified since your last read.
          *
-         *     The definition contains the agent's step workflow. Step types include `prompt_call`, `retrieval`, `regex_replace`, `gate`, `retry`, `evaluate_step`, `extract_data`, `extract_content`, `add_chat_turn`, `load_chat_history`, `add_memory`, `search_memory`, `load_memory`, `streaming_result`, `send_email`, `webhook_call`, `write_aws_s3_object`, `call_agent`, `write_metadata`, `write_content_attachment`, `load_content_attachment`, `load_content`, `display_result`, `join`, `merge`, `text`, `for_each`, `if_else`, and `switch`. Non-composite step types (`display_result`, `join`, `retry`, `streaming_result`) cannot contain child steps.
+         *     The definition contains the agent's step workflow. Step types include `prompt_call`, `retrieval`, `regex_replace`, `evaluate_step`, `extract_data`, `extract_content`, `add_chat_turn`, `load_chat_history`, `add_memory`, `search_memory`, `load_memory`, `streaming_result`, `send_email`, `webhook_call`, `write_aws_s3_object`, `call_agent`, `write_metadata`, `write_content_attachment`, `load_content_attachment`, `load_content`, `display_result`, `join`, `merge`, `text`, `for_each`, `repeat_until`, `if_else`, and `switch`. Non-composite step types (`display_result`, `join`, `streaming_result`) cannot contain child steps. A definition holding a `gate` or `retry` step is rejected: use `if_else`, or `repeat_until` to run steps again until a condition holds.
          *
-         *     **Retry steps** re-execute from a target ancestor step for quality-control loops. Configure with `target_step_id` (ancestor step ID) and `max_retries` (1–10). Best practice: place a `gate` step before the retry to make retries conditional.
+         *     **repeat_until** runs its `body[]`, then tests its `conditions` against the iteration's verdict (`verdict_template`, else the iteration's value); it repeats until they match or `max_iterations` is reached.
          *
-         *     **if_else** runs `then_steps` when its `conditions` (same shape as `gate`) match, otherwise its optional `else_steps`. Either branch's output flows to the if_else step's own `child_steps` (the post-branch continuation chain).
+         *     **if_else** runs `then_steps` when its `conditions` match, otherwise its optional `else_steps`. Either branch's output flows to the if_else step's own `child_steps` (the post-branch continuation chain).
          *
          *     **switch** dispatches on a `discriminator` template (default `{{input}}`) to the first matching case (equality by default; pass a list in `match` for `$in` semantics) or to `else_steps` when no case matches. Cases own their own `steps` subtrees; the chosen branch's output flows to the switch step's own `child_steps`.
          *
@@ -850,8 +851,9 @@ export interface paths {
          * Create Evaluation Criteria
          * @description Create new step evaluation settings for an agent.
          *
-         *     The evaluation mode, retry settings, and sample frequency are inherited
-         *     from the agent and stored on the criteria row for historical reference.
+         *     From Seclai-Version 2026-11-04, `step_id` must name a `display_result` or
+         *     `streaming_result` step, the run's published result; another step returns 400.
+         *     The evaluation mode and sample frequency are the agent's.
          */
         post: operations["create_evaluation_criteria_api_agents__agent_id__evaluation_criteria_post"];
         delete?: never;
@@ -947,7 +949,7 @@ export interface paths {
          *     The response contains the full definition, trigger configuration with schedules, alert configs, evaluation criteria, agent-scoped governance policies, and a resolved dependency manifest that maps every referenced external entity UUID to its human-readable name.
          *
          *     Response shape:
-         *     - `export_version`: schema version (currently `"5"`)
+         *     - `export_version`: schema version (currently `"6"`)
          *     - `exported_at`: ISO-8601 timestamp
          *     - `agent`: name, description, schema_version, definition, timestamps
          *     - `trigger`: trigger type, input template, schedules
@@ -1033,10 +1035,10 @@ export interface paths {
          *     - `input`: text input for agents with a `dynamic_input` trigger.
          *     - `input_upload_id` / `input_upload_ids`: reference one or more files previously uploaded via `POST /agents/{agent_id}/upload-input`. Send them **with** `input` to pair prompt text with the files (the text leads, each file follows under its heading); only the two upload fields are mutually exclusive with each other.
          *     - `priority`: set true for latency-sensitive, user-facing work. For agents with a `streaming_result` step, set `priority=true` to enable real-time token streaming; otherwise the run still proceeds, but without live token streaming.
-         *     - `metadata`: a JSON object that becomes available to agent steps for string substitution.
+         *     - `metadata`: a JSON object for string substitution. Each key must be one the trigger declares (`GET /agents/{agent_id}/triggers/{trigger_id}/metadata-keys`); a run that sends another custom key, or lacks a required one, is refused with HTTP 400.
          *
          *     After starting:
-         *     - Poll `GET /agents/runs/{run_id}` until `status` is `completed` or `failed`.
+         *     - Poll `GET /agents/runs/{run_id}` until `result_reported_at` is set (the run's answer is in `output`) or `status` is `failed`; poll on until `status` is `completed` or `failed` if you need to know that every step finished.
          *     - Use `include_step_outputs=true` to include per-step outputs, timing, and credits.
          *
          *     Auth & scoping:
@@ -1069,6 +1071,7 @@ export interface paths {
          *     - Subsequent events are forwarded from the run event stream (status changes, step events, etc).
          *     - If the agent contains a `streaming_result` step, `stream_token` events deliver individual LLM tokens (with a `token` field) and a `stream_end` event signals completion.
          *     - With `include_reasoning=true`, `stream_reasoning` events (with a `text` field) carry the model's reasoning while it thinks, when the `streaming_result` step's author enabled `show_reasoning`. Reasoning is never part of `output`.
+         *     - A `result` event contains the snapshot once the run has reported its result (`result_reported_at` is set and `output` is the answer).
          *     - The final `done` event contains the terminal snapshot (including `output` and `credits` when available).
          *
          *     Input options (for `dynamic_input` triggers):
@@ -1078,7 +1081,7 @@ export interface paths {
          *     Client guidance:
          *     - Keep the connection open and handle keepalive comments.
          *     - On `timeout` or `error`, the payload includes `run_id` so clients can resume by polling `GET /agents/runs/{run_id}`.
-         *     - `stream_token` events carry the model's raw output. When the agent pairs `streaming_result` with a sibling `extract_content`/`display_result` branch, that branch's `display_result` takes precedence over the stream, so the `done` snapshot's `output` is the validated payload and the tokens are a progress channel — render tokens live, but read the result from `done`. Check `done.status` first: the streamed text is already the run's output when the stream ends, so a run that FAILED its validation step still carries that raw text in `output`.
+         *     - `stream_token` events carry the model's raw output: render them live, but take the answer from the `result` event. `done.status` says whether the whole run succeeded, which can still fail after its result.
          *
          *     Auth & scoping:
          *     - Requires `X-API-Key` header or OAuth Bearer token. All resources are scoped to the caller's account.
@@ -1158,6 +1161,36 @@ export interface paths {
          *     Auth & scoping: requires `X-API-Key` header or OAuth Bearer token; the trigger must belong to an agent in the key's account.
          */
         put: operations["set_email_trigger_config_api_api_agents__agent_id__triggers__trigger_id__email_config_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agents/{agent_id}/triggers/{trigger_id}/metadata-keys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the metadata keys a trigger declares
+         * @description A trigger declares the run metadata keys its agent's steps may reference, each `required` or optional. `system` and `source` keys are written by the platform and are never required; `custom` keys are sent by the caller. A run you start is refused with HTTP 400 when it lacks a required key or sends a custom key the trigger does not declare. `trigger_id` is the one `GET /agents/{agent_id}` returns.
+         *
+         *     Auth & scoping: requires `X-API-Key` header or OAuth Bearer token; the trigger must belong to an agent in the key's account.
+         */
+        get: operations["get_metadata_keys_api_api_agents__agent_id__triggers__trigger_id__metadata_keys_get"];
+        /**
+         * Declare the metadata keys a trigger accepts
+         * @description A trigger declares the run metadata keys its agent's steps may reference, each `required` or optional. `system` and `source` keys are written by the platform and are never required; `custom` keys are sent by the caller. A run you start is refused with HTTP 400 when it lacks a required key or sends a custom key the trigger does not declare. `trigger_id` is the one `GET /agents/{agent_id}` returns.
+         *
+         *     Auth & scoping: requires `X-API-Key` header or OAuth Bearer token; the trigger must belong to an agent in the key's account.
+         *
+         *     Rejected with HTTP 400 when the agent references a key no trigger of its branch then declares.
+         */
+        put: operations["set_metadata_keys_api_api_agents__agent_id__triggers__trigger_id__metadata_keys_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -2462,6 +2495,29 @@ export interface paths {
          *     Fails if the knowledge base is referenced by any agent definitions. Remove the knowledge base from agents first.
          */
         delete: operations["delete_knowledge_base_api_knowledge_bases__knowledge_base_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/knowledge_bases/{knowledge_base_id}/metadata-key-stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Knowledge Base Metadata Key Stats
+         * @description How often each item-metadata key appears on the knowledge base's content items, for declaring a content trigger's metadata keys. An item is counted once, at its latest version; the total includes items with no metadata. Only keys a content run carries are listed: a null value counts as absent, and reserved keys and the keys the platform sets after the item's own are left out. Each window counts the items whose latest version was created or linked in it.
+         *
+         *     Auth & scoping:
+         *     - Requires `X-API-Key` header or OAuth Bearer token. You can only access knowledge bases belonging to your account.
+         */
+        get: operations["get_knowledge_base_metadata_key_stats_api_knowledge_bases__knowledge_base_id__metadata_key_stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -4144,7 +4200,7 @@ export interface components {
             change_id: string;
             /**
              * Definition
-             * @description The agent definition containing name, description, tags, and step workflow tree. Step types include prompt_call, retrieval, regex_replace, gate, retry, evaluate_step, extract_data, extract_content, add_chat_turn, load_chat_history, add_memory, search_memory, load_memory, streaming_result, send_email, webhook_call, call_agent, write_metadata, write_content_attachment, load_content_attachment, load_content, display_result, merge, for_each, if_else, switch, and others.
+             * @description The agent definition containing name, description, tags, and step workflow tree. Step types include prompt_call, retrieval, regex_replace, evaluate_step, extract_data, extract_content, add_chat_turn, load_chat_history, add_memory, search_memory, load_memory, streaming_result, send_email, webhook_call, call_agent, write_metadata, write_content_attachment, load_content_attachment, load_content, display_result, merge, for_each, if_else, switch, and others.
              */
             definition: {
                 [key: string]: unknown;
@@ -4247,7 +4303,7 @@ export interface components {
             }[] | null;
             /**
              * Export Version
-             * @description Schema version of the export format (currently "5").
+             * @description Schema version of the export format (currently "6").
              */
             export_version: string;
             /**
@@ -4355,7 +4411,7 @@ export interface components {
             input_upload_ids?: string[] | null;
             /**
              * Metadata
-             * @description Metadata to make available for string substitution expressions in agent tasks.
+             * @description Metadata for string substitution in agent tasks. Each key must be one the agent's trigger declares (or sets); a run that sends another custom key, or lacks a required one, is refused with HTTP 400.
              */
             metadata?: {
                 [key: string]: components["schemas"]["JsonValue"];
@@ -4406,7 +4462,7 @@ export interface components {
             flagged_policies?: components["schemas"]["routers__api__agents__GovernancePolicyRefResponse"][];
             /**
              * Governance Input Status
-             * @description Result of the governance input evaluation: safe, blocked, skipped, or timed_out.
+             * @description Result of the governance input evaluation: pending, safe, blocked, skipped, timed_out, or error.
              */
             governance_input_status?: string | null;
             /**
@@ -4416,7 +4472,7 @@ export interface components {
             governance_input_wait_ms?: number | null;
             /**
              * Hitl Wait Ms
-             * @description Cumulative milliseconds the run was parked waiting for a human decision on a human_in_the_loop step.  Subtracted from active duration in run-detail and duration-stats responses.
+             * @description Sum over the run's human_in_the_loop steps of each one's wait for a decision, in milliseconds.  Waits that overlap are each counted in full, so the sum can exceed the run's duration.
              */
             hitl_wait_ms?: number | null;
             /**
@@ -4445,6 +4501,11 @@ export interface components {
              */
             priority: boolean;
             /**
+             * Result Reported At
+             * @description When the run reported success: for an agent whose `report_success` is `on_result`, once its result step published, or once its run started if it has no result step; else when the run completed.  From then on `output` is the run's answer and never changes; stop polling here if you only need the answer.  `status` still follows every step, so a run can report success and later fail.  Null until the run reports, for a run that failed before reporting, and for runs that ended before this field existed.
+             */
+            result_reported_at?: string | null;
+            /**
              * Run Id
              * @description Unique identifier for the agent run.
              */
@@ -4468,7 +4529,7 @@ export interface components {
             trace_purged_at?: string | null;
             /**
              * Wait Ms
-             * @description Cumulative milliseconds the run was parked on standard-mode wait steps.  Subtracted from active duration in run-detail and duration-stats responses, exactly like hitl_wait_ms.  Priority waits block inline and are not counted here.
+             * @description Sum over the run's standard-mode wait steps of each one's wait, in milliseconds.  Waits that overlap are each counted in full.  Priority waits block inline and are not counted here.
              */
             wait_ms?: number | null;
         };
@@ -4567,7 +4628,7 @@ export interface components {
             input_upload_ids?: string[] | null;
             /**
              * Metadata
-             * @description Metadata to make available for string substitution expressions in agent tasks.
+             * @description Metadata for string substitution in agent tasks. Each key must be one the agent's trigger declares (or sets); a run that sends another custom key, or lacks a required one, is refused with HTTP 400.
              */
             metadata?: {
                 [key: string]: components["schemas"]["JsonValue"];
@@ -4690,8 +4751,8 @@ export interface components {
             disabled_reason?: string | null;
             /**
              * Evaluation Mode
-             * @description Evaluation mode: output_expectation, eval_and_retry, or sample_and_flag.
-             * @default eval_and_retry
+             * @description Evaluation mode: output_expectation or sample_and_flag.
+             * @default sample_and_flag
              */
             evaluation_mode: string;
             /**
@@ -4716,7 +4777,7 @@ export interface components {
             max_credits_per_run?: number | null;
             /**
              * Max Retries
-             * @description Max retries for eval_and_retry mode.
+             * @description Deprecated: has no effect.
              * @default 3
              */
             max_retries: number;
@@ -4748,7 +4809,7 @@ export interface components {
             prompt_model_auto_rollback_enabled: boolean;
             /**
              * Prompt Model Auto Rollback Triggers
-             * @description Failure signals that trigger rollback. Defaults to agent_eval_fail, governance_block, agent_run_failed when null.
+             * @description Failure signals that trigger rollback. Defaults to governance_block, agent_run_failed when null.
              */
             prompt_model_auto_rollback_triggers?: string[] | null;
             /**
@@ -4759,7 +4820,7 @@ export interface components {
             prompt_model_auto_upgrade_strategy: string;
             /**
              * Retry On Failure
-             * @description Whether to retry on evaluation failure.
+             * @description Deprecated: has no effect.
              * @default true
              */
             retry_on_failure: boolean;
@@ -5709,7 +5770,8 @@ export interface components {
          * CreateEvaluationCriteriaRequest
          * @description Request body for creating an evaluation criteria.
          *
-         *     The evaluation mode, retry settings, and sample frequency are set at the
+         *     step_id names the display_result or streaming_result step to score. The
+         *     evaluation mode and sample frequency are set at the
          *     agent level, not per-criteria.
          */
         CreateEvaluationCriteriaRequest: {
@@ -5758,11 +5820,13 @@ export interface components {
             flagged: boolean;
             /**
              * Retry Count
+             * @description Deprecated: has no effect on any count.
              * @default 0
              */
             retry_count: number;
             /**
              * Retry Triggered
+             * @description Retired; true returns 400 from Seclai-Version 2026-11-04.
              * @default false
              */
             retry_triggered: boolean;
@@ -6026,6 +6090,17 @@ export interface components {
              * @description URL record ID (required for rss/website sources).
              */
             url_id?: string | null;
+        };
+        /** DeclarableMetadataKey */
+        DeclarableMetadataKey: {
+            /**
+             * Always Present
+             * @description Whether every run carries this key.
+             */
+            always_present: boolean;
+            /** Key */
+            key: string;
+            origin: components["schemas"]["MetadataOrigin"];
         };
         /** DmarcFailingSourceResponse */
         DmarcFailingSourceResponse: {
@@ -6501,7 +6576,7 @@ export interface components {
             enabled: boolean;
             /**
              * Evaluation Mode
-             * @description Runtime behavior mode. output_expectation (manual validation), eval_and_retry (every run + retry), sample_and_flag (sampled monitoring).
+             * @description Runtime behavior mode. output_expectation (manual validation), sample_and_flag (sampled monitoring).
              */
             evaluation_mode: string;
             /** Evaluation Prompt */
@@ -6517,7 +6592,10 @@ export interface components {
              * Format: uuid
              */
             id: string;
-            /** Max Retries */
+            /**
+             * Max Retries
+             * @description Deprecated: has no effect.
+             */
             max_retries: number;
             /**
              * Pass Threshold
@@ -6528,7 +6606,10 @@ export interface components {
             result_summary: {
                 [key: string]: number;
             };
-            /** Retry On Failure */
+            /**
+             * Retry On Failure
+             * @description Deprecated: has no effect.
+             */
             retry_on_failure: boolean;
             /** Step Id */
             step_id: string | null;
@@ -6587,9 +6668,15 @@ export interface components {
              * Format: uuid
              */
             id: string;
-            /** Retry Count */
+            /**
+             * Retry Count
+             * @description Deprecated.
+             */
             retry_count: number;
-            /** Retry Triggered */
+            /**
+             * Retry Triggered
+             * @description Deprecated.
+             */
             retry_triggered: boolean;
             /**
              * Score
@@ -6677,9 +6764,15 @@ export interface components {
              * Format: uuid
              */
             id: string;
-            /** Retry Count */
+            /**
+             * Retry Count
+             * @description Deprecated.
+             */
             retry_count: number;
-            /** Retry Triggered */
+            /**
+             * Retry Triggered
+             * @description Deprecated.
+             */
             retry_triggered: boolean;
             /**
              * Score
@@ -6977,7 +7070,7 @@ export interface components {
             step_id?: string | null;
             /**
              * Step Type
-             * @description The step type to generate config for (e.g. 'regex_replace', 'gate', 'text', 'prompt_call', 'retrieval').
+             * @description The step type to generate config for (e.g. 'regex_replace', 'if_else', 'text', 'prompt_call', 'retrieval').
              */
             step_type: string;
             /**
@@ -7322,6 +7415,13 @@ export interface components {
              */
             total: number;
         };
+        /** KnowledgeBaseMetadataKeyStats */
+        KnowledgeBaseMetadataKeyStatsResponse: {
+            /** Knowledge Base Id */
+            knowledge_base_id: string;
+            /** Windows */
+            windows: components["schemas"]["MetadataKeyWindowResponse"][];
+        };
         /**
          * KnowledgeBase
          * @description Response model for a single knowledge base.
@@ -7625,6 +7725,120 @@ export interface components {
              * @description ISO-8601 last-update timestamp.
              */
             updated_at: string;
+        };
+        /** MetadataKeyCountResponse */
+        MetadataKeyCountResponse: {
+            /**
+             * Distinct Values
+             * @description How many different values it takes.
+             */
+            distinct_values: number;
+            /**
+             * Items
+             * @description Items in the window carrying the key.
+             */
+            items: number;
+            /**
+             * Key
+             * @description The item-metadata key.
+             */
+            key: string;
+            /**
+             * Top Values
+             * @description Its 5 most frequent values, most frequent first.
+             */
+            top_values: components["schemas"]["MetadataValueCountResponse"][];
+        };
+        /** MetadataKeyDeclaration */
+        MetadataKeyDeclaration: {
+            /**
+             * Key
+             * @description Steps reference the key as ``{{metadata.<key>}}``.
+             */
+            key: string;
+            /** @description ``system`` and ``source`` keys are written by the platform; ``custom`` keys are sent by the caller or set on the trigger. */
+            origin: components["schemas"]["MetadataOrigin"];
+            /**
+             * Required
+             * @description A caller-started run without this key is refused. Only a ``custom`` key can be required.
+             * @default false
+             */
+            required: boolean;
+        };
+        /** MetadataKeyWindowResponse */
+        MetadataKeyWindowResponse: {
+            /**
+             * Keys
+             * @description Keys seen in the window, most frequent first.
+             */
+            keys: components["schemas"]["MetadataKeyCountResponse"][];
+            /**
+             * Since
+             * @description The window's start; null for all time.
+             */
+            since: string | null;
+            /**
+             * Total Items
+             * @description Items in the window.
+             */
+            total_items: number;
+            /**
+             * Window
+             * @enum {string}
+             */
+            window: "all_time" | "last_30_days" | "last_7_days";
+        };
+        /** MetadataKeysResponse */
+        MetadataKeysResponse: {
+            /**
+             * Accepts Any Source Key
+             * @description True for content triggers, which may declare any item-metadata key.
+             */
+            accepts_any_source_key: boolean;
+            /**
+             * Agent Id
+             * Format: uuid
+             */
+            agent_id: string;
+            /**
+             * Declarable Keys
+             * @description The system and source keys this trigger's type can declare.
+             */
+            declarable_keys: components["schemas"]["DeclarableMetadataKey"][];
+            /**
+             * Metadata Keys
+             * @description The keys the agent's steps may reference. Static trigger metadata and Slack form fields are declared custom keys too, and are not repeated here.
+             */
+            metadata_keys: components["schemas"]["MetadataKeyDeclaration"][];
+            /**
+             * Trigger Id
+             * Format: uuid
+             */
+            trigger_id: string;
+            /**
+             * Warnings
+             * @description Set by a PUT that changes the declaration: agents whose `call_agent` mapping no longer fits it. Always empty on GET.
+             */
+            warnings?: string[];
+        };
+        /**
+         * MetadataOrigin
+         * @description Who writes a run metadata key (docs/architecture/run-metadata.md, Q2).
+         * @enum {string}
+         */
+        MetadataOrigin: "system" | "source" | "custom";
+        /** MetadataValueCountResponse */
+        MetadataValueCountResponse: {
+            /**
+             * Items
+             * @description Items carrying this value.
+             */
+            items: number;
+            /**
+             * Value
+             * @description The value as text, cut to 100 characters; an object is shown as {…} and a list as […].
+             */
+            value: string;
         };
         /**
          * ModalityRateResponse
@@ -7979,6 +8193,14 @@ export interface components {
             /** Mode */
             mode: string;
         };
+        /** SetMetadataKeysRequest */
+        SetMetadataKeysRequest: {
+            /**
+             * Metadata Keys
+             * @description The whole declaration; replaces the trigger's current one.
+             */
+            metadata_keys: components["schemas"]["MetadataKeyDeclaration"][];
+        };
         /**
          * SetSlackTriggerConfigApiRequest
          * @description Omitted fields are left unchanged.
@@ -7986,6 +8208,11 @@ export interface components {
         SetSlackTriggerConfigApiRequest: {
             /** @description `everywhere` in scope, or `channel_opt_in`. */
             activation?: components["schemas"]["SlackTriggerActivation"] | null;
+            /**
+             * Alias
+             * @description The name people type after `/seclai` to run this agent: lowercase letters, digits and hyphens, starting with a letter, unique in the Slack workspace. Generated from the agent's name when not set or empty.
+             */
+            alias?: string | null;
             /**
              * Allow Dms
              * @description Runnable in the app's own DMs.
@@ -7995,18 +8222,13 @@ export interface components {
             channel_ids?: string[] | null;
             /**
              * Form
-             * @description Form fields `{key, label, type, required, hint, choices, max_length}`. `type`: short_text, long_text, number, single_choice, multi_choice, yes_no, date, slack_user or slack_channel. Each value reaches the run as `{{metadata.<key>}}`.
+             * @description Form fields `{key, label, type, required, hint, choices, max_length}`. `type`: short_text, long_text, number, single_choice, multi_choice, yes_no, date, slack_user or slack_channel. Each value reaches the run as `{{metadata.<key>}}`, not in the run's input, which is the text after `/seclai <alias>` or the message the shortcut was used on, and its files.
              */
             form?: {
                 [key: string]: unknown;
             }[] | null;
             /** Include Invoker Email */
             include_invoker_email?: boolean | null;
-            /**
-             * Input
-             * @description The trigger's input template. Each `{{metadata.<key>}}` in it must be a form field key or a platform key; it is checked together with `form`.
-             */
-            input?: string | null;
             /** Max Turns */
             max_turns?: number | null;
             /**
@@ -8074,6 +8296,11 @@ export interface components {
              * Format: uuid
              */
             agent_id: string;
+            /**
+             * Alias
+             * @description The name people type after `/seclai` to run this agent.
+             */
+            alias?: string | null;
             /** Allow Dms */
             allow_dms: boolean;
             /** Channel Ids */
@@ -8870,7 +9097,7 @@ export interface components {
          * UpdateEvaluationCriteriaRequest
          * @description Request body for updating an evaluation criteria.
          *
-         *     Retry settings and sample frequency are set at the agent level.
+         *     The evaluation mode and sample frequency are set at the agent level.
          */
         UpdateEvaluationCriteriaRequest: {
             /** Description */
@@ -9451,7 +9678,7 @@ export interface components {
             } | null;
             /**
              * Evaluation Mode
-             * @description Evaluation mode: 'output_expectation', 'eval_and_retry', or 'sample_and_flag'.
+             * @description Evaluation mode: 'output_expectation' or 'sample_and_flag'. From Seclai-Version 2026-11-04 'eval_and_retry' returns 400; earlier versions store it as 'sample_and_flag'.
              */
             evaluation_mode?: string | null;
             /**
@@ -9466,7 +9693,7 @@ export interface components {
             max_credits_per_run?: number | null;
             /**
              * Max Retries
-             * @description Max retries for eval_and_retry mode (1-10).
+             * @description Deprecated: accepted and has no effect.
              */
             max_retries?: number | null;
             /**
@@ -9496,14 +9723,14 @@ export interface components {
             prompt_model_auto_rollback_enabled?: boolean | null;
             /**
              * Prompt Model Auto Rollback Triggers
-             * @description Failure signals that trigger rollback: agent_eval_fail, governance_flag, governance_block, agent_run_failed.
+             * @description Failure signals that trigger rollback: governance_flag, governance_block, agent_run_failed. agent_eval_fail is accepted and never fires; in the list, a run with a failed evaluation is never picked as the rollback target.
              */
             prompt_model_auto_rollback_triggers?: string[] | null;
             /** @description Auto-upgrade strategy: none, early_adopter, middle_of_road, cautious_adopter. */
             prompt_model_auto_upgrade_strategy?: components["schemas"]["PromptModelAutoUpgradeStrategy"] | null;
             /**
              * Retry On Failure
-             * @description Whether to retry on evaluation failure.
+             * @description Deprecated: accepted and has no effect.
              */
             retry_on_failure?: boolean | null;
             /**
@@ -13235,6 +13462,7 @@ export interface operations {
              *
              *     SSE events:
              *     - `event: init` — `data` is an `AgentRunResponse` snapshot (includes `run_id`).
+             *     - `event: result` — `data` is an `AgentRunResponse` snapshot once the run reported success (see `result_reported_at`): its `output` is the run's answer.  Sent before `done`; for an agent whose `report_success` is `on_result` it can arrive while later steps still run.
              *     - `event: done` — `data` is the final `AgentRunResponse` snapshot (includes `output`, `credits`, etc).
              *     - Other events (e.g. `status`, step events) are forwarded from the run event stream.
              *     - On `timeout` / `error`, the payload includes `run_id` so clients can fetch status via `GET /agents/runs/{run_id}`.
@@ -13419,6 +13647,106 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EmailTriggerConfigResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
+        };
+    };
+    get_metadata_keys_api_api_agents__agent_id__triggers__trigger_id__metadata_keys_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
+            };
+            path: {
+                agent_id: string;
+                trigger_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MetadataKeysResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
+        };
+    };
+    set_metadata_keys_api_api_agents__agent_id__triggers__trigger_id__metadata_keys_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
+            };
+            path: {
+                agent_id: string;
+                trigger_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetMetadataKeysRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MetadataKeysResponse"];
                 };
             };
             /** @description Validation Error */
@@ -16375,6 +16703,53 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description A dependency is unavailable. `database_unavailable` is temporary (for example routine maintenance) and carries a `Retry-After` header, after which the request can be retried unchanged. `vector_store_unavailable` means the vector store backing an embeddings operation is not configured; it carries no `Retry-After` because it does not clear without an operator. */
+            503: {
+                headers: {
+                    /** @description Seconds to wait before retrying. Sent only with `database_unavailable`. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceUnavailableError"];
+                };
+            };
+        };
+    };
+    get_knowledge_base_metadata_key_stats_api_knowledge_bases__knowledge_base_id__metadata_key_stats_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
+                "X-Account-Id"?: components["parameters"]["X-Account-Id"];
+                /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
+                "Seclai-Version"?: components["parameters"]["Seclai-Version"];
+            };
+            path: {
+                knowledge_base_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeBaseMetadataKeyStatsResponse"];
+                };
             };
             /** @description Validation Error */
             422: {

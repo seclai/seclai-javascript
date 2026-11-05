@@ -121,6 +121,14 @@ export type {
   SlackTriggerScope,
   SlackReplyVisibility,
 
+  // Agent Trigger Metadata Keys
+  MetadataOrigin,
+  MetadataKeyDeclaration,
+  MetadataKeyDeclarationInput,
+  SetMetadataKeysRequest,
+  DeclarableMetadataKey,
+  MetadataKeysResponse,
+
   // Agent Email Governance
   AgentEmailOptOutResponse,
   AgentEmailOptOutListResponse,
@@ -217,6 +225,10 @@ export type {
   KnowledgeBaseResponse,
   CreateKnowledgeBaseBody,
   UpdateKnowledgeBaseBody,
+  KnowledgeBaseMetadataKeyStatsResponse,
+  MetadataKeyWindowResponse,
+  MetadataKeyCountResponse,
+  MetadataValueCountResponse,
 
   // Memory Banks
   MemoryBankListResponse,

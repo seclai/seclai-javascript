@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.9.0] - 2026-11-05
+
+### Changed
+
+- Sync the bundled OpenAPI spec and regenerate the types. Existing responses gain properties: `result_reported_at` on `AgentRunResponse`, set once the run's answer is in `output`, and `alias` on `SlackTriggerConfigResponse`
+- Move `SeclaiApiVersion.Latest` to `2026-11-04`. Nothing is sent unless `apiVersion` is set, so a client that passes `SeclaiApiVersion.Latest` now opts into `2026-11-04`. From `2026-11-02`, `updateAgentDefinition()`, and `updateAgent()` when it sets `sampling_config`, refuse a definition or sampling rule that references a metadata key no trigger declares (with a 400 and a 422 respectively), where older versions declare the key as optional; from `2026-11-04`, `createEvaluationResult()` rejects `retry_triggered: true`, `updateAgent()` rejects `evaluation_mode` `eval_and_retry`, and `createEvaluationCriteria()` and `updateEvaluationCriteria()` reject a `step_id` that does not name a `display_result` or `streaming_result` step, each with a 400
+- Mark `input` on `SetSlackTriggerConfigRequest` deprecated. The API ignores it: a Slack run's input is the text after `/seclai <alias>`, or the message the shortcut was used on. It stays on the type so existing calls still compile
+
+### Added
+
+- Add `getMetadataKeys()` and `setMetadataKeys()` to read and replace the run metadata keys an agent trigger declares, which steps reference as `{{metadata.<key>}}`. A key's `required` defaults to `false` and can be omitted
+- Add `getKnowledgeBaseMetadataKeyStats()` to see which item-metadata keys a knowledge base's content carries, with item counts and top values for all time and the last 30 and 7 days
+- Accept `alias` on `setSlackTriggerConfig()`, the name people type after `/seclai` to run the agent
+- Add the `SeclaiApiVersion.V2026_11_02` and `SeclaiApiVersion.V2026_11_04` constants, so those versions are accepted as `apiVersion`
+- Add the type exports `MetadataOrigin`, `MetadataKeyDeclaration`, `MetadataKeyDeclarationInput`, `SetMetadataKeysRequest`, `DeclarableMetadataKey`, `MetadataKeysResponse`, `KnowledgeBaseMetadataKeyStatsResponse`, `MetadataKeyWindowResponse`, `MetadataKeyCountResponse` and `MetadataValueCountResponse`
+
 ## [1.8.0] - 2026-10-31
 
 ### Changed
@@ -270,6 +286,7 @@ _Stable release. No functional changes since 0.0.1._
 
 _Initial release._
 
+[1.9.0]: https://github.com/seclai/seclai-javascript/releases/tag/1.9.0
 [1.8.0]: https://github.com/seclai/seclai-javascript/releases/tag/1.8.0
 [1.7.0]: https://github.com/seclai/seclai-javascript/releases/tag/1.7.0
 [1.6.1]: https://github.com/seclai/seclai-javascript/releases/tag/1.6.1

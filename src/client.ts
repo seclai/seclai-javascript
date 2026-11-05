@@ -182,6 +182,9 @@ import type {
   ListAgentExamplesOptions,
   SetSlackTriggerConfigRequest,
   SlackTriggerConfigResponse,
+  SetMetadataKeysRequest,
+  MetadataKeysResponse,
+  KnowledgeBaseMetadataKeyStatsResponse,
   ListSolutionsOptions,
   ListMemoryBanksOptions,
   ListEvaluationResultsOptions,
@@ -1929,8 +1932,9 @@ export class Seclai {
    * Configure an agent's `SLACK_COMMAND` trigger, which people run from Slack
    * with `/seclai` or the message shortcut.
    *
-   * Sets the Slack connection, form, channels, reply visibility and conversation
-   * settings. Omitted fields are left unchanged.
+   * Sets the Slack connection, `alias` (the name people type after `/seclai`),
+   * form, channels, reply visibility and conversation settings. Omitted fields
+   * are left unchanged. `input` is deprecated and ignored by the API.
    *
    * @param agentId - Agent identifier.
    * @param triggerId - Trigger identifier.
@@ -1968,6 +1972,46 @@ export class Seclai {
     return (await this.request("PUT", `/agents/${agentId}/triggers/${triggerId}/accepted-attachments`, {
       json: body,
     })) as AcceptedAttachmentsResponse;
+  }
+
+  /**
+   * Get the run metadata keys a trigger declares.
+   *
+   * Steps may reference a declared key as `{{metadata.<key>}}`. The response
+   * also lists the system and source keys the trigger's type can declare.
+   *
+   * @param agentId - Agent identifier.
+   * @param triggerId - Trigger identifier, as `getAgent()` returns it.
+   * @returns The trigger's declared and declarable metadata keys.
+   */
+  async getMetadataKeys(agentId: string, triggerId: string): Promise<MetadataKeysResponse> {
+    return (await this.request(
+      "GET",
+      `/agents/${agentId}/triggers/${triggerId}/metadata-keys`,
+    )) as MetadataKeysResponse;
+  }
+
+  /**
+   * Replace the run metadata keys a trigger declares.
+   *
+   * The body is the whole declaration and replaces the current one. The API
+   * answers 400 when the agent references a key that no trigger of its branch
+   * declares.
+   *
+   * @param agentId - Agent identifier.
+   * @param triggerId - Trigger identifier, as `getAgent()` returns it.
+   * @param body - The full declaration; each key's `required` defaults to `false`.
+   * @returns The trigger's metadata keys, with `warnings` naming agents whose
+   *   `call_agent` mapping no longer fits.
+   */
+  async setMetadataKeys(
+    agentId: string,
+    triggerId: string,
+    body: SetMetadataKeysRequest,
+  ): Promise<MetadataKeysResponse> {
+    return (await this.request("PUT", `/agents/${agentId}/triggers/${triggerId}/metadata-keys`, {
+      json: body,
+    })) as MetadataKeysResponse;
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -2155,6 +2199,22 @@ export class Seclai {
    */
   async getKnowledgeBase(knowledgeBaseId: string): Promise<KnowledgeBaseResponse> {
     return (await this.request("GET", `/knowledge_bases/${knowledgeBaseId}`)) as KnowledgeBaseResponse;
+  }
+
+  /**
+   * Get the item-metadata keys seen in a knowledge base's content.
+   *
+   * Reports, for all time and the last 30 and 7 days, each key's item count,
+   * number of distinct values and five most frequent values.
+   *
+   * @param knowledgeBaseId - Knowledge base identifier.
+   * @returns The key statistics per window.
+   */
+  async getKnowledgeBaseMetadataKeyStats(knowledgeBaseId: string): Promise<KnowledgeBaseMetadataKeyStatsResponse> {
+    return (await this.request(
+      "GET",
+      `/knowledge_bases/${knowledgeBaseId}/metadata-key-stats`,
+    )) as KnowledgeBaseMetadataKeyStatsResponse;
   }
 
   /**
