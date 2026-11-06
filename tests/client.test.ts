@@ -548,6 +548,20 @@ describe("Streaming", () => {
     expect(err.run).toEqual(initRun);
   });
 
+  test("runStreamingAgentAndWait with throwOnIncomplete throws for a JSON reply whose run has not finished", async () => {
+    const client = makeClient(() => jsonResponse(reportedRun));
+    const err = await client
+      .runStreamingAgentAndWait("ag_1", { input: "hi" }, { throwOnIncomplete: true })
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(SeclaiStreamingError);
+    expect(err.run).toEqual(reportedRun);
+    // returnOnResult accepts it, and without either option it is returned as released.
+    expect(
+      await client.runStreamingAgentAndWait("ag_1", { input: "hi" }, { throwOnIncomplete: true, returnOnResult: true }),
+    ).toEqual(reportedRun);
+    expect(await client.runStreamingAgentAndWait("ag_1", { input: "hi" })).toEqual(reportedRun);
+  });
+
   // Without throwOnIncomplete, each ending keeps its 1.8.0 behaviour.
   test("runStreamingAgentAndWait by default returns a non-pending snapshot when the stream ends before done", async () => {
     const client = makeClient((req) =>
@@ -720,6 +734,36 @@ describe("Polling", () => {
     });
     expect(result).toEqual(withSteps);
     expect(gets).toEqual(["?include_step_outputs=true"]);
+  });
+
+  test("runAgentAndPoll with includeStepOutputs sends no extra GET for a pending initial response", async () => {
+    let gets = 0;
+    const client = makeClient((req) => {
+      if (req.method === "POST") return jsonResponse({ id: "run_1", status: "pending" });
+      gets++;
+      return jsonResponse({ id: "run_1", status: "running" });
+    });
+    await expect(
+      client.runAgentAndPoll("ag_1", { input: "hi" }, { pollIntervalMs: 50, timeoutMs: 20, includeStepOutputs: true }),
+    ).rejects.toBeInstanceOf(SeclaiStreamingError);
+    expect(gets).toBe(1);
+  });
+
+  test("runAgentAndPoll with includeStepOutputs does not fetch after an abort", async () => {
+    const caller = new AbortController();
+    let gets = 0;
+    const client = makeClient((req) => {
+      if (req.method === "POST") {
+        caller.abort(); // while runAgent() is in flight
+        return jsonResponse({ id: "run_1", status: "completed" });
+      }
+      gets++;
+      return jsonResponse({ id: "run_1", status: "completed" });
+    });
+    await expect(
+      client.runAgentAndPoll("ag_1", { input: "hi" }, { includeStepOutputs: true, signal: caller.signal }),
+    ).rejects.toThrow("Polling aborted.");
+    expect(gets).toBe(0);
   });
 
   test("runAgentAndPoll still throws on timeout without result_reported_at", async () => {

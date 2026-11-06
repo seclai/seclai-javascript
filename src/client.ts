@@ -1252,7 +1252,8 @@ export class Seclai {
       returnOnResult?: boolean;
       /**
        * Throw {@link SeclaiStreamingError}, with the latest snapshot in `run`,
-       * whenever the stream ends or breaks before `done`, instead of returning
+       * whenever the stream ends or breaks before `done`, or the server answers
+       * with plain JSON for a run that has not finished, instead of returning
        * an unfinished run or throwing the fetch error (default: false). This
        * becomes the default in the next major version.
        */
@@ -1317,7 +1318,16 @@ export class Seclai {
 
       // If server returned JSON instead of SSE
       if (isJson) {
-        return (await response.json()) as AgentRunResponse;
+        const run = (await response.json()) as AgentRunResponse;
+        const status = (run as any).status;
+        const finished =
+          status === "completed" || status === "failed" || status === "cancelled" ||
+          Boolean(opts?.returnOnResult && run.result_reported_at);
+        if (opts?.throwOnIncomplete && !finished) {
+          const state = run.result_reported_at ? "A result had been reported; see `run`." : "No result had been reported.";
+          throw new SeclaiStreamingError(`The server answered with JSON for a run that has not finished. ${state}`, run.run_id, run);
+        }
+        return run;
       }
 
       if (!response.body) {
@@ -1357,7 +1367,9 @@ export class Seclai {
         readFailure = err instanceof Error ? err.message : String(err);
       }
 
-      // Dispatch an event whose terminating blank line has not arrived.
+      // Flush the decoder, and dispatch an event whose complete lines were read
+      // but whose terminating blank line has not arrived. Text after the last
+      // newline is not parsed.
       parser.feed(decoder.decode());
       parser.end();
 
@@ -1541,8 +1553,8 @@ export class Seclai {
    * A run's answer can be ready before its last step finishes: once
    * `result_reported_at` is set, `output` holds the answer. Pass
    * `returnOnResult: true` to return as soon as a run has it set, the run
-   * `runAgent()` returns included (with `includeStepOutputs`, the first
-   * `getAgentRun()` instead, fetched without waiting). Such a run may still be in progress: its
+   * `runAgent()` returns included (with `includeStepOutputs`, when that run
+   * would end the poll, it is fetched again at once for its step outputs). Such a run may still be in progress: its
    * `status` is not terminal and the run can still fail, so check
    * `result_reported_at`, not `status`.
    *
@@ -1585,8 +1597,17 @@ export class Seclai {
     if (!runId) throw new SeclaiError("Agent run response did not contain an id.");
 
     // The initial response is checked too: a fast run can already be done. It
-    // carries no step outputs, so when they are asked for, fetch the run first.
-    let current = opts?.includeStepOutputs ? await this.getAgentRun(runId, { includeStepOutputs: true }) : run;
+    // carries no step outputs, so when they are asked for and it would end the
+    // poll, fetch the run first.
+    let current = run;
+    if (opts?.includeStepOutputs) {
+      const status = (run as any).status;
+      if (status === "completed" || status === "failed" || status === "cancelled" ||
+          (opts.returnOnResult && run.result_reported_at)) {
+        if (opts.signal?.aborted) throw new SeclaiError("Polling aborted.");
+        current = await this.getAgentRun(runId, { includeStepOutputs: true });
+      }
+    }
     while (true) {
       const status = (current as any).status;
       if (status === "completed" || status === "failed" || status === "cancelled") {

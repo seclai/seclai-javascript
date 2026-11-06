@@ -370,7 +370,8 @@ By default, a stream that ends before `done` returns the latest snapshot when
 its status is not `pending`, so the run returned may not have finished: check
 `status` and `result_reported_at`. A stream that breaks throws the fetch error.
 Pass `throwOnIncomplete: true` to throw `SeclaiStreamingError`, with the snapshot
-in `run`, in both cases instead. It is recommended, and becomes the default in
+in `run`, in both cases instead, and also when the server answers with plain
+JSON for a run that has not finished. It is recommended, and becomes the default in
 the next major version:
 
 <!-- sdksync:check -->
@@ -459,9 +460,9 @@ const result = await client.runAgentAndPoll(
 A run's answer can be ready before its last step finishes: once
 `result_reported_at` is set on `getAgentRun()`, `output` holds the answer. Pass
 `returnOnResult: true` to return as soon as a run has it set, the one
-`runAgent()` returns included. With `includeStepOutputs`, that first check uses a
-`getAgentRun()` fetched at once instead, because the `runAgent()` response
-carries no step outputs. Such a run may still be in progress: its `status`
+`runAgent()` returns included. With `includeStepOutputs`, when that run would end
+the poll, it is fetched again at once, because the `runAgent()` response carries
+no step outputs. Such a run may still be in progress: its `status`
 is not terminal and the run can still fail, so check `result_reported_at`, not
 `status`. If `timeoutMs` elapses first, it throws `SeclaiStreamingError` with the
 last polled run in `run`.
