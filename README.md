@@ -466,7 +466,7 @@ the poll and `signal` is not aborted, it is fetched again at once, because the
 without step outputs. Such a run may still be in progress: its `status`
 is not terminal and the run can still fail, so check `result_reported_at`, not
 `status`. If `timeoutMs` elapses first, it throws `SeclaiStreamingError` with the
-last polled run in `run`.
+latest run it has (the `runAgent()` response if no poll ran) in `run`.
 
 <!-- sdksync:check -->
 ```ts

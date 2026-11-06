@@ -773,6 +773,18 @@ describe("Polling", () => {
     expect(gets).toBe(0);
   });
 
+  test("runAgentAndPoll returns a finished start run when timeoutMs elapses during the start request", async () => {
+    const client = makeClient(async (req) => {
+      if (req.method === "POST") {
+        await new Promise((r) => setTimeout(r, 40));
+        return jsonResponse({ id: "run_1", status: "completed" });
+      }
+      throw new Error("unexpected GET");
+    });
+    const result = await client.runAgentAndPoll("ag_1", { input: "hi" }, { pollIntervalMs: 5, timeoutMs: 10 });
+    expect(result).toEqual({ id: "run_1", status: "completed" });
+  });
+
   test("runAgentAndPoll still throws on timeout without result_reported_at", async () => {
     const client = makeClient((req) =>
       jsonResponse({ id: "run_1", status: req.method === "POST" ? "pending" : "running", result_reported_at: null }),
