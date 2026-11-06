@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.9.0] - 2026-11-05
+
+### Changed
+
+- Sync the bundled OpenAPI spec and regenerate the types. Existing responses gain properties: `result_reported_at` on `AgentRunResponse`, set once the run's answer is in `output`, and `alias` on `SlackTriggerConfigResponse`
+- Move `SeclaiApiVersion.Latest` to `2026-11-04`. Nothing is sent unless `apiVersion` is set, so a client that passes `SeclaiApiVersion.Latest` now opts into `2026-11-04`. From `2026-11-02`, `updateAgentDefinition()`, and `updateAgent()` when it sets `sampling_config`, refuse a definition or sampling rule that references a metadata key no trigger declares (with a 400 and a 422 respectively), where older versions declare the key as optional; from `2026-11-04`, `createEvaluationResult()` rejects `retry_triggered: true`, `updateAgent()` rejects `evaluation_mode` `eval_and_retry`, and `createEvaluationCriteria()` and `updateEvaluationCriteria()` reject a `step_id` that does not name a `display_result` or `streaming_result` step, each with a 400
+- Note API changes that apply on every API version, whatever `apiVersion` is set: a run started with `runAgent()`, `runStreamingAgent()` or the helpers built on them is refused with a 400 when its `metadata` sends a custom key the trigger does not declare, or lacks a required one, so declare custom keys with `setMetadataKeys()` before sending them; `updateAgentDefinition()` rejects a definition holding a `gate` or `retry` step (use `if_else`, or `repeat_until` to run steps again until a condition holds); the `agent_eval_fail` rollback trigger is accepted and never fires, and the default rollback triggers no longer include it; `max_retries` and `retry_on_failure` on `updateAgent()` are accepted and have no effect; and `evaluation_mode` on `AgentSummaryResponse` defaults to `sample_and_flag` instead of `eval_and_retry`
+- Check the `runAgent()` response in `runAgentAndPoll()` before polling, so a run that ended at once is returned without waiting one `pollIntervalMs`. After an abort through `signal` during the start request, that run is now returned instead of throwing `Polling aborted.`, and with `includeStepOutputs` it comes back without step outputs. When `timeoutMs` elapses during the start request, that run is also returned, where `SeclaiStreamingError` was thrown
+- Mark `input` on `SetSlackTriggerConfigRequest` deprecated. The API ignores it: a Slack run's input is the text after `/seclai <alias>`, or the message the shortcut was used on. It stays on the type so existing calls still compile
+- Mark `max_retries` and `retry_on_failure` on `UpdateAgentRequest`, and `retry_count` and `retry_triggered` on `CreateEvaluationResultRequest`, deprecated. They have no effect, and from `2026-11-04` `retry_triggered: true` returns a 400. They stay on the types so existing calls still compile
+
+### Added
+
+- Add `getMetadataKeys()` and `setMetadataKeys()` to read and replace the run metadata keys an agent trigger declares, which steps reference as `{{metadata.<key>}}`. A key's `required` defaults to `false` and can be omitted
+- Add `getKnowledgeBaseMetadataKeyStats()` to see which item-metadata keys a knowledge base's content carries, with item counts and top values for all time and the last 30 and 7 days
+- Accept `alias` on `setSlackTriggerConfig()`, the name people type after `/seclai` to run the agent
+- Add the `returnOnResult` option to `runAgentAndPoll()` and `runStreamingAgentAndWait()`, to return as soon as a run has `result_reported_at` set (from `runAgent()` or a poll), or a `result` event arrives, without waiting for later steps. The run may still be in progress and can still fail
+- Add the `throwOnIncomplete` option to `runStreamingAgentAndWait()`, to throw `SeclaiStreamingError`, with the latest snapshot in `run`, when the stream ends or breaks before `done`, or the server answers with plain JSON for a run that has not finished, instead of returning a run that has not finished or throwing the fetch error. It will become the default in the next major version
+- Add `run` to `SeclaiStreamingError`: the latest snapshot of the unfinished run when `runStreamingAgentAndWait()` or `runAgentAndPoll()` gives up, so a reported answer in `output` is not lost
+- Add the `SeclaiApiVersion.V2026_11_02` and `SeclaiApiVersion.V2026_11_04` constants, so those versions are accepted as `apiVersion`
+- Add the type exports `MetadataOrigin`, `MetadataKeyDeclaration`, `MetadataKeyDeclarationInput`, `SetMetadataKeysRequest`, `DeclarableMetadataKey`, `MetadataKeysResponse`, `KnowledgeBaseMetadataKeyStatsResponse`, `MetadataKeyWindowResponse`, `MetadataKeyCountResponse` and `MetadataValueCountResponse`
+
 ## [1.8.0] - 2026-10-31
 
 ### Changed
@@ -270,6 +292,7 @@ _Stable release. No functional changes since 0.0.1._
 
 _Initial release._
 
+[1.9.0]: https://github.com/seclai/seclai-javascript/releases/tag/1.9.0
 [1.8.0]: https://github.com/seclai/seclai-javascript/releases/tag/1.8.0
 [1.7.0]: https://github.com/seclai/seclai-javascript/releases/tag/1.7.0
 [1.6.1]: https://github.com/seclai/seclai-javascript/releases/tag/1.6.1
