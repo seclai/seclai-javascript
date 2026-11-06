@@ -1562,9 +1562,12 @@ export class Seclai {
    * with the last polled run in `run`. If that run has `result_reported_at`
    * set, its `output` is the answer.
    *
-   * `signal` is checked between polls. After an abort, a start run that has
-   * already finished is still returned, without step outputs even when
-   * `includeStepOutputs` is set; otherwise this throws.
+   * `signal` is checked at the top of each poll, after the check for a run
+   * that ends the poll. A run that has ended the poll by then, whether the
+   * start run or a polled one, is returned even after an abort; the start run
+   * then comes back without step outputs, even when `includeStepOutputs` is
+   * set. Otherwise an abort throws `SeclaiError("Polling aborted.")`, which is
+   * not an `AbortError` and does not carry `signal.reason`.
    *
    * @param agentId - Agent identifier.
    * @param body - Run request payload.
@@ -1573,8 +1576,9 @@ export class Seclai {
    *   with `result_reported_at` set.
    * @throws {@link SeclaiStreamingError} If `timeoutMs` elapses before the run
    *   finished. Its `run` holds the last polled run.
-   * @throws {@link SeclaiError} `"Polling aborted."` If `signal` is aborted
-   *   before the run finished.
+   * @throws {@link SeclaiError} `"Polling aborted."` If `signal` is aborted and,
+   *   at the next poll's check, the run has not ended the poll. It is not an
+   *   `AbortError` and does not carry `signal.reason`.
    */
   async runAgentAndPoll(
     agentId: string,
