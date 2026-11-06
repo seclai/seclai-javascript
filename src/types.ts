@@ -536,7 +536,7 @@ export type EvaluationResultListResponse = VersionedList<components["schemas"]["
 
 /** Request body for creating a manual evaluation result. */
 export type CreateEvaluationResultRequest = Omit<
-  WithServerDefaults<components["schemas"]["CreateEvaluationResultRequest"], "flagged" | "retry_count" | "retry_triggered">,
+  WithServerDefaults<components["schemas"]["CreateEvaluationResultRequest"], "flagged">,
   "retry_count" | "retry_triggered"
 > & {
   /** @deprecated Has no effect on any count. */

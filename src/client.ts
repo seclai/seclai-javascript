@@ -1199,22 +1199,65 @@ export class Seclai {
    * returns no `stream_reasoning` events.
    *
    * A `result` event carries the run's answer in `output` once
-   * `result_reported_at` is set, and can arrive while later steps still run. If
-   * the stream ends or `timeoutMs` elapses after a `result` event but before
-   * `done`, that `result` snapshot is returned instead of throwing.
+   * `result_reported_at` is set, and can arrive while later steps still run.
+   * Pass `returnOnResult: true` to return that `result` snapshot as soon as it
+   * arrives, without waiting for `done`. Such a run may still be in progress:
+   * its `status` is not terminal and the run can still fail, so check
+   * `result_reported_at`, not `status`.
+   *
+   * If `timeoutMs` elapses, this throws {@link SeclaiStreamingError} with the
+   * latest snapshot in `run`: the `result` snapshot if one arrived, else the
+   * `init` snapshot. An abort from `signal` rethrows the abort error.
+   *
+   * By default, a stream that ends before `done` returns the latest snapshot
+   * when its status is not `pending`, so the run returned may not have
+   * finished: check `status` and `result_reported_at`. A stream that breaks
+   * throws the fetch error. Pass `throwOnIncomplete: true` to throw
+   * {@link SeclaiStreamingError} with the snapshot in `run` in both cases
+   * instead; it is recommended, and becomes the default in the next major
+   * version.
    *
    * @param agentId - Agent identifier.
    * @param body - Streaming run request payload, without `include_reasoning`.
-   * @param opts - Timeout and abort signal options.
-   * @returns Final agent run payload from the `done` event, or the `result`
-   *   snapshot when `done` does not arrive.
-   * @throws {@link SeclaiStreamingError} If the stream ends, or `timeoutMs`
-   *   elapses, before a `done` or `result` event.
+   * @param opts - Timeout, abort signal and `returnOnResult` options.
+   * @returns The run from the `done` event; with `returnOnResult`, the
+   *   `result` snapshot; without `throwOnIncomplete`, possibly an unfinished
+   *   snapshot (see above).
+   * @throws {@link SeclaiStreamingError} If `timeoutMs` elapses, or, with
+   *   `throwOnIncomplete`, the stream ends or breaks, before the run finished.
+   *   Its `run` holds the latest snapshot.
+   *
+   * @example
+   * ```ts
+   * try {
+   *   const run = await client.runStreamingAgentAndWait("agent-id", { input: "Hello" }, { throwOnIncomplete: true });
+   *   console.log(run.output);
+   * } catch (err) {
+   *   if (err instanceof SeclaiStreamingError && err.run?.result_reported_at) {
+   *     console.log("Answer (run not finished):", err.run.output);
+   *   } else throw err;
+   * }
+   * ```
    */
   async runStreamingAgentAndWait(
     agentId: string,
     body: Omit<AgentRunStreamRequest, "include_reasoning">,
-    opts?: { timeoutMs?: number; signal?: AbortSignal },
+    opts?: {
+      timeoutMs?: number;
+      signal?: AbortSignal;
+      /**
+       * Return the `result` snapshot as soon as a `result` event arrives (its
+       * answer is in `output`), without waiting for `done` (default: false).
+       */
+      returnOnResult?: boolean;
+      /**
+       * Throw {@link SeclaiStreamingError}, with the latest snapshot in `run`,
+       * whenever the stream ends or breaks before `done`, instead of returning
+       * an unfinished run or throwing the fetch error (default: false). This
+       * becomes the default in the next major version.
+       */
+      throwOnIncomplete?: boolean;
+    },
   ): Promise<AgentRunResponse> {
     // Not sent even from untyped callers: the reasoning events are discarded here.
     const { include_reasoning: _ignored, ...runBody } = body as AgentRunStreamRequest;
@@ -1300,26 +1343,48 @@ export class Seclai {
         }
       });
 
-      while (!final) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        if (value) parser.feed(decoder.decode(value, { stream: true }));
+      let readFailure: string | undefined;
+      try {
+        while (!final && !(opts?.returnOnResult && reported)) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          if (value) parser.feed(decoder.decode(value, { stream: true }));
+        }
+      } catch (err) {
+        // The caller asked to stop: keep the abort error. Without
+        // throwOnIncomplete, a broken read throws the fetch error, as released.
+        if (opts?.signal?.aborted || (!opts?.throwOnIncomplete && !timedOut)) throw err;
+        readFailure = err instanceof Error ? err.message : String(err);
       }
 
+      // Dispatch an event whose terminating blank line has not arrived.
+      parser.feed(decoder.decode());
       parser.end();
 
       if (final) return final;
-      if (lastSeen && (lastSeen as any).status && (lastSeen as any).status !== "pending") {
+      if (opts?.returnOnResult && reported) {
+        reader.cancel().catch(() => {});
+        return reported;
+      }
+      // Released behaviour without throwOnIncomplete: the stream ended early.
+      if (!opts?.throwOnIncomplete && !timedOut && lastSeen?.status && lastSeen.status !== "pending") {
         return lastSeen;
       }
 
-      throw new SeclaiStreamingError("Stream ended before receiving a 'done' event.", lastSeen?.run_id);
+      const run = reported ?? lastSeen;
+      const state = reported ? "A result had been reported; see `run`." : "No result had been reported.";
+      const reason = timedOut
+        ? `Timed out after ${timeoutMs}ms before the streaming agent run finished.`
+        : readFailure !== undefined
+          ? `Stream failed before the run finished: ${readFailure}.`
+          : "Stream ended before receiving a 'done' event.";
+      throw new SeclaiStreamingError(`${reason} ${state}`, run?.run_id, run);
     } catch (err) {
-      if (timedOut) {
-        if (reported) return reported;
+      if (timedOut && !opts?.signal?.aborted && !(err instanceof SeclaiStreamingError)) {
         throw new SeclaiStreamingError(
           `Timed out after ${timeoutMs}ms waiting for streaming agent run to complete.`,
           lastSeen?.run_id,
+          reported ?? lastSeen,
         );
       }
       throw err;
@@ -1475,16 +1540,23 @@ export class Seclai {
    *
    * A run's answer can be ready before its last step finishes: once
    * `result_reported_at` is set, `output` holds the answer. Pass
-   * `returnOnResult: true` to return as soon as a polled run has it set. When
-   * `timeoutMs` elapses and the last polled run has it set, that run is returned
-   * instead of throwing.
+   * `returnOnResult: true` to return as soon as a run has it set, the run
+   * `runAgent()` returns included (with `includeStepOutputs`, the first
+   * `getAgentRun()` instead, fetched without waiting). Such a run may still be in progress: its
+   * `status` is not terminal and the run can still fail, so check
+   * `result_reported_at`, not `status`.
+   *
+   * When `timeoutMs` elapses first, this throws {@link SeclaiStreamingError}
+   * with the last polled run in `run`. If that run has `result_reported_at`
+   * set, its `output` is the answer.
    *
    * @param agentId - Agent identifier.
    * @param body - Run request payload.
    * @param opts - Polling configuration and abort signal.
-   * @returns The terminal agent run, or one with `result_reported_at` set (see above).
-   * @throws {@link SeclaiStreamingError} On timeout, unless the last polled run
-   *   has `result_reported_at` set.
+   * @returns The terminal agent run, or, with `returnOnResult`, the first run
+   *   with `result_reported_at` set.
+   * @throws {@link SeclaiStreamingError} If `timeoutMs` elapses before the run
+   *   finished. Its `run` holds the last polled run.
    */
   async runAgentAndPoll(
     agentId: string,
@@ -1512,25 +1584,27 @@ export class Seclai {
     const runId = (run as any).id ?? (run as any).run_id;
     if (!runId) throw new SeclaiError("Agent run response did not contain an id.");
 
-    let last: AgentRunResponse | undefined;
+    // The initial response is checked too: a fast run can already be done. It
+    // carries no step outputs, so when they are asked for, fetch the run first.
+    let current = opts?.includeStepOutputs ? await this.getAgentRun(runId, { includeStepOutputs: true }) : run;
     while (true) {
-      if (opts?.signal?.aborted) throw new SeclaiError("Polling aborted.");
-      if (Date.now() - startTime > timeout) {
-        if (last?.result_reported_at) return last;
-        throw new SeclaiStreamingError(`Polling timed out after ${timeout}ms.`, runId);
-      }
-
-      await new Promise((r) => setTimeout(r, pollInterval));
-
-      const current = await this.getAgentRun(runId,
-        opts?.includeStepOutputs ? { includeStepOutputs: true } : undefined,
-      );
-      last = current;
       const status = (current as any).status;
       if (status === "completed" || status === "failed" || status === "cancelled") {
         return current;
       }
       if (opts?.returnOnResult && current.result_reported_at) return current;
+
+      if (opts?.signal?.aborted) throw new SeclaiError("Polling aborted.");
+      if (Date.now() - startTime > timeout) {
+        const state = current.result_reported_at ? "A result had been reported; see `run`." : "No result had been reported.";
+        throw new SeclaiStreamingError(`Polling timed out after ${timeout}ms. ${state}`, runId, current);
+      }
+
+      await new Promise((r) => setTimeout(r, pollInterval));
+
+      current = await this.getAgentRun(runId,
+        opts?.includeStepOutputs ? { includeStepOutputs: true } : undefined,
+      );
     }
   }
 

@@ -10,7 +10,7 @@ import {
   SeclaiStreamingError,
   SeclaiApiVersion,
 } from "../src/index";
-import type { SetAcceptedAttachmentsRequest, SetSlackTriggerConfigRequest } from "../src/index";
+import type { SetAcceptedAttachmentsRequest, SetMetadataKeysRequest, SetSlackTriggerConfigRequest } from "../src/index";
 import { parseIni, isTokenValid } from "../src/auth";
 
 type RecordedRequest = {
@@ -483,7 +483,19 @@ describe("Streaming", () => {
 
   const reportedRun = { run_id: "run_1", status: "running", output: "answer", result_reported_at: "2026-11-05T00:00:00Z" };
 
-  test("runStreamingAgentAndWait returns the result snapshot when the stream ends before done", async () => {
+  const initRun = { run_id: "run_1", status: "running" };
+
+  test("runStreamingAgentAndWait with throwOnIncomplete throws with the init snapshot when the stream ends after init only", async () => {
+    const client = makeClient((req) =>
+      makeSseResponse([`event: init\ndata: ${JSON.stringify(initRun)}\n\n`], { signal: req.signal }),
+    );
+    const err = await client.runStreamingAgentAndWait("ag_1", { input: "hi" }, { timeoutMs: 5_000, throwOnIncomplete: true }).catch((e) => e);
+    expect(err).toBeInstanceOf(SeclaiStreamingError);
+    expect(err.run).toEqual(initRun);
+    expect(err.message).toContain("No result had been reported");
+  });
+
+  test("runStreamingAgentAndWait with throwOnIncomplete throws with the result snapshot when the stream ends before done", async () => {
     const client = makeClient((req) =>
       makeSseResponse(
         [
@@ -493,25 +505,129 @@ describe("Streaming", () => {
         { signal: req.signal },
       ),
     );
-    const result = await client.runStreamingAgentAndWait("ag_1", { input: "hi" }, { timeoutMs: 5_000 });
-    expect(result).toEqual(reportedRun);
+    const err = await client.runStreamingAgentAndWait("ag_1", { input: "hi" }, { timeoutMs: 5_000, throwOnIncomplete: true }).catch((e) => e);
+    expect(err).toBeInstanceOf(SeclaiStreamingError);
+    expect(err.run).toEqual(reportedRun);
+    expect(err.runId).toBe("run_1");
+    expect(err.message).toContain("A result had been reported");
   });
 
-  test("runStreamingAgentAndWait returns the result snapshot on timeout before done", async () => {
+  test("runStreamingAgentAndWait with throwOnIncomplete throws with the result snapshot on timeout, dispatching a buffered event", async () => {
     const encoder = new TextEncoder();
     const client = makeClient((req) => {
-      // Sends init and result, then stays open until the timeout aborts it.
+      // Sends init and a result missing its blank line, then stays open until the timeout aborts it.
       const stream = new ReadableStream<Uint8Array>({
         start(controller) {
-          controller.enqueue(encoder.encode(`event: init\ndata: ${JSON.stringify({ run_id: "run_1", status: "pending" })}\n\n`));
-          controller.enqueue(encoder.encode(`event: result\ndata: ${JSON.stringify(reportedRun)}\n\n`));
+          controller.enqueue(encoder.encode(`event: init\ndata: ${JSON.stringify(initRun)}\n\n`));
+          controller.enqueue(encoder.encode(`event: result\ndata: ${JSON.stringify(reportedRun)}\n`));
           req.signal?.addEventListener("abort", () => controller.error(new Error("aborted")), { once: true });
         },
       });
       return new Response(stream as any, { status: 200, headers: { "content-type": "text/event-stream" } });
     });
-    const result = await client.runStreamingAgentAndWait("ag_1", { input: "hi" }, { timeoutMs: 20 });
+    const err = await client.runStreamingAgentAndWait("ag_1", { input: "hi" }, { timeoutMs: 20, throwOnIncomplete: true }).catch((e) => e);
+    expect(err).toBeInstanceOf(SeclaiStreamingError);
+    expect(err.message).toContain("Timed out after 20ms");
+    expect(err.run).toEqual(reportedRun);
+  });
+
+  test("runStreamingAgentAndWait with throwOnIncomplete throws with the init snapshot when the stream breaks", async () => {
+    const encoder = new TextEncoder();
+    const client = makeClient(() => {
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(encoder.encode(`event: init\ndata: ${JSON.stringify(initRun)}\n\n`));
+          setTimeout(() => controller.error(new TypeError("connection reset")), 5);
+        },
+      });
+      return new Response(stream as any, { status: 200, headers: { "content-type": "text/event-stream" } });
+    });
+    const err = await client.runStreamingAgentAndWait("ag_1", { input: "hi" }, { timeoutMs: 5_000, throwOnIncomplete: true }).catch((e) => e);
+    expect(err).toBeInstanceOf(SeclaiStreamingError);
+    expect(err.message).toContain("connection reset");
+    expect(err.run).toEqual(initRun);
+  });
+
+  // Without throwOnIncomplete, each ending keeps its 1.8.0 behaviour.
+  test("runStreamingAgentAndWait by default returns a non-pending snapshot when the stream ends before done", async () => {
+    const client = makeClient((req) =>
+      makeSseResponse([`event: init\ndata: ${JSON.stringify(initRun)}\n\n`], { signal: req.signal }),
+    );
+    expect(await client.runStreamingAgentAndWait("ag_1", { input: "hi" }, { timeoutMs: 5_000 })).toEqual(initRun);
+  });
+
+  test("runStreamingAgentAndWait by default throws the fetch error when the stream breaks", async () => {
+    const encoder = new TextEncoder();
+    const reset = new TypeError("connection reset");
+    const client = makeClient(() => {
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(encoder.encode(`event: init\ndata: ${JSON.stringify(initRun)}\n\n`));
+          setTimeout(() => controller.error(reset), 5);
+        },
+      });
+      return new Response(stream as any, { status: 200, headers: { "content-type": "text/event-stream" } });
+    });
+    const err = await client.runStreamingAgentAndWait("ag_1", { input: "hi" }, { timeoutMs: 5_000 }).catch((e) => e);
+    expect(err).toBe(reset);
+  });
+
+  test("runStreamingAgentAndWait by default throws SeclaiStreamingError with the snapshot on timeout", async () => {
+    const encoder = new TextEncoder();
+    const client = makeClient((req) => {
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(encoder.encode(`event: init\ndata: ${JSON.stringify(initRun)}\n\n`));
+          req.signal?.addEventListener("abort", () => controller.error(new Error("aborted")), { once: true });
+        },
+      });
+      return new Response(stream as any, { status: 200, headers: { "content-type": "text/event-stream" } });
+    });
+    const err = await client.runStreamingAgentAndWait("ag_1", { input: "hi" }, { timeoutMs: 20 }).catch((e) => e);
+    expect(err).toBeInstanceOf(SeclaiStreamingError);
+    expect(err.runId).toBe("run_1");
+    expect(err.run).toEqual(initRun);
+  });
+
+  test("runStreamingAgentAndWait rethrows a caller abort after a result", async () => {
+    const encoder = new TextEncoder();
+    const caller = new AbortController();
+    const client = makeClient((req) => {
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(encoder.encode(`event: result\ndata: ${JSON.stringify(reportedRun)}\n\n`));
+          req.signal?.addEventListener("abort", () => controller.error(new DOMException("aborted", "AbortError")), { once: true });
+          setTimeout(() => caller.abort(), 5);
+        },
+      });
+      return new Response(stream as any, { status: 200, headers: { "content-type": "text/event-stream" } });
+    });
+    const err = await client
+      .runStreamingAgentAndWait("ag_1", { input: "hi" }, { timeoutMs: 5_000, signal: caller.signal })
+      .catch((e) => e);
+    expect(err).not.toBeInstanceOf(SeclaiStreamingError);
+    expect(err.name).toBe("AbortError");
+  });
+
+  test("runStreamingAgentAndWait with returnOnResult returns the result snapshot without waiting for done", async () => {
+    const encoder = new TextEncoder();
+    let cancelled = false;
+    const client = makeClient(() => {
+      // Never sends done and never closes.
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(encoder.encode(`event: init\ndata: ${JSON.stringify(initRun)}\n\n`));
+          controller.enqueue(encoder.encode(`event: result\ndata: ${JSON.stringify(reportedRun)}\n\n`));
+        },
+        cancel() {
+          cancelled = true;
+        },
+      });
+      return new Response(stream as any, { status: 200, headers: { "content-type": "text/event-stream" } });
+    });
+    const result = await client.runStreamingAgentAndWait("ag_1", { input: "hi" }, { timeoutMs: 5_000, returnOnResult: true });
     expect(result).toEqual(reportedRun);
+    expect(cancelled).toBe(true);
   });
 
   test("runStreamingAgentAndWait returns done over an earlier result", async () => {
@@ -558,12 +674,52 @@ describe("Polling", () => {
 
   const reportedRun = { id: "run_1", status: "running", output: "answer", result_reported_at: "2026-11-05T00:00:00Z" };
 
-  test("runAgentAndPoll returns a run with result_reported_at on timeout", async () => {
+  test("runAgentAndPoll throws with the last polled run on timeout, even when it has result_reported_at", async () => {
     const client = makeClient((req) =>
       req.method === "POST" ? jsonResponse({ id: "run_1", status: "pending" }) : jsonResponse(reportedRun),
     );
-    const result = await client.runAgentAndPoll("ag_1", { input: "hi" }, { pollIntervalMs: 5, timeoutMs: 30 });
-    expect(result).toEqual(reportedRun);
+    const err = await client
+      .runAgentAndPoll("ag_1", { input: "hi" }, { pollIntervalMs: 5, timeoutMs: 30 })
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(SeclaiStreamingError);
+    expect(err.run).toEqual(reportedRun);
+    expect(err.message).toContain("A result had been reported");
+  });
+
+  test("runAgentAndPoll returns the initial runAgent() response without polling when it is already finished", async () => {
+    const completed = { ...reportedRun, status: "completed" };
+    for (const [initial, opts] of [
+      [reportedRun, { returnOnResult: true }],
+      [completed, {}],
+    ] as const) {
+      let gets = 0;
+      const client = makeClient((req) => {
+        if (req.method === "POST") return jsonResponse(initial);
+        gets++;
+        return jsonResponse(completed);
+      });
+      const result = await client.runAgentAndPoll("ag_1", { input: "hi" }, { pollIntervalMs: 5, timeoutMs: 5_000, ...opts });
+      expect(result).toEqual(initial);
+      expect(gets).toBe(0);
+    }
+  });
+
+  test("runAgentAndPoll with includeStepOutputs fetches the run before returning a finished initial response", async () => {
+    const completed = { ...reportedRun, status: "completed" };
+    const withSteps = { ...completed, steps: [{ output: "step output" }] };
+    const gets: string[] = [];
+    const client = makeClient((req) => {
+      if (req.method === "POST") return jsonResponse(completed);
+      gets.push(new URL(req.url).search);
+      return jsonResponse(withSteps);
+    });
+    const result = await client.runAgentAndPoll("ag_1", { input: "hi" }, {
+      pollIntervalMs: 5_000,
+      timeoutMs: 1_000,
+      includeStepOutputs: true,
+    });
+    expect(result).toEqual(withSteps);
+    expect(gets).toEqual(["?include_step_outputs=true"]);
   });
 
   test("runAgentAndPoll still throws on timeout without result_reported_at", async () => {
@@ -2630,6 +2786,17 @@ describe("Agent Trigger Metadata Keys", () => {
       { metadata_keys: [] },
     ]);
   });
+
+  test("setMetadataKeys takes a SetMetadataKeysRequest body with a non-custom origin", async () => {
+    const bodies: unknown[] = [];
+    const client = makeClient((req) => {
+      bodies.push(JSON.parse(req.bodyText!));
+      return jsonResponse(keysResponse);
+    });
+    const body: SetMetadataKeysRequest = { metadata_keys: [{ key: "source_url", origin: "source" }] };
+    await client.setMetadataKeys("ag_1", "tr_1", body);
+    expect(bodies).toEqual([{ metadata_keys: [{ key: "source_url", origin: "source" }] }]);
+  });
 });
 
 describe("Agent Slack Triggers", () => {
@@ -4233,11 +4400,13 @@ describe("Request types", () => {
       const ref = `components["schemas"]["${name}"]`;
       if (!types.includes(ref)) continue; // not exported as a request type
       if (types.includes(`Partial<${ref}>`)) continue;
+      // Keys an outer Omit<WithServerDefaults<…>, "key" | …> drops are declared
+      // again by hand, as optional.
       const wrapped = types.match(
-        new RegExp(`WithServerDefaults<${ref.replace(/[[\]"]/g, "\\$&")},\\s*([^>]+)>`),
+        new RegExp(`WithServerDefaults<${ref.replace(/[[\]"]/g, "\\$&")},\\s*([^>]+)>(?:,\\s*([^>]+)>)?`),
       );
       for (const key of defaulted) {
-        if (!wrapped || !wrapped[1].includes(`"${key}"`)) missing.push(`${name}.${key}`);
+        if (!wrapped || !`${wrapped[1]} ${wrapped[2] ?? ""}`.includes(`"${key}"`)) missing.push(`${name}.${key}`);
       }
     }
     expect(missing).toEqual([]);

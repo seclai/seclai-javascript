@@ -361,16 +361,24 @@ await client.deleteAgentRun("run_id");
 
 The SDK provides two streaming patterns over the SSE `/runs/stream` endpoint:
 
-**Block until done** — returns the final `done` payload. If the stream ends or
-`timeoutMs` elapses after a `result` event but before `done`, it returns the
-`result` snapshot, whose `output` is the run's answer; with neither, it throws
-`SeclaiStreamingError`:
+**Block until done** — returns the run from the `done` event. If `timeoutMs`
+elapses first, it throws `SeclaiStreamingError`, whose `run` holds the latest
+snapshot: the `result` snapshot if one arrived, else the `init` snapshot. An
+abort through `signal` rethrows the abort error.
 
+By default, a stream that ends before `done` returns the latest snapshot when
+its status is not `pending`, so the run returned may not have finished: check
+`status` and `result_reported_at`. A stream that breaks throws the fetch error.
+Pass `throwOnIncomplete: true` to throw `SeclaiStreamingError`, with the snapshot
+in `run`, in both cases instead. It is recommended, and becomes the default in
+the next major version:
+
+<!-- sdksync:check -->
 ```ts
 const result = await client.runStreamingAgentAndWait(
   "agent_id",
   { input: "Hello", metadata: {} },
-  { timeoutMs: 60_000 },
+  { timeoutMs: 60_000, throwOnIncomplete: true },
 );
 ```
 
@@ -387,9 +395,39 @@ for await (const event of client.runStreamingAgent(
 }
 ```
 
+When the server answers with plain JSON instead of an SSE stream,
+`runStreamingAgent` yields only a `done` event, so read the answer from it.
+
 A `result` event carries the run's answer in `output` once `result_reported_at`
 is set. It comes before `done`, and for an agent that reports its result early it
-can arrive while later steps still run.
+can arrive while later steps still run. Pass `returnOnResult: true` to
+`runStreamingAgentAndWait` to return that `result` snapshot without waiting for
+`done`. Such a run may still be in progress: its `status` is not terminal and the
+run can still fail, so check `result_reported_at`, not `status`:
+
+<!-- sdksync:check -->
+```ts
+const run = await client.runStreamingAgentAndWait("agent_id", { input: "Hello" }, { returnOnResult: true });
+if (run.result_reported_at) console.log(run.output);
+```
+
+On a timeout, or with `throwOnIncomplete` on a cut stream, read the answer, if
+one was reported, from the error's `run`:
+
+```ts
+import { SeclaiStreamingError } from "@seclai/sdk";
+
+try {
+  const run = await client.runStreamingAgentAndWait("agent_id", { input: "Hello" }, { throwOnIncomplete: true });
+  console.log(run.output);
+} catch (err) {
+  if (err instanceof SeclaiStreamingError && err.run?.result_reported_at) {
+    console.log("Answer, run not finished:", err.run.output);
+  } else {
+    throw err;
+  }
+}
+```
 
 Pass `include_reasoning: true` to also receive `stream_reasoning` events carrying
 the model's reasoning while it thinks. They are sent only for a
@@ -420,9 +458,13 @@ const result = await client.runAgentAndPoll(
 
 A run's answer can be ready before its last step finishes: once
 `result_reported_at` is set on `getAgentRun()`, `output` holds the answer. Pass
-`returnOnResult: true` to return as soon as a polled run has it set. On timeout,
-a last polled run that has it set is returned instead of throwing
-`SeclaiStreamingError`.
+`returnOnResult: true` to return as soon as a run has it set, the one
+`runAgent()` returns included. With `includeStepOutputs`, that first check uses a
+`getAgentRun()` fetched at once instead, because the `runAgent()` response
+carries no step outputs. Such a run may still be in progress: its `status`
+is not terminal and the run can still fail, so check `result_reported_at`, not
+`status`. If `timeoutMs` elapses first, it throws `SeclaiStreamingError` with the
+last polled run in `run`.
 
 <!-- sdksync:check -->
 ```ts
