@@ -89,10 +89,9 @@ export class SeclaiStreamingError extends SeclaiError {
   /** The run ID associated with the failed stream, when available. */
   public readonly runId: string | undefined;
   /**
-   * The latest snapshot of the unfinished run, when one was received: the
-   * `result` snapshot if one arrived (its `output` is the run's answer), else
-   * the `init` snapshot, or the latest run the poll helper has. The run may still be in
-   * progress, and can still fail.
+   * Set by `runStreamingAgentAndWait()` and `runAgentAndPoll()` to the latest
+   * run they had, if any (when it has `result_reported_at` set, its `output`
+   * is the answer). The run may still be in progress, and can still fail.
    */
   public readonly run: AgentRunResponse | undefined;
 

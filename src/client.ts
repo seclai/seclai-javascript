@@ -1594,8 +1594,9 @@ export class Seclai {
       /** Include per-step outputs in the final result. */
       includeStepOutputs?: boolean;
       /**
-       * Return as soon as a run, the `runAgent()` response included, has `result_reported_at` set (its answer is
-       * in `output`), without waiting for later steps to finish (default: false).
+       * Return as soon as a run, the `runAgent()` response included, has
+       * `result_reported_at` set (its answer is in `output`), without waiting
+       * for later steps to finish (default: false).
        */
       returnOnResult?: boolean;
       signal?: AbortSignal;
