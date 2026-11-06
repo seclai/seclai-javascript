@@ -10,7 +10,7 @@ import {
   SeclaiStreamingError,
   SeclaiApiVersion,
 } from "../src/index";
-import type { SetAcceptedAttachmentsRequest, SetMetadataKeysRequest, SetSlackTriggerConfigRequest } from "../src/index";
+import type { SetAcceptedAttachmentsRequest, SetSlackTriggerConfigRequest } from "../src/index";
 import { parseIni, isTokenValid } from "../src/auth";
 
 type RecordedRequest = {
@@ -480,6 +480,53 @@ describe("Streaming", () => {
     await client.runStreamingAgentAndWait("ag_1", body);
     expect(bodies).toEqual([{ input: "hi" }]);
   });
+
+  const reportedRun = { run_id: "run_1", status: "running", output: "answer", result_reported_at: "2026-11-05T00:00:00Z" };
+
+  test("runStreamingAgentAndWait returns the result snapshot when the stream ends before done", async () => {
+    const client = makeClient((req) =>
+      makeSseResponse(
+        [
+          `event: init\ndata: ${JSON.stringify({ run_id: "run_1", status: "pending" })}\n\n`,
+          `event: result\ndata: ${JSON.stringify(reportedRun)}\n\n`,
+        ],
+        { signal: req.signal },
+      ),
+    );
+    const result = await client.runStreamingAgentAndWait("ag_1", { input: "hi" }, { timeoutMs: 5_000 });
+    expect(result).toEqual(reportedRun);
+  });
+
+  test("runStreamingAgentAndWait returns the result snapshot on timeout before done", async () => {
+    const encoder = new TextEncoder();
+    const client = makeClient((req) => {
+      // Sends init and result, then stays open until the timeout aborts it.
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(encoder.encode(`event: init\ndata: ${JSON.stringify({ run_id: "run_1", status: "pending" })}\n\n`));
+          controller.enqueue(encoder.encode(`event: result\ndata: ${JSON.stringify(reportedRun)}\n\n`));
+          req.signal?.addEventListener("abort", () => controller.error(new Error("aborted")), { once: true });
+        },
+      });
+      return new Response(stream as any, { status: 200, headers: { "content-type": "text/event-stream" } });
+    });
+    const result = await client.runStreamingAgentAndWait("ag_1", { input: "hi" }, { timeoutMs: 20 });
+    expect(result).toEqual(reportedRun);
+  });
+
+  test("runStreamingAgentAndWait returns done over an earlier result", async () => {
+    const done = { run_id: "run_1", status: "completed", output: "answer", credits: 1 };
+    const client = makeClient((req) =>
+      makeSseResponse(
+        [
+          `event: result\ndata: ${JSON.stringify(reportedRun)}\n\n`,
+          `event: done\ndata: ${JSON.stringify(done)}\n\n`,
+        ],
+        { signal: req.signal },
+      ),
+    );
+    expect(await client.runStreamingAgentAndWait("ag_1", { input: "hi" })).toEqual(done);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -507,6 +554,41 @@ describe("Polling", () => {
       timeoutMs: 5_000,
     });
     expect((result as any).status).toBe("completed");
+  });
+
+  const reportedRun = { id: "run_1", status: "running", output: "answer", result_reported_at: "2026-11-05T00:00:00Z" };
+
+  test("runAgentAndPoll returns a run with result_reported_at on timeout", async () => {
+    const client = makeClient((req) =>
+      req.method === "POST" ? jsonResponse({ id: "run_1", status: "pending" }) : jsonResponse(reportedRun),
+    );
+    const result = await client.runAgentAndPoll("ag_1", { input: "hi" }, { pollIntervalMs: 5, timeoutMs: 30 });
+    expect(result).toEqual(reportedRun);
+  });
+
+  test("runAgentAndPoll still throws on timeout without result_reported_at", async () => {
+    const client = makeClient((req) =>
+      jsonResponse({ id: "run_1", status: req.method === "POST" ? "pending" : "running", result_reported_at: null }),
+    );
+    await expect(
+      client.runAgentAndPoll("ag_1", { input: "hi" }, { pollIntervalMs: 5, timeoutMs: 30 }),
+    ).rejects.toBeInstanceOf(SeclaiStreamingError);
+  });
+
+  test("runAgentAndPoll with returnOnResult returns once result_reported_at is set", async () => {
+    let gets = 0;
+    const client = makeClient((req) => {
+      if (req.method === "POST") return jsonResponse({ id: "run_1", status: "pending" });
+      gets++;
+      return jsonResponse(gets === 1 ? reportedRun : { ...reportedRun, status: "completed" });
+    });
+    const result = await client.runAgentAndPoll("ag_1", { input: "hi" }, {
+      pollIntervalMs: 5,
+      timeoutMs: 5_000,
+      returnOnResult: true,
+    });
+    expect(result).toEqual(reportedRun);
+    expect(gets).toBe(1);
   });
 });
 
@@ -2519,17 +2601,13 @@ describe("Agent Trigger Metadata Keys", () => {
   });
 
   test("setMetadataKeys sends PUT /agents/:id/triggers/:tid/metadata-keys with the declaration", async () => {
+    const bodies: unknown[] = [];
     const client = makeClient((req) => {
       const u = new URL(req.url);
       expect(req.method).toBe("PUT");
       expect(u.pathname).toBe("/agents/ag_1/triggers/tr_1/metadata-keys");
       expect(u.search).toBe("");
-      expect(JSON.parse(req.bodyText!)).toEqual({
-        metadata_keys: [
-          { key: "customer_id", origin: "custom", required: true },
-          { key: "region", origin: "custom" },
-        ],
-      });
+      bodies.push(JSON.parse(req.bodyText!));
       return jsonResponse({ ...keysResponse, warnings: ["Caller agent no longer fits"] });
     });
     // `required` is server-defaulted, so a key without it must typecheck.
@@ -2540,18 +2618,17 @@ describe("Agent Trigger Metadata Keys", () => {
       ],
     });
     expect(res.warnings).toEqual(["Caller agent no longer fits"]);
-  });
-
-  test("SetMetadataKeysRequest accepts a key without required, and an empty declaration", async () => {
-    const bodies: unknown[] = [];
-    const client = makeClient((req) => {
-      bodies.push(JSON.parse(req.bodyText!));
-      return jsonResponse({ ...keysResponse, metadata_keys: [] });
-    });
-    const body: SetMetadataKeysRequest = { metadata_keys: [{ key: "source_url", origin: "source" }] };
-    await client.setMetadataKeys("ag_1", "tr_1", body);
+    // An empty declaration is sent as-is.
     await client.setMetadataKeys("ag_1", "tr_1", { metadata_keys: [] });
-    expect(bodies).toEqual([{ metadata_keys: [{ key: "source_url", origin: "source" }] }, { metadata_keys: [] }]);
+    expect(bodies).toEqual([
+      {
+        metadata_keys: [
+          { key: "customer_id", origin: "custom", required: true },
+          { key: "region", origin: "custom" },
+        ],
+      },
+      { metadata_keys: [] },
+    ]);
   });
 });
 

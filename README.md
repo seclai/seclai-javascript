@@ -361,7 +361,10 @@ await client.deleteAgentRun("run_id");
 
 The SDK provides two streaming patterns over the SSE `/runs/stream` endpoint:
 
-**Block until done** — returns the final `done` payload or throws on timeout:
+**Block until done** — returns the final `done` payload. If the stream ends or
+`timeoutMs` elapses after a `result` event but before `done`, it returns the
+`result` snapshot, whose `output` is the run's answer; with neither, it throws
+`SeclaiStreamingError`:
 
 ```ts
 const result = await client.runStreamingAgentAndWait(
@@ -383,6 +386,10 @@ for await (const event of client.runStreamingAgent(
   if (event.event === "done") break;
 }
 ```
+
+A `result` event carries the run's answer in `output` once `result_reported_at`
+is set. It comes before `done`, and for an agent that reports its result early it
+can arrive while later steps still run.
 
 Pass `include_reasoning: true` to also receive `stream_reasoning` events carrying
 the model's reasoning while it thinks. They are sent only for a
@@ -412,7 +419,16 @@ const result = await client.runAgentAndPoll(
 ```
 
 A run's answer can be ready before its last step finishes: once
-`result_reported_at` is set on `getAgentRun()`, `output` holds the answer.
+`result_reported_at` is set on `getAgentRun()`, `output` holds the answer. Pass
+`returnOnResult: true` to return as soon as a polled run has it set. On timeout,
+a last polled run that has it set is returned instead of throwing
+`SeclaiStreamingError`.
+
+<!-- sdksync:check -->
+```ts
+const run = await client.runAgentAndPoll("agent_id", { input: "Hello" }, { returnOnResult: true });
+if (run.result_reported_at) console.log(run.output);
+```
 
 ### Agent input uploads
 
@@ -525,8 +541,11 @@ Declare the run metadata keys a trigger provides, which steps reference as
 `{{metadata.<key>}}`. `system` and `source` keys are written by the platform;
 `custom` keys are sent by the caller or set on the trigger, and only a `custom`
 key can be `required` (default `false`): a caller-started run without it is
-refused. The call replaces the whole declaration, and is refused with a 400 when
-the agent references a key no trigger of its branch declares.
+refused. A run is also refused with a 400 when its `metadata` sends a custom key
+the trigger does not declare, on every API version, so declare custom keys with
+`setMetadataKeys()` before sending them in a run's `metadata`. The call replaces
+the whole declaration, and is refused with a 400 when the agent references a key
+no trigger of its branch declares.
 
 <!-- sdksync:check -->
 ```ts

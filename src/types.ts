@@ -155,7 +155,15 @@ export type CreateAgentRequest = Omit<
  * default to `false` on the server; the generated schema marks them required
  * only because they declare a default.
  */
-export type UpdateAgentRequest = Partial<components["schemas"]["routers__api__agents__UpdateAgentRequest"]>;
+export type UpdateAgentRequest = Omit<
+  Partial<components["schemas"]["routers__api__agents__UpdateAgentRequest"]>,
+  "max_retries" | "retry_on_failure"
+> & {
+  /** @deprecated Has no effect: the API accepts it and ignores it. Evaluations never retry a step. */
+  max_retries?: number | null;
+  /** @deprecated Has no effect: the API accepts it and ignores it. Evaluations never retry a step. */
+  retry_on_failure?: boolean | null;
+};
 
 /**
  * Request body for updating an agent definition (steps, model, etc.).
@@ -246,9 +254,9 @@ export type EmailTriggerConfigResponse = components["schemas"]["EmailTriggerConf
  */
 export type SetSlackTriggerConfigRequest = components["schemas"]["SetSlackTriggerConfigApiRequest"] & {
   /**
-   * @deprecated The API no longer accepts `input` and ignores it. A run's input
-   * is the text after `/seclai <alias>`, or the message the shortcut was used on.
-   * Set `alias` to choose the name.
+   * @deprecated The API ignores `input`; use `alias` to choose the name people
+   * type after `/seclai`. A run's input is the text after `/seclai <alias>`, or
+   * the message the shortcut was used on.
    */
   input?: string | null;
 };
@@ -527,7 +535,18 @@ export type EvaluationResultResponse = components["schemas"]["EvaluationResultRe
 export type EvaluationResultListResponse = VersionedList<components["schemas"]["EvaluationResultListResponse"], "data">;
 
 /** Request body for creating a manual evaluation result. */
-export type CreateEvaluationResultRequest = WithServerDefaults<components["schemas"]["CreateEvaluationResultRequest"], "flagged" | "retry_count" | "retry_triggered">;
+export type CreateEvaluationResultRequest = Omit<
+  WithServerDefaults<components["schemas"]["CreateEvaluationResultRequest"], "flagged" | "retry_count" | "retry_triggered">,
+  "retry_count" | "retry_triggered"
+> & {
+  /** @deprecated Has no effect on any count. */
+  retry_count?: number;
+  /**
+   * @deprecated Retired: evaluations never retry a step. `true` returns HTTP 400
+   * from `Seclai-Version` `2026-11-04`.
+   */
+  retry_triggered?: boolean;
+};
 
 /** Summary of evaluation results for a criteria. */
 export type EvaluationResultSummaryResponse = components["schemas"]["EvaluationResultSummaryResponse"];

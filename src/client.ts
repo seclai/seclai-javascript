@@ -1198,11 +1198,18 @@ export class Seclai {
    * takes no `include_reasoning`, and one passed anyway is not sent: this method
    * returns no `stream_reasoning` events.
    *
+   * A `result` event carries the run's answer in `output` once
+   * `result_reported_at` is set, and can arrive while later steps still run. If
+   * the stream ends or `timeoutMs` elapses after a `result` event but before
+   * `done`, that `result` snapshot is returned instead of throwing.
+   *
    * @param agentId - Agent identifier.
    * @param body - Streaming run request payload, without `include_reasoning`.
    * @param opts - Timeout and abort signal options.
-   * @returns Final agent run payload from the `done` event.
-   * @throws {@link SeclaiStreamingError} If the stream ends before a `done` event.
+   * @returns Final agent run payload from the `done` event, or the `result`
+   *   snapshot when `done` does not arrive.
+   * @throws {@link SeclaiStreamingError} If the stream ends, or `timeoutMs`
+   *   elapses, before a `done` or `result` event.
    */
   async runStreamingAgentAndWait(
     agentId: string,
@@ -1231,6 +1238,7 @@ export class Seclai {
     const signal = anySignal([opts?.signal, timeoutController.signal]);
 
     let lastSeen: AgentRunResponse | undefined;
+    let reported: AgentRunResponse | undefined;
 
     try {
       const init: RequestInit = { method: "POST", headers, body: JSON.stringify(runBody) };
@@ -1282,10 +1290,11 @@ export class Seclai {
 
       const parser = createSseParser((msg) => {
         if (!msg.data) return;
-        if (msg.event === "init" || msg.event === "done") {
+        if (msg.event === "init" || msg.event === "result" || msg.event === "done") {
           try {
             const parsed = JSON.parse(msg.data) as AgentRunResponse;
             lastSeen = parsed;
+            if (msg.event === "result") reported = parsed;
             if (msg.event === "done") final = parsed;
           } catch { /* ignore malformed JSON */ }
         }
@@ -1307,6 +1316,7 @@ export class Seclai {
       throw new SeclaiStreamingError("Stream ended before receiving a 'done' event.", lastSeen?.run_id);
     } catch (err) {
       if (timedOut) {
+        if (reported) return reported;
         throw new SeclaiStreamingError(
           `Timed out after ${timeoutMs}ms waiting for streaming agent run to complete.`,
           lastSeen?.run_id,
@@ -1332,6 +1342,10 @@ export class Seclai {
    * @example
    * ```ts
    * for await (const event of client.runStreamingAgent("agent-id", { input: "Hello!" })) {
+   *   // `result` carries the answer in `output`, possibly before later steps finish.
+   *   if (event.event === "result") {
+   *     console.log("Answer:", (event.data as AgentRunResponse).output);
+   *   }
    *   if (event.event === "done") {
    *     console.log("Final:", event.data);
    *   }
@@ -1459,11 +1473,18 @@ export class Seclai {
    *
    * This is useful in environments where SSE streaming is unavailable.
    *
+   * A run's answer can be ready before its last step finishes: once
+   * `result_reported_at` is set, `output` holds the answer. Pass
+   * `returnOnResult: true` to return as soon as a polled run has it set. When
+   * `timeoutMs` elapses and the last polled run has it set, that run is returned
+   * instead of throwing.
+   *
    * @param agentId - Agent identifier.
    * @param body - Run request payload.
    * @param opts - Polling configuration and abort signal.
-   * @returns The terminal agent run.
-   * @throws {@link SeclaiStreamingError} On timeout.
+   * @returns The terminal agent run, or one with `result_reported_at` set (see above).
+   * @throws {@link SeclaiStreamingError} On timeout, unless the last polled run
+   *   has `result_reported_at` set.
    */
   async runAgentAndPoll(
     agentId: string,
@@ -1475,6 +1496,11 @@ export class Seclai {
       timeoutMs?: number;
       /** Include per-step outputs in the final result. */
       includeStepOutputs?: boolean;
+      /**
+       * Return as soon as a polled run has `result_reported_at` set (its answer is
+       * in `output`), without waiting for later steps to finish (default: false).
+       */
+      returnOnResult?: boolean;
       signal?: AbortSignal;
     },
   ): Promise<AgentRunResponse> {
@@ -1486,9 +1512,11 @@ export class Seclai {
     const runId = (run as any).id ?? (run as any).run_id;
     if (!runId) throw new SeclaiError("Agent run response did not contain an id.");
 
+    let last: AgentRunResponse | undefined;
     while (true) {
       if (opts?.signal?.aborted) throw new SeclaiError("Polling aborted.");
       if (Date.now() - startTime > timeout) {
+        if (last?.result_reported_at) return last;
         throw new SeclaiStreamingError(`Polling timed out after ${timeout}ms.`, runId);
       }
 
@@ -1497,10 +1525,12 @@ export class Seclai {
       const current = await this.getAgentRun(runId,
         opts?.includeStepOutputs ? { includeStepOutputs: true } : undefined,
       );
+      last = current;
       const status = (current as any).status;
       if (status === "completed" || status === "failed" || status === "cancelled") {
         return current;
       }
+      if (opts?.returnOnResult && current.result_reported_at) return current;
     }
   }
 
