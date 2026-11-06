@@ -91,7 +91,7 @@ export class SeclaiStreamingError extends SeclaiError {
   /**
    * The latest snapshot of the unfinished run, when one was received: the
    * `result` snapshot if one arrived (its `output` is the run's answer), else
-   * the `init` snapshot, or the last polled run. The run may still be in
+   * the `init` snapshot, or the latest run the poll helper has. The run may still be in
    * progress, and can still fail.
    */
   public readonly run: AgentRunResponse | undefined;
