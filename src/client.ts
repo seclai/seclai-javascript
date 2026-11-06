@@ -1553,10 +1553,10 @@ export class Seclai {
    * A run's answer can be ready before its last step finishes: once
    * `result_reported_at` is set, `output` holds the answer. Pass
    * `returnOnResult: true` to return as soon as a run has it set, the run
-   * `runAgent()` returns included (with `includeStepOutputs`, when that run
-   * would end the poll, it is fetched again at once for its step outputs). Such a run may still be in progress: its
-   * `status` is not terminal and the run can still fail, so check
-   * `result_reported_at`, not `status`.
+   * `runAgent()` returns included. With `includeStepOutputs`, when that run
+   * would end the poll, it is fetched again at once for its step outputs.
+   * Such a run may still be in progress: its `status` is not terminal and the
+   * run can still fail, so check `result_reported_at`, not `status`.
    *
    * When `timeoutMs` elapses first, this throws {@link SeclaiStreamingError}
    * with the last polled run in `run`. If that run has `result_reported_at`
