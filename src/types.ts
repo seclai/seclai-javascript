@@ -155,7 +155,15 @@ export type CreateAgentRequest = Omit<
  * default to `false` on the server; the generated schema marks them required
  * only because they declare a default.
  */
-export type UpdateAgentRequest = Partial<components["schemas"]["routers__api__agents__UpdateAgentRequest"]>;
+export type UpdateAgentRequest = Omit<
+  Partial<components["schemas"]["routers__api__agents__UpdateAgentRequest"]>,
+  "max_retries" | "retry_on_failure"
+> & {
+  /** @deprecated Has no effect: the API accepts it and ignores it. Evaluations never retry a step. */
+  max_retries?: number | null;
+  /** @deprecated Has no effect: the API accepts it and ignores it. Evaluations never retry a step. */
+  retry_on_failure?: boolean | null;
+};
 
 /**
  * Request body for updating an agent definition (steps, model, etc.).
@@ -241,12 +249,52 @@ export type EmailTriggerConfigResponse = components["schemas"]["EmailTriggerConf
 /**
  * Request body for configuring a `SLACK_COMMAND` trigger.
  *
- * Every field is optional, and an omitted field is left unchanged.
+ * Every field is optional, and an omitted field is left unchanged. `alias` is
+ * the name people type after `/seclai` to run the agent.
  */
-export type SetSlackTriggerConfigRequest = components["schemas"]["SetSlackTriggerConfigApiRequest"];
+export type SetSlackTriggerConfigRequest = components["schemas"]["SetSlackTriggerConfigApiRequest"] & {
+  /**
+   * @deprecated The API ignores `input`; use `alias` to choose the name people
+   * type after `/seclai`. A run's input is the text after `/seclai <alias>`, or
+   * the message the shortcut was used on.
+   */
+  input?: string | null;
+};
 
 /** A `SLACK_COMMAND` trigger's Slack connection, form, channels and conversation settings. */
 export type SlackTriggerConfigResponse = components["schemas"]["SlackTriggerConfigApiResponse"];
+
+// ─── Agent Trigger Metadata Keys ─────────────────────────────────────────────
+
+/** Who writes a run metadata key: `system`, `source` (both written by the platform) or `custom`. */
+export type MetadataOrigin = components["schemas"]["MetadataOrigin"];
+
+/**
+ * One run metadata key a trigger declares, which steps reference as
+ * `{{metadata.<key>}}`.
+ */
+export type MetadataKeyDeclaration = components["schemas"]["MetadataKeyDeclaration"];
+
+/**
+ * A {@link MetadataKeyDeclaration} as sent to {@link Seclai.setMetadataKeys}:
+ * `required` defaults to `false` and can be omitted — the generated type marks
+ * it required only because the schema declares a default.
+ */
+export type MetadataKeyDeclarationInput = WithServerDefaults<MetadataKeyDeclaration, "required">;
+
+/**
+ * Request body for {@link Seclai.setMetadataKeys}: the whole declaration, which
+ * replaces the trigger's current one.
+ */
+export type SetMetadataKeysRequest = Omit<components["schemas"]["SetMetadataKeysRequest"], "metadata_keys"> & {
+  metadata_keys: MetadataKeyDeclarationInput[];
+};
+
+/** A system or source metadata key a trigger's type can declare. */
+export type DeclarableMetadataKey = components["schemas"]["DeclarableMetadataKey"];
+
+/** The run metadata keys a trigger declares, and the ones its type could declare. */
+export type MetadataKeysResponse = components["schemas"]["MetadataKeysResponse"];
 
 /** Where a Slack trigger runs within its scope: `everywhere` or `channel_opt_in`. */
 export type SlackTriggerActivation = components["schemas"]["SlackTriggerActivation"];
@@ -487,7 +535,18 @@ export type EvaluationResultResponse = components["schemas"]["EvaluationResultRe
 export type EvaluationResultListResponse = VersionedList<components["schemas"]["EvaluationResultListResponse"], "data">;
 
 /** Request body for creating a manual evaluation result. */
-export type CreateEvaluationResultRequest = WithServerDefaults<components["schemas"]["CreateEvaluationResultRequest"], "flagged" | "retry_count" | "retry_triggered">;
+export type CreateEvaluationResultRequest = Omit<
+  WithServerDefaults<components["schemas"]["CreateEvaluationResultRequest"], "flagged">,
+  "retry_count" | "retry_triggered"
+> & {
+  /** @deprecated Has no effect on any count. */
+  retry_count?: number;
+  /**
+   * @deprecated Retired: evaluations never retry a step. `true` returns HTTP 400
+   * from `Seclai-Version` `2026-11-04`.
+   */
+  retry_triggered?: boolean;
+};
 
 /** Summary of evaluation results for a criteria. */
 export type EvaluationResultSummaryResponse = components["schemas"]["EvaluationResultSummaryResponse"];
@@ -570,6 +629,18 @@ export type CreateKnowledgeBaseBody = components["schemas"]["CreateKnowledgeBase
 
 /** Request body for updating a knowledge base. */
 export type UpdateKnowledgeBaseBody = components["schemas"]["UpdateKnowledgeBaseBody"];
+
+/** Item-metadata keys seen in a knowledge base's content, per time window. */
+export type KnowledgeBaseMetadataKeyStatsResponse = components["schemas"]["KnowledgeBaseMetadataKeyStatsResponse"];
+
+/** The item-metadata keys seen in one window (`all_time`, `last_30_days` or `last_7_days`). */
+export type MetadataKeyWindowResponse = components["schemas"]["MetadataKeyWindowResponse"];
+
+/** One item-metadata key: how many items carry it, how many values it takes, and its top values. */
+export type MetadataKeyCountResponse = components["schemas"]["MetadataKeyCountResponse"];
+
+/** One value of an item-metadata key and how many items carry it. */
+export type MetadataValueCountResponse = components["schemas"]["MetadataValueCountResponse"];
 
 // ─── Memory Banks ────────────────────────────────────────────────────────────
 

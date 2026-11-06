@@ -7,6 +7,8 @@
  * handles every SDK error. Narrow to more specific subclasses for finer handling.
  */
 
+import type { AgentRunResponse } from "./types";
+
 /** Base error class for the Seclai SDK. */
 export class SeclaiError extends Error {
   constructor(message: string) {
@@ -79,14 +81,24 @@ export class SeclaiAPIValidationError extends SeclaiAPIStatusError {
   }
 }
 
-/** Thrown when a streaming operation fails (e.g. stream ends unexpectedly). */
+/**
+ * Thrown when a streaming operation fails (e.g. stream ends unexpectedly), or
+ * when a run helper stops waiting before the run finished.
+ */
 export class SeclaiStreamingError extends SeclaiError {
   /** The run ID associated with the failed stream, when available. */
   public readonly runId: string | undefined;
+  /**
+   * Set by `runStreamingAgentAndWait()` and `runAgentAndPoll()` to the latest
+   * run they had, if any (when it has `result_reported_at` set, its `output`
+   * is the answer). The run may still be in progress, and can still fail.
+   */
+  public readonly run: AgentRunResponse | undefined;
 
-  constructor(message: string, runId?: string) {
+  constructor(message: string, runId?: string, run?: AgentRunResponse) {
     super(message);
     this.name = "SeclaiStreamingError";
     this.runId = runId;
+    this.run = run;
   }
 }

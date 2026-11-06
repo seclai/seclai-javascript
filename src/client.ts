@@ -182,6 +182,9 @@ import type {
   ListAgentExamplesOptions,
   SetSlackTriggerConfigRequest,
   SlackTriggerConfigResponse,
+  SetMetadataKeysRequest,
+  MetadataKeysResponse,
+  KnowledgeBaseMetadataKeyStatsResponse,
   ListSolutionsOptions,
   ListMemoryBanksOptions,
   ListEvaluationResultsOptions,
@@ -1195,16 +1198,67 @@ export class Seclai {
    * takes no `include_reasoning`, and one passed anyway is not sent: this method
    * returns no `stream_reasoning` events.
    *
+   * A `result` event carries the run's answer in `output` once
+   * `result_reported_at` is set, and can arrive while later steps still run.
+   * Pass `returnOnResult: true` to return that `result` snapshot as soon as it
+   * arrives, without waiting for `done`. Such a run may still be in progress:
+   * its `status` is not terminal and the run can still fail, so check
+   * `result_reported_at`, not `status`.
+   *
+   * If `timeoutMs` elapses, this throws {@link SeclaiStreamingError} with the
+   * latest snapshot in `run`: the `result` snapshot if one arrived, else the
+   * `init` snapshot. An abort from `signal` rethrows the abort error.
+   *
+   * By default, a stream that ends before `done` returns the latest snapshot
+   * when its status is not `pending`, so the run returned may not have
+   * finished: check `status` and `result_reported_at`. A stream that breaks
+   * throws the fetch error. Pass `throwOnIncomplete: true` to throw
+   * {@link SeclaiStreamingError} with the snapshot in `run` in both cases
+   * instead; it is recommended, and becomes the default in the next major
+   * version.
+   *
    * @param agentId - Agent identifier.
    * @param body - Streaming run request payload, without `include_reasoning`.
-   * @param opts - Timeout and abort signal options.
-   * @returns Final agent run payload from the `done` event.
-   * @throws {@link SeclaiStreamingError} If the stream ends before a `done` event.
+   * @param opts - Timeout, abort signal and `returnOnResult` options.
+   * @returns The run from the `done` event; with `returnOnResult`, the
+   *   `result` snapshot; without `throwOnIncomplete`, possibly an unfinished
+   *   snapshot (see above).
+   * @throws {@link SeclaiStreamingError} If `timeoutMs` elapses, or, with
+   *   `throwOnIncomplete`, the stream ends or breaks, before the run finished.
+   *   Its `run` holds the latest snapshot.
+   *
+   * @example
+   * ```ts
+   * try {
+   *   const run = await client.runStreamingAgentAndWait("agent-id", { input: "Hello" }, { throwOnIncomplete: true });
+   *   console.log(run.output);
+   * } catch (err) {
+   *   if (err instanceof SeclaiStreamingError && err.run?.result_reported_at) {
+   *     console.log("Answer (run not finished):", err.run.output);
+   *   } else throw err;
+   * }
+   * ```
    */
   async runStreamingAgentAndWait(
     agentId: string,
     body: Omit<AgentRunStreamRequest, "include_reasoning">,
-    opts?: { timeoutMs?: number; signal?: AbortSignal },
+    opts?: {
+      timeoutMs?: number;
+      signal?: AbortSignal;
+      /**
+       * Return the `result` snapshot as soon as a `result` event arrives (its
+       * answer is in `output`), without waiting for `done` (default: false).
+       */
+      returnOnResult?: boolean;
+      /**
+       * Throw {@link SeclaiStreamingError}, with the latest snapshot in `run`,
+       * whenever the stream ends or breaks before `done`, or the server answers
+       * with plain JSON for a run that has not finished, instead of returning
+       * an unfinished run or throwing the fetch error (default: false). This
+       * becomes the default in the next major version.
+       */
+      throwOnIncomplete?: boolean;
+    },
   ): Promise<AgentRunResponse> {
     // Not sent even from untyped callers: the reasoning events are discarded here.
     const { include_reasoning: _ignored, ...runBody } = body as AgentRunStreamRequest;
@@ -1228,6 +1282,7 @@ export class Seclai {
     const signal = anySignal([opts?.signal, timeoutController.signal]);
 
     let lastSeen: AgentRunResponse | undefined;
+    let reported: AgentRunResponse | undefined;
 
     try {
       const init: RequestInit = { method: "POST", headers, body: JSON.stringify(runBody) };
@@ -1263,7 +1318,16 @@ export class Seclai {
 
       // If server returned JSON instead of SSE
       if (isJson) {
-        return (await response.json()) as AgentRunResponse;
+        const run = (await response.json()) as AgentRunResponse;
+        const status = (run as any).status;
+        const finished =
+          status === "completed" || status === "failed" || status === "cancelled" ||
+          Boolean(opts?.returnOnResult && run.result_reported_at);
+        if (opts?.throwOnIncomplete && !finished) {
+          const state = run.result_reported_at ? "A result had been reported; see `run`." : "No result had been reported.";
+          throw new SeclaiStreamingError(`The server answered with JSON for a run that has not finished. ${state}`, run.run_id, run);
+        }
+        return run;
       }
 
       if (!response.body) {
@@ -1279,34 +1343,60 @@ export class Seclai {
 
       const parser = createSseParser((msg) => {
         if (!msg.data) return;
-        if (msg.event === "init" || msg.event === "done") {
+        if (msg.event === "init" || msg.event === "result" || msg.event === "done") {
           try {
             const parsed = JSON.parse(msg.data) as AgentRunResponse;
             lastSeen = parsed;
+            if (msg.event === "result") reported = parsed;
             if (msg.event === "done") final = parsed;
           } catch { /* ignore malformed JSON */ }
         }
       });
 
-      while (!final) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        if (value) parser.feed(decoder.decode(value, { stream: true }));
+      let readFailure: string | undefined;
+      try {
+        while (!final && !(opts?.returnOnResult && reported)) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          if (value) parser.feed(decoder.decode(value, { stream: true }));
+        }
+      } catch (err) {
+        // The caller asked to stop: keep the abort error. Without
+        // throwOnIncomplete, a broken read throws the fetch error, as released.
+        if (opts?.signal?.aborted || (!opts?.throwOnIncomplete && !timedOut)) throw err;
+        readFailure = err instanceof Error ? err.message : String(err);
       }
 
+      // Flush the decoder, and dispatch an event whose complete lines were read
+      // but whose terminating blank line has not arrived. Text after the last
+      // newline is not parsed.
+      parser.feed(decoder.decode());
       parser.end();
 
       if (final) return final;
-      if (lastSeen && (lastSeen as any).status && (lastSeen as any).status !== "pending") {
+      if (opts?.returnOnResult && reported) {
+        reader.cancel().catch(() => {});
+        return reported;
+      }
+      // Released behaviour without throwOnIncomplete: the stream ended early.
+      if (!opts?.throwOnIncomplete && !timedOut && lastSeen?.status && lastSeen.status !== "pending") {
         return lastSeen;
       }
 
-      throw new SeclaiStreamingError("Stream ended before receiving a 'done' event.", lastSeen?.run_id);
+      const run = reported ?? lastSeen;
+      const state = reported ? "A result had been reported; see `run`." : "No result had been reported.";
+      const reason = timedOut
+        ? `Timed out after ${timeoutMs}ms before the streaming agent run finished.`
+        : readFailure !== undefined
+          ? `Stream failed before the run finished: ${readFailure}.`
+          : "Stream ended before receiving a 'done' event.";
+      throw new SeclaiStreamingError(`${reason} ${state}`, run?.run_id, run);
     } catch (err) {
-      if (timedOut) {
+      if (timedOut && !opts?.signal?.aborted && !(err instanceof SeclaiStreamingError)) {
         throw new SeclaiStreamingError(
           `Timed out after ${timeoutMs}ms waiting for streaming agent run to complete.`,
           lastSeen?.run_id,
+          reported ?? lastSeen,
         );
       }
       throw err;
@@ -1329,6 +1419,10 @@ export class Seclai {
    * @example
    * ```ts
    * for await (const event of client.runStreamingAgent("agent-id", { input: "Hello!" })) {
+   *   // `result` carries the answer in `output`, possibly before later steps finish.
+   *   if (event.event === "result") {
+   *     console.log("Answer:", (event.data as AgentRunResponse).output);
+   *   }
    *   if (event.event === "done") {
    *     console.log("Final:", event.data);
    *   }
@@ -1456,11 +1550,38 @@ export class Seclai {
    *
    * This is useful in environments where SSE streaming is unavailable.
    *
+   * A run's answer can be ready before its last step finishes: once
+   * `result_reported_at` is set, `output` holds the answer. Pass
+   * `returnOnResult: true` to return as soon as a run has it set, the run
+   * `runAgent()` returns included. With `includeStepOutputs`, when that run
+   * would end the poll and `signal` is not aborted, it is fetched again at
+   * once for its step outputs.
+   * Such a run may still be in progress: its `status` is not terminal and the
+   * run can still fail, so check `result_reported_at`, not `status`.
+   *
+   * When `timeoutMs` elapses first, this throws {@link SeclaiStreamingError}
+   * with the latest run it has (the `runAgent()` response if no poll ran) in
+   * `run`. If that run has `result_reported_at`
+   * set, its `output` is the answer.
+   *
+   * `signal` is checked at the top of each poll, after the check for a run
+   * that ends the poll. A run that has ended the poll by then, whether the
+   * start run or a polled one, is returned even after an abort; the start run
+   * then comes back without step outputs, even when `includeStepOutputs` is
+   * set. Otherwise an abort throws `SeclaiError("Polling aborted.")`, which is
+   * not an `AbortError` and does not carry `signal.reason`.
+   *
    * @param agentId - Agent identifier.
    * @param body - Run request payload.
    * @param opts - Polling configuration and abort signal.
-   * @returns The terminal agent run.
-   * @throws {@link SeclaiStreamingError} On timeout.
+   * @returns The terminal agent run, or, with `returnOnResult`, the first run
+   *   with `result_reported_at` set.
+   * @throws {@link SeclaiStreamingError} If `timeoutMs` elapses before the run
+   *   finished. Its `run` holds the latest run it has (the `runAgent()`
+   *   response if no poll ran).
+   * @throws {@link SeclaiError} `"Polling aborted."` If `signal` is aborted and,
+   *   at the next poll's check, the run has not ended the poll. It is not an
+   *   `AbortError` and does not carry `signal.reason`.
    */
   async runAgentAndPoll(
     agentId: string,
@@ -1472,6 +1593,12 @@ export class Seclai {
       timeoutMs?: number;
       /** Include per-step outputs in the final result. */
       includeStepOutputs?: boolean;
+      /**
+       * Return as soon as a run, the `runAgent()` response included, has
+       * `result_reported_at` set (its answer is in `output`), without waiting
+       * for later steps to finish (default: false).
+       */
+      returnOnResult?: boolean;
       signal?: AbortSignal;
     },
   ): Promise<AgentRunResponse> {
@@ -1483,21 +1610,36 @@ export class Seclai {
     const runId = (run as any).id ?? (run as any).run_id;
     if (!runId) throw new SeclaiError("Agent run response did not contain an id.");
 
-    while (true) {
-      if (opts?.signal?.aborted) throw new SeclaiError("Polling aborted.");
-      if (Date.now() - startTime > timeout) {
-        throw new SeclaiStreamingError(`Polling timed out after ${timeout}ms.`, runId);
+    // The initial response is checked too: a fast run can already be done. It
+    // carries no step outputs, so when they are asked for and it would end the
+    // poll, fetch the run first.
+    let current = run;
+    if (opts?.includeStepOutputs) {
+      const status = (run as any).status;
+      if (status === "completed" || status === "failed" || status === "cancelled" ||
+          (opts.returnOnResult && run.result_reported_at)) {
+        // After an abort, skip the fetch: the loop returns the start response.
+        if (!opts.signal?.aborted) current = await this.getAgentRun(runId, { includeStepOutputs: true });
       }
-
-      await new Promise((r) => setTimeout(r, pollInterval));
-
-      const current = await this.getAgentRun(runId,
-        opts?.includeStepOutputs ? { includeStepOutputs: true } : undefined,
-      );
+    }
+    while (true) {
       const status = (current as any).status;
       if (status === "completed" || status === "failed" || status === "cancelled") {
         return current;
       }
+      if (opts?.returnOnResult && current.result_reported_at) return current;
+
+      if (opts?.signal?.aborted) throw new SeclaiError("Polling aborted.");
+      if (Date.now() - startTime > timeout) {
+        const state = current.result_reported_at ? "A result had been reported; see `run`." : "No result had been reported.";
+        throw new SeclaiStreamingError(`Polling timed out after ${timeout}ms. ${state}`, runId, current);
+      }
+
+      await new Promise((r) => setTimeout(r, pollInterval));
+
+      current = await this.getAgentRun(runId,
+        opts?.includeStepOutputs ? { includeStepOutputs: true } : undefined,
+      );
     }
   }
 
@@ -1929,8 +2071,9 @@ export class Seclai {
    * Configure an agent's `SLACK_COMMAND` trigger, which people run from Slack
    * with `/seclai` or the message shortcut.
    *
-   * Sets the Slack connection, form, channels, reply visibility and conversation
-   * settings. Omitted fields are left unchanged.
+   * Sets the Slack connection, `alias` (the name people type after `/seclai`),
+   * form, channels, reply visibility and conversation settings. Omitted fields
+   * are left unchanged. `input` is deprecated and ignored by the API.
    *
    * @param agentId - Agent identifier.
    * @param triggerId - Trigger identifier.
@@ -1968,6 +2111,46 @@ export class Seclai {
     return (await this.request("PUT", `/agents/${agentId}/triggers/${triggerId}/accepted-attachments`, {
       json: body,
     })) as AcceptedAttachmentsResponse;
+  }
+
+  /**
+   * Get the run metadata keys a trigger declares.
+   *
+   * Steps may reference a declared key as `{{metadata.<key>}}`. The response
+   * also lists the system and source keys the trigger's type can declare.
+   *
+   * @param agentId - Agent identifier.
+   * @param triggerId - Trigger identifier, as `getAgent()` returns it.
+   * @returns The trigger's declared and declarable metadata keys.
+   */
+  async getMetadataKeys(agentId: string, triggerId: string): Promise<MetadataKeysResponse> {
+    return (await this.request(
+      "GET",
+      `/agents/${agentId}/triggers/${triggerId}/metadata-keys`,
+    )) as MetadataKeysResponse;
+  }
+
+  /**
+   * Replace the run metadata keys a trigger declares.
+   *
+   * The body is the whole declaration and replaces the current one. The API
+   * answers 400 when the agent references a key that no trigger of its branch
+   * declares.
+   *
+   * @param agentId - Agent identifier.
+   * @param triggerId - Trigger identifier, as `getAgent()` returns it.
+   * @param body - The full declaration; each key's `required` defaults to `false`.
+   * @returns The trigger's metadata keys, with `warnings` naming agents whose
+   *   `call_agent` mapping no longer fits.
+   */
+  async setMetadataKeys(
+    agentId: string,
+    triggerId: string,
+    body: SetMetadataKeysRequest,
+  ): Promise<MetadataKeysResponse> {
+    return (await this.request("PUT", `/agents/${agentId}/triggers/${triggerId}/metadata-keys`, {
+      json: body,
+    })) as MetadataKeysResponse;
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -2155,6 +2338,22 @@ export class Seclai {
    */
   async getKnowledgeBase(knowledgeBaseId: string): Promise<KnowledgeBaseResponse> {
     return (await this.request("GET", `/knowledge_bases/${knowledgeBaseId}`)) as KnowledgeBaseResponse;
+  }
+
+  /**
+   * Get the item-metadata keys seen in a knowledge base's content.
+   *
+   * Reports, for all time and the last 30 and 7 days, each key's item count,
+   * number of distinct values and five most frequent values.
+   *
+   * @param knowledgeBaseId - Knowledge base identifier.
+   * @returns The key statistics per window.
+   */
+  async getKnowledgeBaseMetadataKeyStats(knowledgeBaseId: string): Promise<KnowledgeBaseMetadataKeyStatsResponse> {
+    return (await this.request(
+      "GET",
+      `/knowledge_bases/${knowledgeBaseId}/metadata-key-stats`,
+    )) as KnowledgeBaseMetadataKeyStatsResponse;
   }
 
   /**
