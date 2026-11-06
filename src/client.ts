@@ -1604,8 +1604,8 @@ export class Seclai {
       const status = (run as any).status;
       if (status === "completed" || status === "failed" || status === "cancelled" ||
           (opts.returnOnResult && run.result_reported_at)) {
-        if (opts.signal?.aborted) throw new SeclaiError("Polling aborted.");
-        current = await this.getAgentRun(runId, { includeStepOutputs: true });
+        // After an abort, skip the fetch: the loop returns the start response.
+        if (!opts.signal?.aborted) current = await this.getAgentRun(runId, { includeStepOutputs: true });
       }
     }
     while (true) {

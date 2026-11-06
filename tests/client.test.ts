@@ -562,6 +562,14 @@ describe("Streaming", () => {
     expect(await client.runStreamingAgentAndWait("ag_1", { input: "hi" })).toEqual(reportedRun);
   });
 
+  test("runStreamingAgentAndWait with throwOnIncomplete returns a JSON reply whose run is completed or failed", async () => {
+    for (const status of ["completed", "failed"]) {
+      const run = { ...reportedRun, status };
+      const client = makeClient(() => jsonResponse(run));
+      expect(await client.runStreamingAgentAndWait("ag_1", { input: "hi" }, { throwOnIncomplete: true })).toEqual(run);
+    }
+  });
+
   // Without throwOnIncomplete, each ending keeps its 1.8.0 behaviour.
   test("runStreamingAgentAndWait by default returns a non-pending snapshot when the stream ends before done", async () => {
     const client = makeClient((req) =>
@@ -749,7 +757,7 @@ describe("Polling", () => {
     expect(gets).toBe(1);
   });
 
-  test("runAgentAndPoll with includeStepOutputs does not fetch after an abort", async () => {
+  test("runAgentAndPoll with includeStepOutputs returns a finished start run without fetching after an abort", async () => {
     const caller = new AbortController();
     let gets = 0;
     const client = makeClient((req) => {
@@ -760,9 +768,8 @@ describe("Polling", () => {
       gets++;
       return jsonResponse({ id: "run_1", status: "completed" });
     });
-    await expect(
-      client.runAgentAndPoll("ag_1", { input: "hi" }, { includeStepOutputs: true, signal: caller.signal }),
-    ).rejects.toThrow("Polling aborted.");
+    const result = await client.runAgentAndPoll("ag_1", { input: "hi" }, { includeStepOutputs: true, signal: caller.signal });
+    expect(result).toEqual({ id: "run_1", status: "completed" });
     expect(gets).toBe(0);
   });
 
