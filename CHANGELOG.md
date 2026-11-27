@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.10.0] - 2026-11-27
+
+### Changed
+
+- Sync the bundled OpenAPI spec and regenerate the types. `PendingProcessingCompletedFailedStatus`, the `status` of `AgentRunResponse`, `AgentRunStepResponse` and `AgentRunAttemptResponse`, gains `cancelled`. The run status union can gain values in a minor release, so an exhaustive `switch` or a `Record` keyed by it should handle values it does not know. A tier `getGenerationTiers()` returns can now carry `aspect_ratios`, the aspect ratios an image tier's model can be asked for
+- Move `SeclaiApiVersion.Latest` to `2026-11-19`. Nothing is sent unless `apiVersion` is set, so a client that passes `SeclaiApiVersion.Latest` now opts into the four versions added below: from `2026-11-08`, a run cancelled with `cancelAgentRun()` or `cancelQueuedEmailRuns()` ends with `status` `cancelled` instead of `failed`; from `2026-11-09`, `listAgentExamples()` reads `query` as a description of what the agent should do and returns entries ranked by how well they match it, best first, where older versions return only entries containing every word; from `2026-11-14`, `runAgent()`, `runStreamingAgent()` and the helpers built on them are refused with a 409, and no run is created, for an agent whose definition fails to validate, where older versions return the run already failed with the validation error as its cause; and from `2026-11-19`, `createAlertConfig()` accepts the agent alert type `step_failure_continued`
+- Note API changes that apply on every API version, whatever `apiVersion` is set: `cancelAgentRun()` also cancels a `pending`, `waiting_human` or `waiting_scheduled` run, and cancelling a run started by another agent's `call_agent` step that is still waiting for it ends the outermost calling run, and every run below it that has not reported its result
+- Describe a run's answer as the output of the step carrying `run_result`, as the API reference now does, in place of a `streaming_result` or `display_result` step: from `2026-11-04` the `step_id` of a criterion passed to `createEvaluationCriteria()` or `updateEvaluationCriteria()` must name the step carrying `run_result`
+
+### Added
+
+- Add the `rangeStart`, `rangeEnd` and `rangeSuffix` options to `downloadAgentRunAttachment()`, to download one byte range of an attachment: `rangeStart` alone reads to the end of the file, with `rangeEnd` (inclusive) it reads that span, and `rangeSuffix` alone reads the last that many bytes. The server answers with status 206 and `Content-Range`, or 200 and the whole file when the file is empty, and a range starting at or past the end of a non-empty file throws `SeclaiAPIStatusError` with `statusCode` 416. Any other combination, a `rangeEnd` below `rangeStart`, a negative `rangeStart` or `rangeEnd`, a `rangeSuffix` below 1, or a value that is not a safe integer (`Number.isSafeInteger`), throws `SeclaiConfigurationError` before a request is sent. With none set, the request is unchanged and the SDK adds no `Range` header
+- Add `headers` to `SeclaiAPIStatusError` and `SeclaiAPIValidationError`: the error response's headers as a `Headers` object, such as `Retry-After` on a 503, or on a 416 from a ranged `downloadAgentRunAttachment()` a `Content-Range` ending in `/<size>`, the file's size in bytes. It is set on every request path, including uploads, raw downloads and streaming runs, and is an empty `Headers` when the error is constructed without them. In a browser, only the headers the server's CORS policy exposes are present
+- Add `include_commentary` to the `runStreamingAgent()` request, to receive `stream_commentary` events carrying the text a model on OpenAI's Responses API writes outside its final answer, for a `prompt_call` step whose `run_result` enables `show_commentary`. `runStreamingAgentAndWait()`, which returns no such events, does not take it and does not send one passed anyway
+- Add the `SeclaiApiVersion.V2026_11_08`, `SeclaiApiVersion.V2026_11_09`, `SeclaiApiVersion.V2026_11_14` and `SeclaiApiVersion.V2026_11_19` constants, so those versions are accepted as `apiVersion`
+
 ## [1.9.0] - 2026-11-05
 
 ### Changed
@@ -292,6 +308,7 @@ _Stable release. No functional changes since 0.0.1._
 
 _Initial release._
 
+[1.10.0]: https://github.com/seclai/seclai-javascript/releases/tag/1.10.0
 [1.9.0]: https://github.com/seclai/seclai-javascript/releases/tag/1.9.0
 [1.8.0]: https://github.com/seclai/seclai-javascript/releases/tag/1.8.0
 [1.7.0]: https://github.com/seclai/seclai-javascript/releases/tag/1.7.0

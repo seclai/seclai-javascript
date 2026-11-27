@@ -348,8 +348,11 @@ export type ResumeInboundResponse = components["schemas"]["ResumeInboundResponse
 /** Request body for starting an agent run. */
 export type AgentRunRequest = WithServerDefaults<components["schemas"]["AgentRunRequest"], "priority">;
 
-/** Request body for starting an agent run in streaming mode (SSE). `include_reasoning` defaults to `false`. */
-export type AgentRunStreamRequest = WithServerDefaults<components["schemas"]["AgentRunStreamRequest"], "include_reasoning">;
+/**
+ * Request body for starting an agent run in streaming mode (SSE).
+ * `include_reasoning` and `include_commentary` default to `false`.
+ */
+export type AgentRunStreamRequest = WithServerDefaults<components["schemas"]["AgentRunStreamRequest"], "include_reasoning" | "include_commentary">;
 
 /** Response body describing an agent run. */
 export type AgentRunResponse = components["schemas"]["AgentRunResponse"];
@@ -1041,7 +1044,12 @@ export type SourceIndexMode = components["schemas"]["SourceIndexMode"];
 
 // ─── Enums ───────────────────────────────────────────────────────────────────
 
-/** Processing status: pending, processing, completed, or failed. */
+/**
+ * Status of an agent run, run attempt or run step: pending, queued,
+ * processing, waiting_human, waiting_scheduled, completed, failed or
+ * cancelled. An agent run cancelled under `apiVersion` `2026-11-08` or later
+ * ends `cancelled`; on earlier versions it ends `failed`.
+ */
 export type PendingProcessingCompletedFailedStatus = components["schemas"]["PendingProcessingCompletedFailedStatus"];
 
 // ─── SSE Event Types ─────────────────────────────────────────────────────────
@@ -1074,7 +1082,13 @@ export interface SortableListOptions extends ListOptions {
 
 /** Filters for {@link Seclai.listAgentExamples}. */
 export interface ListAgentExamplesOptions extends ListOptions {
-  /** Words every matching example must contain. */
+  /**
+   * What the agent should do. From `apiVersion` `2026-11-09`, entries are
+   * ranked by how well they match it, in words and meaning, best first, and a
+   * query of several words that are all filler ("create an agent") counts as
+   * no query. Before
+   * it, only entries containing every word match.
+   */
   query?: string;
   /** Only examples for this use case. */
   useCase?: string;

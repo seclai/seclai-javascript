@@ -127,7 +127,7 @@ Leave `apiVersion` unset and the header is omitted, so the account's pinned
 baseline applies and responses keep their current shapes. Upgrading this package
 alone never changes the wire contract.
 
-Known versions are on `SeclaiApiVersion` (`V2026_07_01` through `V2026_11_04`,
+Known versions are on `SeclaiApiVersion` (`V2026_07_01` through `V2026_11_19`,
 plus `Default` and `Latest`), imported from `@seclai/sdk`. A version this release was
 **not** built against throws at construction: a newer version can reshape
 responses, and this client would decode them incorrectly rather than reject them.
@@ -193,6 +193,15 @@ a request that used to succeed, or (from `2026-10-21`) which fields can be
 - `2026-11-02` refuses an agent write that references a metadata key no trigger
   declares, where older versions declare the key for you.
 - `2026-11-04` rejects with a 400 evaluation settings that were accepted before.
+- `2026-11-08` changes a value you may branch on: a cancelled agent run reports
+  `status` `cancelled` instead of `failed`.
+- `2026-11-09` changes which gallery entries `listAgentExamples()` returns for a
+  `query`, and their order.
+- `2026-11-14` refuses with a 409, and no run, a run of an agent whose
+  definition fails to validate, where older versions return a run that has
+  already failed.
+- `2026-11-19` accepts a new agent alert type, `step_failure_continued`, in
+  `createAlertConfig()`.
 
 | Version | What it changes |
 | --- | --- |
@@ -209,7 +218,11 @@ a request that used to succeed, or (from `2026-10-21`) which fields can be
 | `2026-10-21` | An evaluation result whose evaluator returned no verdict (`error`) is left out of `failed` and of `pass_rate` / `failure_rate` in `getNonManualEvaluationSummary()`, and `getEvaluationCriteriaSummary()` averages `average_score` over passed and failed results only. `testDraftEvaluation()` returns `score` and `passed` as `null` for an `error` result. Below it the summary counts `error` results in `failed` and the rates, `average_score` includes their stored scores, and the test draft returns `score` 0.5 and `passed: false`. The summary's `error` count is returned on every version |
 | `2026-10-28` | An `if_else` or `switch` step's `output` is the result of the arm it took, or its input when that arm is empty or it took none. Below it the `output` is a `{"branch": ...}` marker naming the arm, with no `attachments`. The step's `decision` names the arm on every version |
 | `2026-11-02` | `updateAgentDefinition()`, and `updateAgent()` when it sets `sampling_config`, refuse a definition or sampling rule that references a metadata key no trigger declares, with a 400 and a 422 respectively. Declare the key first with `setMetadataKeys()`. An `agent_definition` import through `createAgent()` or `updateAgent()` is not refused and still declares the keys it reads. Below it each such key is declared on the trigger as optional |
-| `2026-11-04` | `createEvaluationResult()` rejects `retry_triggered: true` and `updateAgent()` rejects `evaluation_mode` `eval_and_retry` with a 400: evaluations never retry a step. `createEvaluationCriteria()`, and `updateEvaluationCriteria()` when it changes `step_id`, reject a `step_id` that does not name a `display_result` or `streaming_result` step with a 400. Below it `eval_and_retry` is stored as `sample_and_flag` |
+| `2026-11-04` | `createEvaluationResult()` rejects `retry_triggered: true` and `updateAgent()` rejects `evaluation_mode` `eval_and_retry` with a 400: evaluations never retry a step. `createEvaluationCriteria()`, and `updateEvaluationCriteria()` when it changes `step_id`, reject a `step_id` that does not name the step carrying `run_result` with a 400. Below it `eval_and_retry` is stored as `sample_and_flag` |
+| `2026-11-08` | An agent run cancelled with `cancelAgentRun()` or `cancelQueuedEmailRuns()` ends with `status` `cancelled`. Below it the run ends `failed`. `runAgentAndPoll()` and `runStreamingAgentAndWait()` treat both as the end of the run |
+| `2026-11-09` | `listAgentExamples()` reads `query` as a description of what the agent should do and returns entries ranked by how well they match it, in words and meaning, best first; a query of several words that are all filler ("create an agent") counts as no query. Below it only entries containing every word of `query` are returned |
+| `2026-11-14` | `runAgent()`, `runStreamingAgent()` and the helpers built on them are refused with a 409, and no run is created, for an agent whose definition fails to validate. Below it the run is returned, already failed with the validation error as its cause |
+| `2026-11-19` | `createAlertConfig()` accepts the agent alert type `step_failure_continued` |
 
 **`Latest` moves with the SDK.** `SeclaiApiVersion.Latest` is the newest version
 the installed release knows, so upgrading the package can opt a client that
@@ -218,9 +231,12 @@ passes it into every version added since — `1.6.0` moved it from `2026-07-27` 
 `2026-10-21`, across the `2026-10-05` status change, the `2026-10-13` and
 `2026-10-19` source-setting rejections, the `2026-10-16` input change and the
 `2026-10-21` evaluation change, `1.8.0` moves it to `2026-10-28`,
-across the `if_else` / `switch` step-output change, and `1.9.0` moves it to
+across the `if_else` / `switch` step-output change, `1.9.0` moves it to
 `2026-11-04`, across the `2026-11-02` undeclared-metadata-key refusal and the
-`2026-11-04` evaluation-setting rejections. Pass a
+`2026-11-04` evaluation-setting rejections, and `1.10.0` moves it to
+`2026-11-19`, across the `2026-11-08` `cancelled` run status, the `2026-11-09`
+gallery ranking, the `2026-11-14` refusal of an agent that fails to
+validate and the `2026-11-19` `step_failure_continued` alert type. Pass a
 dated constant such as `SeclaiApiVersion.V2026_07_27` to keep behaviour fixed
 across upgrades.
 
@@ -431,23 +447,30 @@ try {
 ```
 
 Pass `include_reasoning: true` to also receive `stream_reasoning` events carrying
-the model's reasoning while it thinks. They are sent only for a
-`streaming_result` step whose author enabled `show_reasoning`, and reasoning is
-never part of `output`:
+the model's reasoning while it thinks, and `include_commentary: true` to receive
+`stream_commentary` events carrying the text a model on OpenAI's Responses API
+writes outside its final answer, with its `phase` and `message` number. They are
+sent only for a `prompt_call` step whose `run_result` enables `show_reasoning`
+or `show_commentary` respectively, never when a governance policy redacts that
+step, and neither is part of `output`. `runStreamingAgentAndWait()` returns no
+such events and does not send either key:
 
 <!-- sdksync:check -->
 ```ts
 for await (const event of client.runStreamingAgent("agent_id", {
   input: "Hello",
   include_reasoning: true,
+  include_commentary: true,
 })) {
   if (event.event === "stream_reasoning") console.log(event.data);
+  if (event.event === "stream_commentary") console.log(event.data);
 }
 ```
 
 ### Polling
 
-For environments where SSE is not practical, poll for a completed run:
+For environments where SSE is not practical, poll until the run ends with
+`status` `completed`, `failed` or `cancelled`:
 
 ```ts
 const result = await client.runAgentAndPoll(
@@ -506,11 +529,56 @@ Only a `dynamic_input` agent takes uploads; any other agent rejects one with a
 
 <!-- sdksync:check -->
 ```ts
-// Download a file emitted by a step in an agent run. The attachment_id is the
-// URL-safe-base64 storage_key surfaced in run output manifests / webhooks.
+// Download a file of an agent run. attachment_id is the `id` of an entry in the
+// run's or a step's `attachments`, or the URL-safe-base64 storage key that
+// webhook and email links carry.
 const resp = await client.downloadAgentRunAttachment("run_id", "attachment_id");
 const blob = await resp.blob(); // raw Response — stream or save the bytes
 ```
+
+To fetch part of a file, set a byte range. Offsets are zero-based and
+`rangeEnd` is inclusive: `rangeStart` alone reads to the end of the file,
+`rangeStart` with `rangeEnd` reads that span, and `rangeSuffix` alone reads the
+last that many bytes. The server answers a range with status 206 and a
+`Content-Range` header, and a range of an empty file with 200 and the whole
+(empty) file, so check `status` before treating the body as the whole file.
+
+<!-- sdksync:check -->
+```ts
+const part = await client.downloadAgentRunAttachment("run_id", "attachment_id", {
+  rangeStart: 0,
+  rangeEnd: 1023, // the first 1 KiB
+});
+if (part.status === 206) {
+  console.log(part.headers.get("content-range")); // e.g. "bytes 0-1023/52341"
+}
+const tail = await client.downloadAgentRunAttachment("run_id", "attachment_id", {
+  rangeSuffix: 512, // the last 512 bytes
+});
+console.log((await tail.arrayBuffer()).byteLength);
+```
+
+A range that starts at or past the end of a non-empty file throws
+`SeclaiAPIStatusError` with `statusCode` 416. The error's `headers` field holds
+the response headers, and its `Content-Range` ends in `/<size>`, the file's size
+in bytes (in a browser, only if the server's CORS policy exposes it).
+
+```ts
+import { SeclaiAPIStatusError } from "@seclai/sdk";
+
+try {
+  await client.downloadAgentRunAttachment("run_id", "attachment_id", { rangeStart: 52341 });
+} catch (err) {
+  if (err instanceof SeclaiAPIStatusError && err.statusCode === 416) {
+    console.log(err.headers.get("content-range")); // e.g. "bytes */52341"
+  }
+}
+```
+
+Any other combination (`rangeEnd` without `rangeStart`, `rangeSuffix` with
+either, `rangeEnd` below `rangeStart`, a negative `rangeStart` or `rangeEnd`, a
+`rangeSuffix` below 1, or a value that is not a safe integer) throws `SeclaiConfigurationError` before a request is
+sent.
 
 ### Agent email triggers
 
@@ -626,7 +694,7 @@ const rejections = await client.listInboundEmailRejections({ agentId: "agent_id"
 
 // Account-wide overload circuit breaker
 const status = await client.getInboundEmailStatus(); // { paused, queued_backlog }
-await client.cancelQueuedEmailRuns();  // fail all QUEUED (over-quota parked) runs
+await client.cancelQueuedEmailRuns();  // cancel all QUEUED (over-quota parked) runs
 await client.resumeInboundEmail();     // one-shot override; re-arms if still overloaded
 ```
 
