@@ -198,6 +198,61 @@ describe("Error Handling", () => {
     await expect(client.listSources()).rejects.toBeInstanceOf(SeclaiAPIStatusError);
   });
 
+  test("a status error carries the response headers, such as Retry-After on a 503", async () => {
+    const client = makeClient(() => new Response("busy", { status: 503, headers: { "retry-after": "30" } }));
+    const err = await client.listSources().catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(SeclaiAPIStatusError);
+    expect((err as SeclaiAPIStatusError).headers.get("Retry-After")).toBe("30");
+  });
+
+  test("a 422 validation error carries the response headers", async () => {
+    const client = makeClient(() =>
+      new Response(JSON.stringify({ detail: [] }), {
+        status: 422, headers: { "content-type": "application/json", "x-request-id": "req_1" },
+      }),
+    );
+    const err = await client.listSources().catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(SeclaiAPIValidationError);
+    expect((err as SeclaiAPIValidationError).headers.get("x-request-id")).toBe("req_1");
+  });
+
+  test.each([
+    ["requestRaw", (c: Seclai) => c.requestRaw("GET", "/x")],
+    ["upload", (c: Seclai) => c.uploadFileToSource("src_1", { file: new Uint8Array([1]) })],
+    ["runStreamingAgent", async (c: Seclai) => {
+      for await (const _ of c.runStreamingAgent("ag_1", { input: "hi" })) { /* drain */ }
+    }],
+    ["runStreamingAgentAndWait", (c: Seclai) => c.runStreamingAgentAndWait("ag_1", { input: "hi" })],
+  ] as const)("a status error from %s carries the response headers", async (_name, call) => {
+    const client = makeClient(() => new Response("busy", { status: 503, headers: { "retry-after": "30" } }));
+    const err = await (call(client) as Promise<unknown>).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(SeclaiAPIStatusError);
+    expect((err as SeclaiAPIStatusError).headers.get("retry-after")).toBe("30");
+  });
+
+  test.each([
+    ["requestRaw", (c: Seclai) => c.requestRaw("GET", "/x")],
+    ["upload", (c: Seclai) => c.uploadFileToSource("src_1", { file: new Uint8Array([1]) })],
+    ["runStreamingAgent", async (c: Seclai) => {
+      for await (const _ of c.runStreamingAgent("ag_1", { input: "hi" })) { /* drain */ }
+    }],
+    ["runStreamingAgentAndWait", (c: Seclai) => c.runStreamingAgentAndWait("ag_1", { input: "hi" })],
+  ] as const)("a 422 validation error from %s carries the response headers", async (_name, call) => {
+    const client = makeClient(() =>
+      new Response(JSON.stringify({ detail: [] }), {
+        status: 422, headers: { "content-type": "application/json", "x-request-id": "req_1" },
+      }),
+    );
+    const err = await (call(client) as Promise<unknown>).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(SeclaiAPIValidationError);
+    expect((err as SeclaiAPIValidationError).headers.get("x-request-id")).toBe("req_1");
+  });
+
+  test("a status error built without headers has empty headers", () => {
+    const err = new SeclaiAPIStatusError({ message: "m", statusCode: 500, method: "GET", url: "u", responseText: undefined });
+    expect([...err.headers.keys()]).toEqual([]);
+  });
+
   test("SeclaiStreamingError has runId", () => {
     const err = new SeclaiStreamingError("timeout", "run_xyz");
     expect(err.runId).toBe("run_xyz");
@@ -1684,7 +1739,7 @@ describe("Agent Input Uploads", () => {
     expect(await resp.text()).toBe("bytes");
   });
 
-  test("downloadAgentRunAttachment throws SeclaiAPIStatusError on 416", async () => {
+  test("downloadAgentRunAttachment throws SeclaiAPIStatusError on 416, with the file size in its Content-Range header", async () => {
     const client = makeClient(
       () => new Response(null, { status: 416, headers: { "content-range": "bytes */100" } }),
     );
@@ -1693,6 +1748,7 @@ describe("Agent Input Uploads", () => {
       .catch((e: unknown) => e);
     expect(err).toBeInstanceOf(SeclaiAPIStatusError);
     expect((err as SeclaiAPIStatusError).statusCode).toBe(416);
+    expect((err as SeclaiAPIStatusError).headers.get("Content-Range")).toBe("bytes */100");
   });
 });
 

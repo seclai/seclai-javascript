@@ -558,7 +558,21 @@ console.log((await tail.arrayBuffer()).byteLength);
 ```
 
 A range that starts at or past the end of a non-empty file throws
-`SeclaiAPIStatusError` with `statusCode` 416.
+`SeclaiAPIStatusError` with `statusCode` 416. The error's `headers` field holds
+the response headers, and its `Content-Range` ends in `/<size>`, the file's size
+in bytes (in a browser, only if the server's CORS policy exposes it).
+
+```ts
+import { SeclaiAPIStatusError } from "@seclai/sdk";
+
+try {
+  await client.downloadAgentRunAttachment("run_id", "attachment_id", { rangeStart: 52341 });
+} catch (err) {
+  if (err instanceof SeclaiAPIStatusError && err.statusCode === 416) {
+    console.log(err.headers.get("content-range")); // e.g. "bytes */52341"
+  }
+}
+```
 
 Any other combination (`rangeEnd` without `rangeStart`, `rangeSuffix` with
 either, `rangeEnd` below `rangeStart`, a negative `rangeStart` or `rangeEnd`, a

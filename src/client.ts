@@ -766,6 +766,7 @@ export class Seclai {
           method,
           url: url.toString(),
           responseText,
+          headers: new Headers(response.headers),
           validationError: validation,
         });
       }
@@ -775,6 +776,7 @@ export class Seclai {
         method,
         url: url.toString(),
         responseText,
+        headers: new Headers(response.headers),
       });
     }
 
@@ -838,6 +840,7 @@ export class Seclai {
           method,
           url: url.toString(),
           responseText,
+          headers: new Headers(response.headers),
           validationError: validation,
         });
       }
@@ -847,6 +850,7 @@ export class Seclai {
         method,
         url: url.toString(),
         responseText,
+        headers: new Headers(response.headers),
       });
     }
 
@@ -896,6 +900,7 @@ export class Seclai {
           method: "POST",
           url: url.toString(),
           responseText,
+          headers: new Headers(response.headers),
           validationError: validation,
         });
       }
@@ -905,6 +910,7 @@ export class Seclai {
         method: "POST",
         url: url.toString(),
         responseText,
+        headers: new Headers(response.headers),
       });
     }
 
@@ -1362,6 +1368,7 @@ export class Seclai {
             method: "POST",
             url: url.toString(),
             responseText,
+            headers: new Headers(response.headers),
             validationError: validation,
           });
         }
@@ -1371,6 +1378,7 @@ export class Seclai {
           method: "POST",
           url: url.toString(),
           responseText,
+          headers: new Headers(response.headers),
         });
       }
 
@@ -1536,6 +1544,7 @@ export class Seclai {
             method: "POST",
             url: url.toString(),
             responseText,
+            headers: new Headers(response.headers),
             validationError: validation,
           });
         }
@@ -1545,6 +1554,7 @@ export class Seclai {
           method: "POST",
           url: url.toString(),
           responseText,
+          headers: new Headers(response.headers),
         });
       }
 
@@ -1806,7 +1816,9 @@ export class Seclai {
    * with status 206 and a `Content-Range` header, so check `resp.status` before
    * treating the body as the whole file. A range of an empty file is answered with
    * 200 and the whole (empty) file. A range that starts at or past the end of a
-   * non-empty file throws {@link SeclaiAPIStatusError} with `statusCode` 416.
+   * non-empty file throws {@link SeclaiAPIStatusError} with `statusCode` 416,
+   * and its `headers.get("content-range")` ends in `/<size>`, the file's size in
+   * bytes.
    *
    * @param runId - Run identifier.
    * @param attachmentId - The `id` of an entry in the run's or a step's

@@ -40,6 +40,14 @@ export class SeclaiAPIStatusError extends SeclaiError {
   public readonly url: string;
   /** Best-effort response body text (if available). */
   public readonly responseText: string | undefined;
+  /**
+   * Headers of the error response, such as `Retry-After` on a 503, or
+   * `Content-Range` on a 416 from a ranged `downloadAgentRunAttachment()`, whose
+   * value ends in `/<size>`, the file's size in bytes. Empty when the response
+   * headers are unknown. In a browser, only the headers the server's CORS policy
+   * exposes are present.
+   */
+  public readonly headers: Headers;
 
   constructor(opts: {
     /** Human-readable error message. */
@@ -48,6 +56,8 @@ export class SeclaiAPIStatusError extends SeclaiError {
     method: string;
     url: string;
     responseText: string | undefined;
+    /** Response headers; defaults to an empty `Headers`. */
+    headers?: Headers;
   }) {
     super(opts.message);
     this.name = "SeclaiAPIStatusError";
@@ -55,6 +65,7 @@ export class SeclaiAPIStatusError extends SeclaiError {
     this.method = opts.method;
     this.url = opts.url;
     this.responseText = opts.responseText;
+    this.headers = opts.headers ?? new Headers();
   }
 }
 
@@ -73,6 +84,7 @@ export class SeclaiAPIValidationError extends SeclaiAPIStatusError {
     method: string;
     url: string;
     responseText: string | undefined;
+    headers?: Headers;
     validationError: unknown;
   }) {
     super(opts);
