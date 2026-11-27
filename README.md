@@ -529,8 +529,9 @@ Only a `dynamic_input` agent takes uploads; any other agent rejects one with a
 
 <!-- sdksync:check -->
 ```ts
-// Download a file emitted by a step in an agent run. The attachment_id is the
-// URL-safe-base64 storage_key surfaced in run output manifests / webhooks.
+// Download a file of an agent run. attachment_id is the `id` of an entry in the
+// run's or a step's `attachments`, or the URL-safe-base64 storage key that
+// webhook and email links carry.
 const resp = await client.downloadAgentRunAttachment("run_id", "attachment_id");
 const blob = await resp.blob(); // raw Response — stream or save the bytes
 ```
