@@ -458,27 +458,53 @@ describe("Streaming", () => {
     expect((events[2].data as any).status).toBe("completed");
   });
 
-  test("runStreamingAgent sends include_reasoning and keeps it optional", async () => {
+  test("runStreamingAgent sends include_reasoning and include_commentary and keeps them optional", async () => {
     const bodies: unknown[] = [];
     const client = makeClient((req) => {
       bodies.push(JSON.parse(req.bodyText!));
       return makeSseResponse([`event: done\ndata: ${JSON.stringify({ run_id: "run_1" })}\n\n`], { signal: req.signal });
     });
-    // No cast: `include_reasoning` is server-defaulted and must not be required.
+    // No cast: both keys are server-defaulted and must not be required.
     for await (const _ of client.runStreamingAgent("ag_1", { input: "hi" })) void _;
     for await (const _ of client.runStreamingAgent("ag_1", { input: "hi", include_reasoning: true })) void _;
-    expect(bodies).toEqual([{ input: "hi" }, { input: "hi", include_reasoning: true }]);
+    for await (const _ of client.runStreamingAgent("ag_1", { input: "hi", include_commentary: true })) void _;
+    expect(bodies).toEqual([
+      { input: "hi" },
+      { input: "hi", include_reasoning: true },
+      { input: "hi", include_commentary: true },
+    ]);
   });
-  test("runStreamingAgentAndWait does not send include_reasoning from an untyped caller", async () => {
+  test("runStreamingAgent yields stream_commentary events", async () => {
+    const commentary = { phase: "commentary", message: 1, text: "Looking that up." };
+    const client = makeClient((req) =>
+      makeSseResponse(
+        [
+          `event: stream_commentary\ndata: ${JSON.stringify(commentary)}\n\n`,
+          `event: done\ndata: ${JSON.stringify({ run_id: "run_1", status: "completed" })}\n\n`,
+        ],
+        { signal: req.signal },
+      ),
+    );
+    const events: { event: string; data: unknown }[] = [];
+    for await (const e of client.runStreamingAgent("ag_1", { input: "hi", include_commentary: true })) events.push(e);
+    expect(events[0]).toEqual({ event: "stream_commentary", data: commentary });
+  });
+  test("runStreamingAgentAndWait does not send include_reasoning or include_commentary from an untyped caller", async () => {
     const bodies: unknown[] = [];
     const client = makeClient((req) => {
       bodies.push(JSON.parse(req.bodyText!));
       return makeSseResponse([`event: done\ndata: ${JSON.stringify({ run_id: "run_1" })}\n\n`], { signal: req.signal });
     });
-    // A plain-JS caller can pass the key the TypeScript signature omits.
-    const body = { input: "hi", include_reasoning: true } as unknown as { input: string };
+    // A plain-JS caller can pass the keys the TypeScript signature omits.
+    const body = { input: "hi", include_reasoning: true, include_commentary: true } as unknown as { input: string };
     await client.runStreamingAgentAndWait("ag_1", body);
     expect(bodies).toEqual([{ input: "hi" }]);
+  });
+  test("runStreamingAgentAndWait with throwOnIncomplete returns a cancelled run the server answers with as JSON", async () => {
+    const cancelled = { run_id: "run_1", status: "cancelled" };
+    const client = makeClient(() => jsonResponse(cancelled));
+    const run = await client.runStreamingAgentAndWait("ag_1", { input: "hi" }, { throwOnIncomplete: true });
+    expect(run).toEqual(cancelled);
   });
 
   const reportedRun = { run_id: "run_1", status: "running", output: "answer", result_reported_at: "2026-11-05T00:00:00Z" };
@@ -692,6 +718,18 @@ describe("Polling", () => {
       timeoutMs: 5_000,
     });
     expect((result as any).status).toBe("completed");
+  });
+
+  test("runAgentAndPoll stops polling when the run is cancelled", async () => {
+    let gets = 0;
+    const client = makeClient((req) => {
+      if (req.method === "POST") return jsonResponse({ id: "run_1", status: "pending" });
+      gets++;
+      return jsonResponse({ id: "run_1", status: gets < 2 ? "processing" : "cancelled" });
+    });
+    const result = await client.runAgentAndPoll("ag_1", { input: "hi" }, { pollIntervalMs: 5, timeoutMs: 5_000 });
+    expect(result).toEqual({ id: "run_1", status: "cancelled" });
+    expect(gets).toBe(2);
   });
 
   const reportedRun = { id: "run_1", status: "running", output: "answer", result_reported_at: "2026-11-05T00:00:00Z" };
@@ -1578,6 +1616,83 @@ describe("Agent Input Uploads", () => {
     await expect(
       client.downloadAgentRunAttachment("run_1", "att_1", { signal: controller.signal }),
     ).rejects.toMatchObject({ name: "AbortError" });
+  });
+
+  test("downloadAgentRunAttachment sends no Range header when no range is set", async () => {
+    let headers: Record<string, string> = {};
+    const client = makeClient((req) => {
+      headers = req.headers;
+      return new Response("file-bytes", { status: 200 });
+    });
+    await client.downloadAgentRunAttachment("run_1", "att_1", { downloadName: "a.pdf" });
+    expect(headers).not.toHaveProperty("range");
+  });
+
+  test.each([
+    [{ rangeStart: 100 }, "bytes=100-"],
+    [{ rangeStart: 0 }, "bytes=0-"],
+    [{ rangeStart: 0, rangeEnd: 499 }, "bytes=0-499"],
+    [{ rangeStart: 7, rangeEnd: 7 }, "bytes=7-7"],
+    [{ rangeSuffix: 500 }, "bytes=-500"],
+  ])("downloadAgentRunAttachment sends the Range header for %o", async (range, expected) => {
+    let headers: Record<string, string> = {};
+    const client = makeClient((req) => {
+      headers = req.headers;
+      return new Response("part", { status: 206 });
+    });
+    await client.downloadAgentRunAttachment("run_1", "att_1", range);
+    expect(headers["range"]).toBe(expected);
+  });
+
+  test.each([
+    { rangeEnd: 10 },
+    { rangeSuffix: 10, rangeStart: 0 },
+    { rangeSuffix: 10, rangeEnd: 20 },
+    { rangeSuffix: 10, rangeStart: 0, rangeEnd: 20 },
+    { rangeStart: 10, rangeEnd: 9 },
+    { rangeStart: -1 },
+    { rangeStart: 0, rangeEnd: -1 },
+    { rangeSuffix: 0 },
+    { rangeSuffix: -5 },
+    { rangeStart: 1.5 },
+    { rangeStart: 0, rangeEnd: 2.5 },
+    { rangeSuffix: Number.NaN },
+    { rangeStart: Number.POSITIVE_INFINITY },
+  ])("downloadAgentRunAttachment rejects the range %o before any request", async (range) => {
+    let calls = 0;
+    const client = makeClient(() => {
+      calls += 1;
+      return new Response("unused", { status: 200 });
+    });
+    await expect(client.downloadAgentRunAttachment("run_1", "att_1", range)).rejects.toBeInstanceOf(
+      SeclaiConfigurationError,
+    );
+    expect(calls).toBe(0);
+  });
+
+  test("downloadAgentRunAttachment returns a 206 partial response as the Response", async () => {
+    const client = makeClient(
+      () =>
+        new Response("bytes", {
+          status: 206,
+          headers: { "content-range": "bytes 0-4/100", "accept-ranges": "bytes" },
+        }),
+    );
+    const resp = await client.downloadAgentRunAttachment("run_1", "att_1", { rangeStart: 0, rangeEnd: 4 });
+    expect(resp.status).toBe(206);
+    expect(resp.headers.get("content-range")).toBe("bytes 0-4/100");
+    expect(await resp.text()).toBe("bytes");
+  });
+
+  test("downloadAgentRunAttachment throws SeclaiAPIStatusError on 416", async () => {
+    const client = makeClient(
+      () => new Response(null, { status: 416, headers: { "content-range": "bytes */100" } }),
+    );
+    const err = await client
+      .downloadAgentRunAttachment("run_1", "att_1", { rangeStart: 100 })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(SeclaiAPIStatusError);
+    expect((err as SeclaiAPIStatusError).statusCode).toBe(416);
   });
 });
 
@@ -3569,7 +3684,7 @@ describe("API version constants", () => {
   test("a constant reaches the wire", async () => {
     const client = makeClient(
       (req) => {
-        expect(req.headers["seclai-version"]).toBe("2026-11-04");
+        expect(req.headers["seclai-version"]).toBe("2026-11-19");
         return jsonResponse({ data: [] });
       },
       { apiVersion: SeclaiApiVersion.Latest },

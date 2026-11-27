@@ -32,9 +32,11 @@ export interface paths {
          *     Starting from the agent gallery:
          *     - Pass a `key` from `GET /agents/examples` as `agent_template`, or `blank` for an empty agent.
          *     - Bind the template's resource slots to existing resources with `resource_bindings`, or set `create_missing_resources` to have the creatable ones created.
+         *     - The agent names the files its steps produce by step: a step `gen` names its images `gen.1.png`, `gen.2.png`, and so on.
          *
          *     Importing an existing agent:
          *     - Pass `agent_definition` with the JSON shape produced by `GET /agents/{id}/export`. The full extras suite (alert_configs, evaluation_criteria, governance_policies, schedules, solutions) is applied; items that don't resolve in this account are reported in the response's `import_warnings` array.
+         *     - The imported definition keeps its own `file_names` setting.
          *     - Use `POST /agents/preview-import` first to surface `unresolved_refs` (workflow refs to KBs, memory banks, source connections, sub-agents that don't exist here). Then pass `entity_remap: {source_uuid: target_uuid}` on this call to substitute them before save.
          *
          *     Auth & scoping:
@@ -197,7 +199,7 @@ export interface paths {
          *     Accepts a partial update – only the fields included in the request body
          *     are modified.  Use this to toggle enabled/disabled, change the
          *     evaluation prompt, or rename the criteria. From Seclai-Version 2026-11-04 a
-         *     changed `step_id` must name a `display_result` or `streaming_result` step.
+         *     changed `step_id` must name the step carrying `run_result`.
          */
         patch: operations["update_evaluation_criteria_api_agents_evaluation_criteria__criteria_id__patch"];
         trace?: never;
@@ -326,6 +328,8 @@ export interface paths {
         /**
          * List agent gallery examples
          * @description List the agent gallery: example agents to start from, searchable by text and filterable by use case. Pass an entry's `key` as `agent_template` on POST /agents, with `resource_bindings` for the resources it needs.
+         *
+         *     From `Seclai-Version: 2026-11-09`, `query` describes what the agent should do and entries are ranked by how well they match its words and meaning, best first; a query of several words that are all filler, such as 'create an agent', counts as no query. Without a query every version lists entries by key; older versions list only entries containing every word of `query`.
          */
         get: operations["list_agent_examples_api_agents_examples_get"];
         put?: never;
@@ -391,7 +395,7 @@ export interface paths {
         put?: never;
         /**
          * Cancel all queued inbound-email runs
-         * @description Fail all of the account's QUEUED (over-quota parked) inbound-email runs at once. A queued run has consumed no quota, so this merely fails them. Returns the count cancelled.
+         * @description Cancel all of the account's QUEUED (over-quota parked) inbound-email runs at once. A queued run has consumed no quota or credits. Each ends `cancelled` (`failed` with `Seclai-Version` before `2026-11-08`). Returns the count cancelled.
          *
          *     Auth & scoping: requires `X-API-Key` header or OAuth Bearer token for an account owner/admin; scoped to the key's account.
          */
@@ -498,11 +502,15 @@ export interface paths {
         post?: never;
         /**
          * Cancel an agent run
-         * @description Cancel an in-flight (`processing`) or queued (`queued`) agent run.
+         * @description Cancel an agent run that has not ended: `queued`, `pending`, `processing`, `waiting_human` or `waiting_scheduled`.
          *
-         *     A `queued` run is an inbound-email run parked by the per-plan rate quota that has not yet been dispatched; it has consumed no quota.
+         *     A `queued` run is an inbound-email run parked by the per-plan rate quota that has not yet been dispatched; it has consumed no quota. A waiting run's open approval request is cancelled with it, and its reviewers are told.
          *
-         *     If the run is already in a terminal state (`completed` or `failed`), cancellation will be rejected.
+         *     If the run was started by another agent's `call_agent` step that is still waiting for its result, the cancel ends the outermost such calling run, and every run below it that has not reported its result.
+         *
+         *     The run ends `cancelled`. With `Seclai-Version` before `2026-11-08` it shows `failed`.
+         *
+         *     If the run has already ended (`completed`, `failed` or `cancelled`), cancellation is rejected.
          *
          *     Auth & scoping:
          *     - Requires `X-API-Key` header or OAuth Bearer token. You can only cancel runs belonging to your account.
@@ -738,14 +746,15 @@ export interface paths {
          *     - `write_content_attachment`: Write a file-backed attachment to content (optionally indexed for retrieval; content-triggered agents only. Fields: `attachment_key`, `content`, `content_type`, `indexed`)
          *     - `load_content_attachment`: Load a previously written attachment (content-triggered agents only. Fields: `attachment_key`)
          *     - `load_content`: Load the full text body of a source document (typically used with content-triggered agents; can also load by explicit `content_version_id`. Fields: `content_version_id` optional)
-         *     - `streaming_result`: Stream LLM tokens in real-time via SSE (must be a direct child of `prompt_call`; requires `dynamic_input` or `template_input` trigger; `priority: true` enables real-time streaming). An agent has at most one `streaming_result` or `display_result`; saving refuses a second
-         *     - `display_result`: Show output to the user
-         *     - `join`: Merge parallel branches
-         *     - `merge`: Combine multiple inputs into a single templated output
-         *     - `text`: Static text literal
+         *     - `parallel`: Run its named `lanes` at the same time. The step after it reads their results as the block's output: a JSON object keyed by lane name, or its `output_template`, where `{{lane.<name>}}` is a lane's result
+         *     - `text`: Produce output from a template, and select files with `attachments`
          *     - `for_each`: Iterate a body over a list of items (body lives in `body[]`)
-         *     - `if_else`: Conditional dispatch. Evaluates `conditions` and runs `then_steps` on match, otherwise the optional `else_steps`. The chosen branch's output flows to the if_else step's own `child_steps` (post-branch continuation chain). **`display_result` and `streaming_result` are not allowed inside `then_steps` / `else_steps`** — end each branch with a content-producing step (e.g. `text`, `prompt_call`) and place the single `display_result` in `child_steps`.
-         *     - `switch`: Single-discriminator dispatch. Renders `discriminator` (default `{{input}}`) and routes to the first matching `cases[]` entry (equality by default; pass a list in `match` for `$in` semantics) or to `else_steps` when nothing matches. The chosen case's output flows to the switch step's own `child_steps`. **`display_result` and `streaming_result` are not allowed inside `cases[].steps` or `else_steps`** — end each case with a content-producing step and place the single `display_result` in `child_steps`.
+         *     - `if_else`: Conditional dispatch. Evaluates `conditions` and runs `then_steps` on match, otherwise the optional `else_steps`. The chosen branch's output flows to the if_else step's own `child_steps` (post-branch continuation chain).
+         *     - `switch`: Single-discriminator dispatch. Renders `discriminator` (default `{{input}}`) and routes to the first matching `cases[]` entry (equality by default; pass a list in `match` for `$in` semantics) or to `else_steps` when nothing matches. The chosen case's output flows to the switch step's own `child_steps`.
+         *
+         *     Each list of steps (`child_steps`, a branch arm, a loop body, a lane) holds at most one step; steps that run at the same time are a `parallel` block's lanes. A scope's result (a branch arm's, a loop iteration's, a lane's) is its last step's output; an empty arm's is the branch's input, and an empty lane's the block's input.
+         *
+         *     `run_result` marks a step's output as the run's answer. Only a `prompt_call`, `text`, `call_agent`, `generate_image`, `generate_audio` or `generate_video` step may carry it; a run reaches at most one, and no loop body holds one. Plain text: a `text` or `prompt_call` step carrying it. JSON: a `text` step whose template is a single placeholder naming a JSON step, or that sets `content_type` `application/json`. HTML: a `text` step whose `content_type` is `text/html`. Files or generated media: the flag's `attachments`, a `text` step's `attachments`, or a generate step carrying it. A streamed answer: a `prompt_call` carrying it with `stream` on. No answer: no step carries it, and the agent reports success at start or at completion.
          *
          *     Auth & scoping:
          *     - Requires `X-API-Key` header or OAuth Bearer token. You can only access agents belonging to your account.
@@ -757,7 +766,13 @@ export interface paths {
          *
          *     Uses **optimistic locking**: provide `expected_change_id` from the last `GET /agents/{agent_id}/definition`. Returns `409 Conflict` if the definition was modified since your last read.
          *
-         *     The definition contains the agent's step workflow. Step types include `prompt_call`, `retrieval`, `regex_replace`, `evaluate_step`, `extract_data`, `extract_content`, `add_chat_turn`, `load_chat_history`, `add_memory`, `search_memory`, `load_memory`, `streaming_result`, `send_email`, `webhook_call`, `write_aws_s3_object`, `call_agent`, `write_metadata`, `write_content_attachment`, `load_content_attachment`, `load_content`, `display_result`, `join`, `merge`, `text`, `for_each`, `repeat_until`, `if_else`, and `switch`. Non-composite step types (`display_result`, `join`, `streaming_result`) cannot contain child steps. A definition holding a `gate` or `retry` step is rejected: use `if_else`, or `repeat_until` to run steps again until a condition holds.
+         *     The definition contains the agent's step workflow. Step types include `prompt_call`, `retrieval`, `regex_replace`, `evaluate_step`, `extract_data`, `extract_content`, `add_chat_turn`, `load_chat_history`, `add_memory`, `search_memory`, `load_memory`, `send_email`, `webhook_call`, `write_aws_s3_object`, `call_agent`, `write_metadata`, `write_content_attachment`, `load_content_attachment`, `load_content`, `text`, `for_each`, `repeat_until`, `if_else`, `switch` and `parallel`.
+         *
+         *     Each list of steps (`child_steps`, a branch arm, a loop body, a lane) holds at most one step. A list of more than one step is stored as a `parallel` block with one lane per step, which no later step reads.
+         *
+         *     **parallel** starts every lane in `lanes` with the block's input, and the step after it starts once every lane has finished. Its output is a JSON object keyed by lane name, or its `output_template`, where `{{lane.<name>}}` is a lane's result.
+         *
+         *     `run_result` marks a step's output as the run's answer. Only a `prompt_call`, `text`, `call_agent`, `generate_image`, `generate_audio` or `generate_video` step may carry it; a run reaches at most one, and no loop body holds one. Plain text: a `text` or `prompt_call` step carrying it. JSON: a `text` step whose template is a single placeholder naming a JSON step, or that sets `content_type` `application/json`. HTML: a `text` step whose `content_type` is `text/html`. Files or generated media: the flag's `attachments`, a `text` step's `attachments`, or a generate step carrying it. A streamed answer: a `prompt_call` carrying it with `stream` on. No answer: no step carries it, and the agent reports success at start or at completion.
          *
          *     **repeat_until** runs its `body[]`, then tests its `conditions` against the iteration's verdict (`verdict_template`, else the iteration's value); it repeats until they match or `max_iterations` is reached.
          *
@@ -851,8 +866,8 @@ export interface paths {
          * Create Evaluation Criteria
          * @description Create new step evaluation settings for an agent.
          *
-         *     From Seclai-Version 2026-11-04, `step_id` must name a `display_result` or
-         *     `streaming_result` step, the run's published result; another step returns 400.
+         *     From Seclai-Version 2026-11-04, `step_id` must name the step carrying
+         *     `run_result`, the run's published result; another step returns 400.
          *     The evaluation mode and sample frequency are the agent's.
          */
         post: operations["create_evaluation_criteria_api_agents__agent_id__evaluation_criteria_post"];
@@ -949,7 +964,7 @@ export interface paths {
          *     The response contains the full definition, trigger configuration with schedules, alert configs, evaluation criteria, agent-scoped governance policies, and a resolved dependency manifest that maps every referenced external entity UUID to its human-readable name.
          *
          *     Response shape:
-         *     - `export_version`: schema version (currently `"6"`)
+         *     - `export_version`: schema version (currently `"7"`)
          *     - `exported_at`: ISO-8601 timestamp
          *     - `agent`: name, description, schema_version, definition, timestamps
          *     - `trigger`: trigger type, input template, schedules
@@ -1034,8 +1049,9 @@ export interface paths {
          *     Key fields:
          *     - `input`: text input for agents with a `dynamic_input` trigger.
          *     - `input_upload_id` / `input_upload_ids`: reference one or more files previously uploaded via `POST /agents/{agent_id}/upload-input`. Send them **with** `input` to pair prompt text with the files (the text leads, each file follows under its heading); only the two upload fields are mutually exclusive with each other.
-         *     - `priority`: set true for latency-sensitive, user-facing work. For agents with a `streaming_result` step, set `priority=true` to enable real-time token streaming; otherwise the run still proceeds, but without live token streaming.
+         *     - `priority`: set true for latency-sensitive, user-facing work. For an agent whose `prompt_call` streams its answer (`run_result` with `stream` on), set `priority=true` to enable real-time token streaming; otherwise the run still proceeds, but without live token streaming.
          *     - `metadata`: a JSON object for string substitution. Each key must be one the trigger declares (`GET /agents/{agent_id}/triggers/{trigger_id}/metadata-keys`); a run that sends another custom key, or lacks a required one, is refused with HTTP 400.
+         *     - An agent whose definition fails to validate is refused with HTTP 409 and no run (`Seclai-Version: 2026-11-14` and later); earlier versions get the run, already failed with the validation error as its cause.
          *
          *     After starting:
          *     - Poll `GET /agents/runs/{run_id}` until `result_reported_at` is set (the run's answer is in `output`) or `status` is `failed`; poll on until `status` is `completed` or `failed` if you need to know that every step finished.
@@ -1069,14 +1085,17 @@ export interface paths {
          *     How it works:
          *     - The first `init` event contains an `AgentRunResponse` snapshot, including the `run_id`.
          *     - Subsequent events are forwarded from the run event stream (status changes, step events, etc).
-         *     - If the agent contains a `streaming_result` step, `stream_token` events deliver individual LLM tokens (with a `token` field) and a `stream_end` event signals completion.
-         *     - With `include_reasoning=true`, `stream_reasoning` events (with a `text` field) carry the model's reasoning while it thinks, when the `streaming_result` step's author enabled `show_reasoning`. Reasoning is never part of `output`.
+         *     - If the agent has a `prompt_call` that streams its answer (`run_result` with `stream` on), `stream_token` events deliver individual LLM tokens (with a `token` field) and a `stream_end` event signals completion; their `step_id` is that `prompt_call`'s id.
+         *     - With `include_reasoning=true`, `stream_reasoning` events (with a `text` field) carry the model's reasoning while it thinks, when that `prompt_call`'s `run_result` enables `show_reasoning`. Reasoning is never part of `output`.
+         *     - With `include_commentary=true`, `stream_commentary` events (with `phase`, `message` and `text` fields) carry the text a model on OpenAI's Responses API writes outside its final answer, when that `prompt_call`'s `run_result` enables `show_commentary`. Commentary is never part of `output`.
          *     - A `result` event contains the snapshot once the run has reported its result (`result_reported_at` is set and `output` is the answer).
          *     - The final `done` event contains the terminal snapshot (including `output` and `credits` when available).
          *
          *     Input options (for `dynamic_input` triggers):
          *     - `input`: text input passed directly.
          *     - `input_upload_id` / `input_upload_ids`: reference one or more files uploaded via `POST /agents/{agent_id}/upload-input`. Combine either with `input` to send prompt text alongside the files; only the two upload fields are mutually exclusive with each other.
+         *
+         *     An agent whose definition fails to validate is refused with HTTP 409 and no run (`Seclai-Version: 2026-11-14` and later); earlier versions get the run, already failed with the validation error as its cause.
          *
          *     Client guidance:
          *     - Keep the connection open and handle keepalive comments.
@@ -1506,7 +1525,7 @@ export interface paths {
          * Create alert config
          * @description Create a new alert configuration.
          *
-         *     Agent alert types: run_failed, consecutive_failures, error_rate_spike, run_burst, slow_run, credits_low_threshold, credits_runout_prediction, credits_usage_spike, non_manual_eval_failed, non_manual_eval_flagged, governance_flagged, governance_blocked, model_newer_available, model_deprecated, model_sunset.
+         *     Agent alert types: run_failed, consecutive_failures, error_rate_spike, run_burst, slow_run, credits_low_threshold, credits_runout_prediction, credits_usage_spike, non_manual_eval_failed, non_manual_eval_flagged, governance_flagged, governance_blocked, model_newer_available, model_deprecated, model_sunset, step_failure_continued (from Seclai-Version 2026-11-19).
          *     Source alert types: pull_failed, consecutive_pull_failures, pull_error_rate_spike, source_spend_limit_reached (needs source_connection_id).
          *
          *     Distribution types: owner, owner_admins, selected_members. Organization accounts are normalized to owner_admins.
@@ -2994,7 +3013,7 @@ export interface paths {
          * Get Generation Tiers
          * @description List the media-generation quality tiers and the model + cost each resolves to.
          *
-         *     On a prompt_call's `media_generation` tool — and the dedicated generate_* steps via tier routing — the author/LLM chooses a *tier* (fast/balanced/thorough), never a model. This is the surface that maps each `(modality, tier)` to its concrete generator, raw `credits_per_unit`, `unit_label`, and a human-readable scaled `price_label`. Global routing/pricing (the same for every account); read-only. REST parity with the `list_generation_tiers` MCP tool.
+         *     On a prompt_call's `media_generation` tool — and the dedicated generate_* steps via tier routing — the author/LLM chooses a *tier* (fast/balanced/thorough), never a model. This is the surface that maps each `(modality, tier)` to its concrete generator, raw `credits_per_unit`, `unit_label`, a human-readable scaled `price_label`, and for image tiers the `aspect_ratios` an image generator may be pinned to. Global routing/pricing (the same for every account); read-only. REST parity with the `list_generation_tiers` MCP tool.
          *
          *     Auth & scoping:
          *     - Requires `X-API-Key` header or OAuth Bearer token.
@@ -4009,6 +4028,11 @@ export interface paths {
          *     MIME handling:
          *     - Inline-safe MIMEs (image/*, audio/*, video/*, application/pdf, text/plain, application/vnd.seclai.manifest+json) are served with their declared type.
          *     - Everything else is served as ``application/octet-stream`` with an attachment disposition to prevent stored-XSS.
+         *
+         *     Byte ranges:
+         *     - Every 200 and 206 carries ``Accept-Ranges: bytes`` and ``Content-Length``.
+         *     - One range of a non-empty file (``bytes=start-end``, ``bytes=start-`` or ``bytes=-suffix`` with a positive suffix) is answered with 206 and ``Content-Range``, or with 416 and ``Content-Range: bytes *\/<size>`` when it starts at or past the end of the file or ends before it starts.
+         *     - Any other ``Range``, including more than one range, is ignored and the whole file is served.
          */
         get: operations["serve_agent_run_attachment_api_v2_agent_runs__run_id__attachments__attachment_id__get"];
         put?: never;
@@ -4200,7 +4224,7 @@ export interface components {
             change_id: string;
             /**
              * Definition
-             * @description The agent definition containing name, description, tags, and step workflow tree. Step types include prompt_call, retrieval, regex_replace, evaluate_step, extract_data, extract_content, add_chat_turn, load_chat_history, add_memory, search_memory, load_memory, streaming_result, send_email, webhook_call, call_agent, write_metadata, write_content_attachment, load_content_attachment, load_content, display_result, merge, for_each, if_else, switch, and others.
+             * @description The agent definition containing name, description, tags, and step workflow tree. Step types include prompt_call, retrieval, regex_replace, evaluate_step, extract_data, extract_content, add_chat_turn, load_chat_history, add_memory, search_memory, load_memory, send_email, webhook_call, call_agent, write_metadata, write_content_attachment, load_content_attachment, load_content, text, for_each, if_else, switch, parallel, and others.
              */
             definition: {
                 [key: string]: unknown;
@@ -4212,7 +4236,7 @@ export interface components {
             schema_version: string;
             /**
              * Warnings
-             * @description Validation warnings, if any.
+             * @description Validation warnings, if any. Each has `step_path`, `message` and `severity` (`info` or `warning`).
              */
             warnings?: {
                 [key: string]: string;
@@ -4275,7 +4299,7 @@ export interface components {
         AgentExportResponse: {
             /**
              * Agent
-             * @description Agent metadata and full definition. Keys: name, description, schema_version, definition, default_evaluation_tier, evaluation_mode, sampling_config, max_retries, retry_on_failure, prompt_model_auto_upgrade_strategy, prompt_model_auto_rollback_enabled, prompt_model_auto_rollback_triggers, max_credits_per_run, max_credits_per_period, max_runs_per_hour, max_runs_per_day, max_runs_total, created_at, updated_at.
+             * @description Agent metadata and full definition. Keys: name, description, schema_version, definition, default_evaluation_tier, evaluation_mode, sampling_config, max_retries, retry_on_failure, prompt_model_auto_upgrade_strategy, prompt_model_auto_rollback_enabled, prompt_model_auto_rollback_triggers, max_credits_per_run, max_credits_per_period, max_runs_per_hour, max_runs_per_day, max_runs_total, gallery_example (a copy of a gallery example's setup guidance, or null), created_at, updated_at.
              */
             agent: {
                 [key: string]: unknown;
@@ -4303,7 +4327,7 @@ export interface components {
             }[] | null;
             /**
              * Export Version
-             * @description Schema version of the export format (currently "6").
+             * @description Schema version of the export format (currently "7").
              */
             export_version: string;
             /**
@@ -4502,7 +4526,7 @@ export interface components {
             priority: boolean;
             /**
              * Result Reported At
-             * @description When the run reported success: for an agent whose `report_success` is `on_result`, once its result step published, or once its run started if it has no result step; else when the run completed.  From then on `output` is the run's answer and never changes; stop polling here if you only need the answer.  `status` still follows every step, so a run can report success and later fail.  Null until the run reports, for a run that failed before reporting, and for runs that ended before this field existed.
+             * @description When the run reported success: for an agent whose `report_success` is `on_result`, once the step carrying `run_result` published, or once its run started if no step carries it; else when the run completed.  From then on `output` is the run's answer and never changes; stop polling here if you only need the answer.  `status` still follows every step, so a run can report success and later fail.  Null until the run reports, for a run that failed before reporting, and for runs that ended before this field existed.
              */
             result_reported_at?: string | null;
             /**
@@ -4606,8 +4630,14 @@ export interface components {
         /** AgentRunStreamRequest */
         AgentRunStreamRequest: {
             /**
+             * Include Commentary
+             * @description Receive `stream_commentary` events carrying the text a model on OpenAI's Responses API writes outside its final answer, with its `phase` and `message` number. They are sent only for a `prompt_call` whose `run_result` enables `show_commentary`, and never when a governance policy redacts that step.
+             * @default false
+             */
+            include_commentary: boolean;
+            /**
              * Include Reasoning
-             * @description Receive `stream_reasoning` events carrying the model's reasoning while it thinks. They are sent only for a `streaming_result` step whose author enabled `show_reasoning`, and never when a governance policy redacts that step.
+             * @description Receive `stream_reasoning` events carrying the model's reasoning while it thinks. They are sent only for a `prompt_call` whose `run_result` enables `show_reasoning`, and never when a governance policy redacts that step.
              * @default false
              */
             include_reasoning: boolean;
@@ -5733,7 +5763,7 @@ export interface components {
             alert_type: string;
             /**
              * Cooldown Minutes
-             * @description Cooldown period in minutes. Omit to use the per-alert-type default (1440 for credit alerts, 60 otherwise).
+             * @description Cooldown period in minutes. Omit to use the alert type's default.
              */
             cooldown_minutes?: number | null;
             /**
@@ -5770,7 +5800,7 @@ export interface components {
          * CreateEvaluationCriteriaRequest
          * @description Request body for creating an evaluation criteria.
          *
-         *     step_id names the display_result or streaming_result step to score. The
+         *     step_id names the step carrying run_result, the run's answer, to score. The
          *     evaluation mode and sample frequency are set at the
          *     agent level, not per-criteria.
          */
@@ -7125,6 +7155,11 @@ export interface components {
         };
         /** GenerationTierResponse */
         GenerationTierResponse: {
+            /**
+             * Aspect Ratios
+             * @description The aspect ratios the tier's model can be asked for, and so the values a media_generation image generator's aspect_ratio pin may take. Empty for audio and video tiers and for an image model that takes no ratio.
+             */
+            aspect_ratios?: string[];
             /** Credits Per Unit */
             credits_per_unit: number | null;
             /** Modality */
@@ -7911,7 +7946,7 @@ export interface components {
          * PendingProcessingCompletedFailedStatus
          * @enum {string}
          */
-        PendingProcessingCompletedFailedStatus: "pending" | "processing" | "completed" | "failed" | "queued" | "waiting_human" | "waiting_scheduled";
+        PendingProcessingCompletedFailedStatus: "pending" | "processing" | "completed" | "failed" | "queued" | "waiting_human" | "waiting_scheduled" | "cancelled";
         /**
          * PlaygroundCreateRequest
          * @description Create a model playground experiment via the public API.
@@ -9550,7 +9585,7 @@ export interface components {
             } | null;
             /**
              * Agent Template
-             * @description Agent gallery entry to start from: a `key` from GET /agents/examples, or `blank`. The keys retrieval_example and simple_qa remain accepted for their gallery entries.
+             * @description Agent gallery entry to start from: a `key` from GET /agents/examples, or `blank`. The keys retrieval_example and simple_qa remain accepted for their gallery entries. An entry's safety policies, which its summary may describe, are not created on an agent created here.
              */
             agent_template?: string | null;
             /**
@@ -10909,12 +10944,12 @@ export interface components {
             family_generation?: number | null;
             /**
              * Generation Credits Per Unit
-             * @description Per-unit credit cost for a dedicated media-generation model, in the unit named by ``generation_params.pricing_unit`` (per image / per second / per character / per output token). Multiply by the produced unit count (images, seconds, characters) for the run cost. None for models with no generation descriptor. This rate applies when the model is used in a generate_image/audio/video step; a model that also serves the chat path is billed per token there instead, using the input/output token rates on this same record. When `generation_params.price_varies_by` is set the model has one rate per value of that option and this is the **highest** of them — read `generation_credits_per_variant` for the real spread rather than presenting this as the price.
+             * @description Per-unit credit cost for a dedicated media-generation model, in the unit named by ``generation_params.pricing_unit`` (per image / per second / per character / per output token). Multiply by the produced unit count (images, seconds, characters) for the run cost. None for models with no generation descriptor. This rate applies when the model is used in a generate_image/audio/video step; a model that also serves the chat path is billed per token there instead, using the input/output token rates on this same record. When `generation_params.price_varies_by` is set the model has one rate per value (or combination) and this is the **highest** of them — read `generation_credits_per_variant` for the real spread rather than presenting this as the price.
              */
             generation_credits_per_unit?: number | null;
             /**
              * Generation Credits Per Variant
-             * @description Per-unit credit cost keyed by the value of the option named in `generation_params.price_varies_by` (e.g. `{'720p': 1330, '1080p': 1995}`). None for a model with a single rate, where `generation_credits_per_unit` already describes it exactly.
+             * @description Per-unit credit cost keyed by the value of the option named in `generation_params.price_varies_by` (e.g. `{'720p': 1330, '1080p': 1995}`); when it names several options (a list), the key joins their values with ':' in that order (`'1080p:audio'`). None for a model with a single rate, where `generation_credits_per_unit` already describes it exactly.
              */
             generation_credits_per_variant?: {
                 [key: string]: number;
@@ -11922,7 +11957,7 @@ export interface operations {
     list_agent_examples_api_agents_examples_get: {
         parameters: {
             query?: {
-                /** @description Words every match must contain. */
+                /** @description What the agent should do; before 2026-11-09, words every match must contain. */
                 query?: string | null;
                 /** @description Only entries for this use case. */
                 use_case?: string | null;
@@ -20293,6 +20328,7 @@ export interface operations {
                 download_name?: string | null;
             };
             header?: {
+                Range?: string | null;
                 /** @description Target a different organization account (OAuth only). When omitted, the user's default account is used. Ignored for API key authentication — the key's account is always used. */
                 "X-Account-Id"?: components["parameters"]["X-Account-Id"];
                 /** @description Opt into dated, backward-incompatible API changes (format YYYY-MM-DD). When omitted, the account's pinned baseline version is used and responses keep their legacy shapes. Send a date on or after a change's release to adopt it — e.g. `2026-07-27` enables rejection of undeclared query parameters (422) and the canonical `{data, pagination}` envelope (pagination = `{page, limit, total, pages, has_next, has_prev}`) on every list endpoint that previously returned a bare array, a flat `{data, total, page, limit}`, a `{configs, total}`, or another per-resource key. */
@@ -20320,6 +20356,28 @@ export interface operations {
                     "text/plain": string;
                     "video/*": string;
                 };
+            };
+            /** @description The one byte range the ``Range`` header asked for. */
+            206: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                    "application/pdf": string;
+                    "application/vnd.seclai.manifest+json": string;
+                    "audio/*": string;
+                    "image/*": string;
+                    "text/plain": string;
+                    "video/*": string;
+                };
+            };
+            /** @description The ``Range`` cannot be satisfied for this file. */
+            416: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

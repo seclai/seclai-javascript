@@ -391,6 +391,45 @@ function headerKey(headers: Record<string, string> | undefined, name: string): s
     .pop();
 }
 
+/**
+ * The `Range` header value for one byte range, or `undefined` when none of the
+ * three is set. Throws {@link SeclaiConfigurationError} for any combination
+ * other than start, start and end, or suffix alone, so no request is sent.
+ */
+function byteRangeHeader(
+  start: number | undefined,
+  end: number | undefined,
+  suffix: number | undefined,
+): string | undefined {
+  // A nullish value from untyped JavaScript means "not set", as for headers.
+  const hasStart = start !== undefined && start !== null;
+  const hasEnd = end !== undefined && end !== null;
+  const hasSuffix = suffix !== undefined && suffix !== null;
+  if (!hasStart && !hasEnd && !hasSuffix) return undefined;
+  const fail = (why: string): never => {
+    throw new SeclaiConfigurationError(`Invalid byte range: ${why}`);
+  };
+  if (hasSuffix) {
+    if (hasStart || hasEnd) fail("rangeSuffix cannot be combined with rangeStart or rangeEnd.");
+    if (!Number.isSafeInteger(suffix) || (suffix as number) < 1) {
+      fail(`rangeSuffix must be a whole number of at least 1, got ${String(suffix)}.`);
+    }
+    return `bytes=-${suffix}`;
+  }
+  if (!hasStart) fail("rangeEnd requires rangeStart; use rangeSuffix for the last bytes of the file.");
+  if (!Number.isSafeInteger(start) || (start as number) < 0) {
+    fail(`rangeStart must be a whole number of at least 0, got ${String(start)}.`);
+  }
+  if (!hasEnd) return `bytes=${start}-`;
+  if (!Number.isSafeInteger(end) || (end as number) < 0) {
+    fail(`rangeEnd must be a whole number of at least 0, got ${String(end)}.`);
+  }
+  if ((end as number) < (start as number)) {
+    fail(`rangeEnd (${end}) must not be less than rangeStart (${start}).`);
+  }
+  return `bytes=${start}-${end}`;
+}
+
 async function safeText(response: Response): Promise<string | undefined> {
   try {
     return await response.clone().text();
@@ -940,6 +979,10 @@ export class Seclai {
   /**
    * List the agent gallery: example agents to start from.
    *
+   * From `apiVersion` `2026-11-09`, `query` describes what the agent should do
+   * and entries come back ranked by how well they match it, best first. Before
+   * it, only entries containing every word of `query` are returned.
+   *
    * Pass an entry's `key` as `agent_template` to {@link createAgent}, with
    * `resource_bindings` for the resources it needs.
    *
@@ -1109,6 +1152,11 @@ export class Seclai {
   /**
    * Start an agent run.
    *
+   * From `apiVersion` `2026-11-14`, an agent whose definition fails to validate
+   * is refused with HTTP 409 ({@link SeclaiAPIStatusError}) and no run is
+   * created; earlier versions return the run, already failed with the
+   * validation error as its cause.
+   *
    * @param agentId - Agent identifier.
    * @param body - Run request payload (`input`, `metadata`, `priority`, etc.).
    * @returns The created agent run.
@@ -1173,14 +1221,17 @@ export class Seclai {
   }
 
   /**
-   * Cancel a running agent run.
+   * Cancel an agent run that has not ended: `queued`, `pending`, `processing`,
+   * `waiting_human` or `waiting_scheduled`.
    *
    * Cancellation is `DELETE` on the run resource — the API exposes no
    * `POST .../cancel` route, and no operation that deletes a run. Rejected when
-   * the run has already reached a terminal state.
+   * the run has already ended (`completed`, `failed` or `cancelled`). From
+   * `apiVersion` `2026-11-08` the cancelled run ends with status `cancelled`;
+   * on earlier versions it ends `failed`.
    *
    * @param runId - Run identifier.
-   * @returns Updated run (with cancelled status).
+   * @returns The updated run.
    */
   async cancelAgentRun(runId: string): Promise<AgentRunResponse> {
     return (await this.request("DELETE", `/agents/runs/${runId}`)) as AgentRunResponse;
@@ -1195,8 +1246,9 @@ export class Seclai {
    *
    * Consumes the entire SSE stream and returns only the terminal `done` payload.
    * For real-time event access, use {@link runStreamingAgent} instead. The body
-   * takes no `include_reasoning`, and one passed anyway is not sent: this method
-   * returns no `stream_reasoning` events.
+   * takes no `include_reasoning` or `include_commentary`, and one passed anyway
+   * is not sent: this method returns no `stream_reasoning` or
+   * `stream_commentary` events.
    *
    * A `result` event carries the run's answer in `output` once
    * `result_reported_at` is set, and can arrive while later steps still run.
@@ -1218,7 +1270,8 @@ export class Seclai {
    * version.
    *
    * @param agentId - Agent identifier.
-   * @param body - Streaming run request payload, without `include_reasoning`.
+   * @param body - Streaming run request payload, without `include_reasoning`
+   *   or `include_commentary`.
    * @param opts - Timeout, abort signal and `returnOnResult` options.
    * @returns The run from the `done` event; with `returnOnResult`, the
    *   `result` snapshot; without `throwOnIncomplete`, possibly an unfinished
@@ -1241,7 +1294,7 @@ export class Seclai {
    */
   async runStreamingAgentAndWait(
     agentId: string,
-    body: Omit<AgentRunStreamRequest, "include_reasoning">,
+    body: Omit<AgentRunStreamRequest, "include_reasoning" | "include_commentary">,
     opts?: {
       timeoutMs?: number;
       signal?: AbortSignal;
@@ -1260,8 +1313,13 @@ export class Seclai {
       throwOnIncomplete?: boolean;
     },
   ): Promise<AgentRunResponse> {
-    // Not sent even from untyped callers: the reasoning events are discarded here.
-    const { include_reasoning: _ignored, ...runBody } = body as AgentRunStreamRequest;
+    // Not sent even from untyped callers: the reasoning and commentary events
+    // are discarded here.
+    const {
+      include_reasoning: _reasoning,
+      include_commentary: _commentary,
+      ...runBody
+    } = body as AgentRunStreamRequest;
     const url = buildURL(this.baseUrl, `/agents/${agentId}/runs/stream`);
 
     const authHdrs = await this.authHeaders();
@@ -1409,7 +1467,13 @@ export class Seclai {
    * Run an agent in streaming mode and yield each SSE event as it arrives.
    *
    * This is an `AsyncGenerator` suitable for real-time UIs that want to render
-   * step progress as it happens.
+   * step progress as it happens. Set `include_reasoning` or
+   * `include_commentary` in `body` to also receive `stream_reasoning` or
+   * `stream_commentary` events.
+   *
+   * From `apiVersion` `2026-11-14`, an agent whose definition fails to validate
+   * is refused with HTTP 409 ({@link SeclaiAPIStatusError}) before any event,
+   * and no run is created.
    *
    * @param agentId - Agent identifier.
    * @param body - Streaming run request payload.
@@ -1726,26 +1790,58 @@ export class Seclai {
   }
 
   /**
-   * Download a file attachment emitted by a step in an agent run.
+   * Download a file of an agent run (one a step emitted or one the run started
+   * with), or one byte range of it.
    *
    * Returns the raw `Response` so you can stream or save the binary data.
    *
+   * To fetch part of the file, set a byte range. Offsets are zero-based and
+   * `rangeEnd` is inclusive:
+   *
+   * - `rangeStart` alone sends `Range: bytes=<rangeStart>-`, from that byte to the end.
+   * - `rangeStart` and `rangeEnd` send `Range: bytes=<rangeStart>-<rangeEnd>`.
+   * - `rangeSuffix` alone sends `Range: bytes=-<rangeSuffix>`, the last that many bytes.
+   *
+   * With none of them set, the SDK adds no `Range` header. The server answers a range
+   * with status 206 and a `Content-Range` header, so check `resp.status` before
+   * treating the body as the whole file. A range of an empty file is answered with
+   * 200 and the whole (empty) file. A range that starts at or past the end of a
+   * non-empty file throws {@link SeclaiAPIStatusError} with `statusCode` 416.
+   *
    * @param runId - Run identifier.
-   * @param attachmentId - URL-safe-base64-encoded `storage_key` of the attachment
-   *   (as surfaced in run output manifests and webhook/email payloads).
+   * @param attachmentId - The `id` of an entry in the run's or a step's
+   *   `attachments`, or the URL-safe-base64-encoded storage key that webhook and
+   *   email links carry.
    * @param opts - Optional `downloadName` filename hint for the download
-   *   disposition, and `signal`, which cancels the request; with a standard `fetch` this
+   *   disposition; `rangeStart`, `rangeEnd` and `rangeSuffix`, the byte range
+   *   described above; and `signal`, which cancels the request; with a standard `fetch` this
    *   includes reading the body, so `AbortSignal.timeout(ms)` bounds the whole
    *   transfer.
-   * @returns Raw response with the attachment bytes.
+   * @returns Raw response with the attachment bytes: status 200 with the whole
+   *   file, or 206 with the requested range.
+   * @throws {@link SeclaiConfigurationError} Before any request, when the range
+   *   options are not one of the three forms above: `rangeEnd` without
+   *   `rangeStart`, `rangeSuffix` with either of them, `rangeEnd` less than
+   *   `rangeStart`, a negative `rangeStart` or `rangeEnd`, a `rangeSuffix` below
+   *   1, or a value that is not a safe integer (`Number.isSafeInteger`).
+   * @throws {@link SeclaiAPIStatusError} On a non-2xx response, including 416
+   *   when the range cannot be satisfied.
    */
   async downloadAgentRunAttachment(
     runId: string,
     attachmentId: string,
-    opts: { downloadName?: string; signal?: AbortSignal } = {},
+    opts: {
+      downloadName?: string;
+      rangeStart?: number;
+      rangeEnd?: number;
+      rangeSuffix?: number;
+      signal?: AbortSignal;
+    } = {},
   ): Promise<Response> {
+    const range = byteRangeHeader(opts.rangeStart, opts.rangeEnd, opts.rangeSuffix);
     return await this.requestRaw("GET", `/v2/agent-runs/${runId}/attachments/${attachmentId}`, {
       query: { download_name: opts.downloadName },
+      ...(range === undefined ? {} : { headers: { Range: range } }),
       signal: opts.signal,
     });
   }
@@ -2277,11 +2373,12 @@ export class Seclai {
   }
 
   /**
-   * Fail all of the account's QUEUED (over-quota parked) inbound-email runs at
-   * once.
+   * Cancel all of the account's QUEUED (over-quota parked) inbound-email runs
+   * at once.
    *
-   * A queued run consumed no quota or credits at queue time, so this merely
-   * fails them. Requires an account owner/admin.
+   * A queued run consumed no quota or credits at queue time. Each ends
+   * `cancelled`, or `failed` with an `apiVersion` before `2026-11-08`.
+   * Requires an account owner/admin.
    *
    * @returns The count cancelled.
    */
