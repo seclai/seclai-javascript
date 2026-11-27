@@ -4026,7 +4026,7 @@ export interface paths {
          *     - The calling account must own ``run_id``; lookup failures (missing run, cross-account run, soft-deleted agent, a run whose trace was purged, a file not in the run) all collapse to a single 404 to prevent cross-tenant existence enumeration.
          *
          *     MIME handling:
-         *     - Inline-safe MIMEs (image/*, audio/*, video/*, application/pdf, text/plain, application/vnd.seclai.manifest+json) are served with their declared type.
+         *     - Inline-safe MIMEs (image/*, audio/*, video/*, application/pdf, text/plain) are served with their declared type.
          *     - Everything else is served as ``application/octet-stream`` with an attachment disposition to prevent stored-XSS.
          *
          *     Byte ranges:
@@ -20345,12 +20345,15 @@ export interface operations {
             /** @description Attachment bytes streamed with the resolved MIME type (inline-safe types keep their declared type; everything else is ``application/octet-stream``). */
             200: {
                 headers: {
+                    /** @description Always ``bytes``. */
+                    "Accept-Ranges"?: string;
+                    /** @description The number of bytes in this response's body. */
+                    "Content-Length"?: number;
                     [name: string]: unknown;
                 };
                 content: {
                     "application/octet-stream": string;
                     "application/pdf": string;
-                    "application/vnd.seclai.manifest+json": string;
                     "audio/*": string;
                     "image/*": string;
                     "text/plain": string;
@@ -20360,12 +20363,17 @@ export interface operations {
             /** @description The one byte range the ``Range`` header asked for. */
             206: {
                 headers: {
+                    /** @description Always ``bytes``. */
+                    "Accept-Ranges"?: string;
+                    /** @description The number of bytes in this response's body. */
+                    "Content-Length"?: number;
+                    /** @description ``bytes <start>-<end>/<size>``: the inclusive range served and the size in bytes of the file as served. */
+                    "Content-Range"?: string;
                     [name: string]: unknown;
                 };
                 content: {
                     "application/octet-stream": string;
                     "application/pdf": string;
-                    "application/vnd.seclai.manifest+json": string;
                     "audio/*": string;
                     "image/*": string;
                     "text/plain": string;
@@ -20375,6 +20383,8 @@ export interface operations {
             /** @description The ``Range`` cannot be satisfied for this file. */
             416: {
                 headers: {
+                    /** @description ``bytes *\/<size>``: the size in bytes of the file as served. */
+                    "Content-Range"?: string;
                     [name: string]: unknown;
                 };
                 content?: never;
