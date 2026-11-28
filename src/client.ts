@@ -574,15 +574,25 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
       reject(abortReason(signal));
       return;
     }
+    // setTimeout fires at once for a delay over MAX_TIMER_MS, so wait in steps
+    // of at most that until the whole delay has passed (Infinity: until aborted).
+    let remaining = Math.max(ms, 0);
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const onAbort = () => {
       clearTimeout(timer);
       reject(abortReason(signal!));
     };
-    const timer = setTimeout(() => {
-      signal?.removeEventListener("abort", onAbort);
-      resolve();
-    }, ms);
+    const arm = () => {
+      const step = Math.min(remaining, MAX_TIMER_MS);
+      remaining -= step;
+      timer = setTimeout(() => {
+        if (remaining > 0) return arm();
+        signal?.removeEventListener("abort", onAbort);
+        resolve();
+      }, step);
+    };
     signal?.addEventListener("abort", onAbort, { once: true });
+    arm();
   });
 }
 
@@ -1715,8 +1725,8 @@ export class Seclai {
    * deadline: a wait between polls that reaches it ends the call with the
    * timeout, so a `timeoutMs` no greater than `pollIntervalMs` sends no poll.
    * With a `fetch` that honours `signal`, a poll still in flight at the
-   * deadline is aborted and the timeout is thrown; another error a poll ends
-   * with is thrown as itself. `timeoutMs` does not cut off the start request
+   * deadline is aborted and the timeout is thrown; an HTTP error status a
+   * poll gets after the deadline is thrown as itself. `timeoutMs` does not cut off the start request
    * (the server may already have created the run) or the fetch for an ended
    * start run's step outputs; only `signal` does. A request is not cut off
    * while more than 2^31-1 ms remain.
@@ -1773,8 +1783,8 @@ export class Seclai {
     // when it settles, so a fetch that leaves its listener on the signal it was
     // given leaves none on the caller's. A caller abort throws the abort error,
     // whatever the fetch rejects with. With `bounded`, the request is also cut
-    // off at the deadline, and only the abort that causes throws the timeout:
-    // any other error is thrown as itself. No timer is set while more than
+    // off at the deadline, which throws the timeout, unless an HTTP error
+    // status arrived anyway: that is thrown as itself. No timer is set while more than
     // MAX_TIMER_MS remain (setTimeout would fire at once).
     const abortable = async <T>(bounded: boolean, send: (s: AbortSignal | undefined) => Promise<T>): Promise<T> => {
       const limit = new AbortController();
@@ -1789,8 +1799,9 @@ export class Seclai {
         return await send(linked.signal);
       } catch (err) {
         throwIfAborted(signal);
-        const cutOff = err === limit.signal.reason || (err as { name?: unknown } | null)?.name === "AbortError";
-        if (limit.signal.aborted && cutOff) throw timedOut();
+        // A status that arrived is thrown as itself; anything else once the
+        // deadline has fired is the cut-off, whatever the fetch turned it into.
+        if (limit.signal.aborted && !(err instanceof SeclaiAPIStatusError)) throw timedOut();
         throw err;
       } finally {
         clearTimeout(timer);

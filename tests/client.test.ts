@@ -1302,6 +1302,40 @@ describe("Polling — abort and deadline", () => {
     expect(Date.now() - started).toBeGreaterThanOrEqual(70);
   }, 5_000);
 
+  test("runAgentAndPoll throws the timeout when a fetch turns the deadline's abort into its own error", async () => {
+    const client = new Seclai({
+      apiKey: "k",
+      baseUrl: "https://test.invalid",
+      fetch: async (_input, init) => {
+        if (init?.method === "POST") return jsonResponse(pending);
+        return await new Promise<Response>((_resolve, reject) =>
+          init?.signal?.addEventListener("abort", () => reject(new Error("Request aborted")), { once: true }),
+        );
+      },
+    });
+    const err = await client.runAgentAndPoll("ag_1", { input: "hi" }, { pollIntervalMs: 5, timeoutMs: 40 }).catch((e) => e);
+    expect(err).toBeInstanceOf(SeclaiStreamingError);
+    expect(err.run).toEqual(pending);
+  }, 5_000);
+
+  test.each([
+    ["timeoutMs and pollIntervalMs Infinity", { timeoutMs: Infinity, pollIntervalMs: Infinity }],
+    ["a pollIntervalMs over 2^31-1 ms", { timeoutMs: Infinity, pollIntervalMs: 3_000_000_000 }],
+  ] as const)("runAgentAndPoll waits out %s instead of ending or polling at once", async (_name, waits) => {
+    let gets = 0;
+    const client = makeClient((req) => {
+      if (req.method === "POST") return jsonResponse(pending);
+      gets++;
+      return jsonResponse({ id: "run_1", status: "running" });
+    });
+    const caller = new AbortController();
+    const reason = new Error("stop");
+    setTimeout(() => caller.abort(reason), 50);
+    const err = await client.runAgentAndPoll("ag_1", { input: "hi" }, { ...waits, signal: caller.signal }).catch((e) => e);
+    expect(err).toBe(reason);
+    expect(gets).toBe(0);
+  });
+
   test("runAgentAndPoll throws a poll's own error, not the timeout, when it arrives after the deadline (#25)", async () => {
     const client = new Seclai({
       apiKey: "k",
