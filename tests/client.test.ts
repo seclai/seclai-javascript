@@ -905,6 +905,493 @@ describe("Polling", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Stream endings, abort and deadline handling (#20)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** A caller signal that counts the abort listeners attached to it and not yet removed. */
+function countedSignal() {
+  const controller = new AbortController();
+  const signal = controller.signal;
+  const live = new Set<unknown>();
+  const add = signal.addEventListener.bind(signal);
+  const remove = signal.removeEventListener.bind(signal);
+  signal.addEventListener = ((type: string, listener: any, options?: any) => {
+    if (type === "abort") live.add(listener);
+    add(type, listener, options);
+  }) as typeof signal.addEventListener;
+  signal.removeEventListener = ((type: string, listener: any, options?: any) => {
+    if (type === "abort") live.delete(listener);
+    remove(type, listener, options);
+  }) as typeof signal.removeEventListener;
+  return { controller, signal, listeners: () => live.size };
+}
+
+/** An SSE body that sends `chunks`, then stays open until cancelled; `cancelled()` reports whether it was. */
+function openSseResponse(chunks: string[]) {
+  const encoder = new TextEncoder();
+  let cancelled = false;
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const chunk of chunks) controller.enqueue(encoder.encode(chunk));
+    },
+    cancel() {
+      cancelled = true;
+    },
+  });
+  const response = new Response(stream as any, { status: 200, headers: { "content-type": "text/event-stream" } });
+  return { response, cancelled: () => cancelled };
+}
+
+/** An SSE body that sends `chunks`, then fails with `error`. */
+function brokenSseResponse(chunks: string[], error: unknown) {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const chunk of chunks) controller.enqueue(encoder.encode(chunk));
+      setTimeout(() => controller.error(error), 5);
+    },
+  });
+  return new Response(stream as any, { status: 200, headers: { "content-type": "text/event-stream" } });
+}
+
+describe("Streaming — stream endings", () => {
+  const initRun = { run_id: "run_1", status: "running" };
+  const updateRun = { run_id: "run_1", status: "processing", output: null };
+  const reportedRun = { run_id: "run_1", status: "running", output: "answer", result_reported_at: "2026-11-05T00:00:00Z" };
+  const doneRun = { run_id: "run_1", status: "completed", output: "answer" };
+  const sse = (event: string, data: unknown) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+
+  test.each([false, true])(
+    "runStreamingAgentAndWait throws on event: error with the server's message and the latest snapshot (throwOnIncomplete: %s)",
+    async (throwOnIncomplete) => {
+      const client = makeClient((req) =>
+        makeSseResponse(
+          [sse("init", initRun), sse("result", reportedRun), sse("error", { run_id: "run_1", error: "Model provider unavailable" })],
+          { signal: req.signal },
+        ),
+      );
+      const err = await client
+        .runStreamingAgentAndWait("ag_1", { input: "hi" }, { timeoutMs: 5_000, throwOnIncomplete })
+        .catch((e) => e);
+      expect(err).toBeInstanceOf(SeclaiStreamingError);
+      expect(err.message).toContain("Model provider unavailable");
+      expect(err.message).toContain("A result had been reported");
+      expect(err.run).toEqual(reportedRun);
+      expect(err.runId).toBe("run_1");
+    },
+  );
+
+  test.each([false, true])(
+    "runStreamingAgentAndWait throws on event: timeout with the init snapshot, not a later update (throwOnIncomplete: %s)",
+    async (throwOnIncomplete) => {
+      const client = makeClient((req) =>
+        makeSseResponse([sse("init", initRun), sse("update", updateRun), sse("timeout", { run_id: "run_1" })], {
+          signal: req.signal,
+        }),
+      );
+      const err = await client
+        .runStreamingAgentAndWait("ag_1", { input: "hi" }, { timeoutMs: 5_000, throwOnIncomplete })
+        .catch((e) => e);
+      expect(err).toBeInstanceOf(SeclaiStreamingError);
+      expect(err.message).toContain("timed out");
+      expect(err.run).toEqual(initRun);
+      expect(err.runId).toBe("run_1");
+    },
+  );
+
+  test("runStreamingAgentAndWait by default returns the init snapshot, not a later update, when the stream ends before done", async () => {
+    const client = makeClient((req) =>
+      makeSseResponse([sse("init", initRun), sse("update", updateRun)], { signal: req.signal }),
+    );
+    expect(await client.runStreamingAgentAndWait("ag_1", { input: "hi" }, { timeoutMs: 5_000 })).toEqual(initRun);
+  });
+
+  test("runStreamingAgent yields error and timeout events to the caller", async () => {
+    const client = makeClient((req) =>
+      makeSseResponse([sse("init", initRun), sse("error", { run_id: "run_1", error: "boom" })], { signal: req.signal }),
+    );
+    const events: { event: string; data: unknown }[] = [];
+    for await (const e of client.runStreamingAgent("ag_1", { input: "hi" })) events.push(e);
+    expect(events).toEqual([
+      { event: "init", data: initRun },
+      { event: "error", data: { run_id: "run_1", error: "boom" } },
+    ]);
+  });
+
+  test("a final line without a trailing newline is parsed by runStreamingAgent and runStreamingAgentAndWait", async () => {
+    const chunks = [sse("init", initRun), `event: done\ndata: ${JSON.stringify(doneRun)}`];
+    const client = makeClient((req) => makeSseResponse(chunks, { signal: req.signal }));
+    const events: { event: string; data: unknown }[] = [];
+    for await (const e of client.runStreamingAgent("ag_1", { input: "hi" })) events.push(e);
+    expect(events.at(-1)).toEqual({ event: "done", data: doneRun });
+    expect(await client.runStreamingAgentAndWait("ag_1", { input: "hi" }, { throwOnIncomplete: true })).toEqual(doneRun);
+  });
+
+  test.each([
+    ["done", [sse("init", initRun), sse("done", doneRun)], {}],
+    ["result with returnOnResult", [sse("result", reportedRun)], { returnOnResult: true }],
+    ["event: error", [sse("error", { run_id: "run_1", error: "boom" })], {}],
+    ["event: timeout", [sse("timeout", { run_id: "run_1" })], {}],
+  ] as const)("runStreamingAgentAndWait cancels the reader after %s", async (_name, chunks, opts) => {
+    let body: ReturnType<typeof openSseResponse> | undefined;
+    const client = makeClient(() => {
+      body = openSseResponse([...chunks]);
+      return body.response;
+    });
+    await client.runStreamingAgentAndWait("ag_1", { input: "hi" }, { timeoutMs: 5_000, ...opts }).catch(() => undefined);
+    expect(body!.cancelled()).toBe(true);
+  });
+
+  test("runStreamingAgent cancels the reader when the caller leaves the loop", async () => {
+    let body: ReturnType<typeof openSseResponse> | undefined;
+    const client = makeClient(() => {
+      body = openSseResponse([sse("init", initRun)]);
+      return body.response;
+    });
+    for await (const _ of client.runStreamingAgent("ag_1", { input: "hi" }, { timeoutMs: 5_000 })) break;
+    expect(body!.cancelled()).toBe(true);
+  });
+
+  test("runStreamingAgentAndWait and runStreamingAgent leave no listener on the caller's signal", async () => {
+    const client = makeClient((req) => makeSseResponse([sse("init", initRun), sse("done", doneRun)]));
+    const caller = countedSignal();
+    for (let i = 0; i < 3; i++) {
+      await client.runStreamingAgentAndWait("ag_1", { input: "hi" }, { signal: caller.signal });
+      for await (const _ of client.runStreamingAgent("ag_1", { input: "hi" }, { signal: caller.signal })) void _;
+    }
+    // A call that throws leaves none either.
+    const failing = makeClient(() => new Response("busy", { status: 503 }));
+    await failing.runStreamingAgentAndWait("ag_1", { input: "hi" }, { signal: caller.signal }).catch(() => undefined);
+    expect(caller.listeners()).toBe(0);
+  });
+
+  test("runStreamingAgentAndWait throws one timeout error, whether timeoutMs elapses during the request or the read", async () => {
+    const duringRequest = new Seclai({ apiKey: "k", baseUrl: "https://test.invalid", fetch: hangUntilAborted });
+    const duringRead = makeClient((req) => {
+      const encoder = new TextEncoder();
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(encoder.encode(sse("init", initRun)));
+          req.signal?.addEventListener("abort", () => controller.error(new Error("aborted")), { once: true });
+        },
+      });
+      return new Response(stream as any, { status: 200, headers: { "content-type": "text/event-stream" } });
+    });
+    const a = await duringRequest.runStreamingAgentAndWait("ag_1", { input: "hi" }, { timeoutMs: 10 }).catch((e) => e);
+    const b = await duringRead.runStreamingAgentAndWait("ag_1", { input: "hi" }, { timeoutMs: 10 }).catch((e) => e);
+    expect(a).toBeInstanceOf(SeclaiStreamingError);
+    expect(b).toBeInstanceOf(SeclaiStreamingError);
+    expect(a.message).toBe("Timed out after 10ms waiting for streaming agent run to complete. No result had been reported.");
+    expect(b.message).toBe(a.message);
+    expect(a.run).toBeUndefined();
+    expect(b.run).toEqual(initRun);
+  });
+
+  test("runStreamingAgentAndWait by default returns a done event read in full before the stream broke", async () => {
+    const reset = new TypeError("connection reset");
+    // done's lines arrived, its blank line did not.
+    const client = makeClient(() => brokenSseResponse([sse("init", initRun), `event: done\ndata: ${JSON.stringify(doneRun)}\n`], reset));
+    expect(await client.runStreamingAgentAndWait("ag_1", { input: "hi" }, { timeoutMs: 5_000 })).toEqual(doneRun);
+  });
+
+  test("runStreamingAgentAndWait with returnOnResult by default returns a result read in full before the stream broke", async () => {
+    const reset = new TypeError("connection reset");
+    const client = makeClient(() => brokenSseResponse([`event: result\ndata: ${JSON.stringify(reportedRun)}\n`], reset));
+    expect(await client.runStreamingAgentAndWait("ag_1", { input: "hi" }, { timeoutMs: 5_000, returnOnResult: true })).toEqual(
+      reportedRun,
+    );
+  });
+
+  test("runStreamingAgentAndWait rethrows a caller abort, not an event buffered before it", async () => {
+    const encoder = new TextEncoder();
+    const caller = new AbortController();
+    const client = makeClient((req) => {
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          // The result's lines arrive, its blank line does not.
+          controller.enqueue(encoder.encode(`event: result\ndata: ${JSON.stringify(reportedRun)}\n`));
+          req.signal?.addEventListener("abort", () => controller.error(new DOMException("aborted", "AbortError")), { once: true });
+          setTimeout(() => caller.abort(), 5);
+        },
+      });
+      return new Response(stream as any, { status: 200, headers: { "content-type": "text/event-stream" } });
+    });
+    const err = await client
+      .runStreamingAgentAndWait("ag_1", { input: "hi" }, { timeoutMs: 5_000, returnOnResult: true, signal: caller.signal })
+      .catch((e) => e);
+    expect(err).not.toBeInstanceOf(SeclaiStreamingError);
+    expect(err.name).toBe("AbortError");
+  });
+
+  test.each([false, true])(
+    "runStreamingAgentAndWait throws the timeout when the body ends without done after timeoutMs (throwOnIncomplete: %s)",
+    async (throwOnIncomplete) => {
+      // A body the timeout's abort does not cut: it closes on its own, later.
+      const client = new Seclai({
+        apiKey: "k",
+        baseUrl: "https://test.invalid",
+        fetch: async () => {
+          const encoder = new TextEncoder();
+          const stream = new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(encoder.encode(sse("init", initRun)));
+              setTimeout(() => controller.close(), 40);
+            },
+          });
+          return new Response(stream as any, { status: 200, headers: { "content-type": "text/event-stream" } });
+        },
+      });
+      const err = await client
+        .runStreamingAgentAndWait("ag_1", { input: "hi" }, { timeoutMs: 10, throwOnIncomplete })
+        .catch((e) => e);
+      expect(err).toBeInstanceOf(SeclaiStreamingError);
+      expect(err.message).toContain("Timed out after 10ms");
+      expect(err.run).toEqual(initRun);
+    },
+  );
+
+  test("runStreamingAgentAndWait ends the server's error text with one period", async () => {
+    const client = makeClient((req) =>
+      makeSseResponse([sse("error", { run_id: "run_1", error: "Model provider unavailable." })], { signal: req.signal }),
+    );
+    const err = await client.runStreamingAgentAndWait("ag_1", { input: "hi" }).catch((e) => e);
+    expect(err.message).toContain("Model provider unavailable. No result");
+  });
+
+  test("runStreamingAgent yields an event read in full before the stream broke, then throws the fetch error", async () => {
+    const reset = new TypeError("connection reset");
+    const client = makeClient(() =>
+      brokenSseResponse([`event: result\ndata: ${JSON.stringify(reportedRun)}\n`, "data: {\"run_"], reset),
+    );
+    const events: { event: string; data: unknown }[] = [];
+    const err = await (async () => {
+      for await (const e of client.runStreamingAgent("ag_1", { input: "hi" }, { timeoutMs: 5_000 })) events.push(e);
+    })().catch((e) => e);
+    expect(err).toBe(reset);
+    // The cut-off data line is not parsed into the result's data.
+    expect(events).toEqual([{ event: "result", data: reportedRun }]);
+  });
+});
+
+describe("Polling — abort and deadline", () => {
+  const pending = { id: "run_1", status: "pending" };
+  const completed = { id: "run_1", status: "completed", output: "done" };
+
+  test("runAgentAndPoll starts no run when the signal is already aborted, and throws signal.reason", async () => {
+    let requests = 0;
+    const client = makeClient(() => {
+      requests++;
+      return jsonResponse(pending);
+    });
+    const caller = new AbortController();
+    const reason = new Error("stop");
+    caller.abort(reason);
+    const err = await client.runAgentAndPoll("ag_1", { input: "hi" }, { signal: caller.signal }).catch((e) => e);
+    expect(err).toBe(reason);
+    expect(requests).toBe(0);
+  });
+
+  test("runAgentAndPoll throws an AbortError, not SeclaiError, when aborted without a reason", async () => {
+    const caller = new AbortController();
+    const client = makeClient((req) => {
+      if (req.method === "POST") {
+        setTimeout(() => caller.abort(), 5);
+        return jsonResponse(pending);
+      }
+      return jsonResponse({ id: "run_1", status: "running" });
+    });
+    const err = await client
+      .runAgentAndPoll("ag_1", { input: "hi" }, { pollIntervalMs: 1_000, timeoutMs: 5_000, signal: caller.signal })
+      .catch((e) => e);
+    expect(err).not.toBeInstanceOf(SeclaiError);
+    expect(err.name).toBe("AbortError");
+    expect(err).toBe(caller.signal.reason);
+  });
+
+  test("runAgentAndPoll stops the wait between polls on an abort and sends no further GET", async () => {
+    const caller = new AbortController();
+    let gets = 0;
+    const client = makeClient((req) => {
+      if (req.method === "POST") return jsonResponse(pending);
+      gets++;
+      return jsonResponse({ id: "run_1", status: "running" });
+    });
+    setTimeout(() => caller.abort(new Error("stop")), 20);
+    const started = Date.now();
+    const err = await client
+      .runAgentAndPoll("ag_1", { input: "hi" }, { pollIntervalMs: 10_000, timeoutMs: 60_000, signal: caller.signal })
+      .catch((e) => e);
+    expect(err.message).toBe("stop");
+    expect(Date.now() - started).toBeLessThan(2_000);
+    expect(gets).toBe(0);
+  });
+
+  test("runAgentAndPoll passes signal to the start request and every poll", async () => {
+    const caller = new AbortController();
+    const signals: (AbortSignal | null | undefined)[] = [];
+    let gets = 0;
+    const client = makeClient((req) => {
+      signals.push(req.signal);
+      if (req.method === "POST") return jsonResponse(pending);
+      gets++;
+      return jsonResponse(gets < 2 ? { id: "run_1", status: "running" } : completed);
+    });
+    await client.runAgentAndPoll("ag_1", { input: "hi" }, { pollIntervalMs: 5, timeoutMs: 5_000, signal: caller.signal });
+    expect(signals).toHaveLength(3);
+    // Each request gets its own signal, linked to the caller's.
+    for (const s of signals) expect(s).toBeInstanceOf(AbortSignal);
+  });
+
+  test("runAgentAndPoll leaves no listener on a reused signal when the fetch keeps its own on the signal it is given", async () => {
+    const caller = countedSignal();
+    let gets = 0;
+    const client = new Seclai({
+      apiKey: "k",
+      baseUrl: "https://test.invalid",
+      // Like undici: a listener on init.signal that is not removed when the request ends.
+      fetch: async (_input, init) => {
+        init?.signal?.addEventListener("abort", () => {});
+        if (init?.method === "POST") return jsonResponse(pending);
+        gets++;
+        return jsonResponse(gets < 2 ? { id: "run_1", status: "running" } : completed);
+      },
+    });
+    for (let i = 0; i < 2; i++) {
+      gets = 0;
+      await client.runAgentAndPoll("ag_1", { input: "hi" }, { pollIntervalMs: 5, timeoutMs: 5_000, signal: caller.signal });
+    }
+    expect(caller.listeners()).toBe(0);
+  });
+
+  test("runAgentAndPoll with includeStepOutputs returns an ended start run without step outputs when aborted during their fetch", async () => {
+    const caller = new AbortController();
+    const client = new Seclai({
+      apiKey: "k",
+      baseUrl: "https://test.invalid",
+      fetch: async (input, init) => {
+        if (init?.method === "POST") return jsonResponse(completed);
+        setTimeout(() => caller.abort(new Error("stop")), 5);
+        return hangUntilAborted(input, init);
+      },
+    });
+    const result = await client.runAgentAndPoll("ag_1", { input: "hi" }, {
+      timeoutMs: 5_000,
+      includeStepOutputs: true,
+      signal: caller.signal,
+    });
+    expect(result).toEqual(completed);
+  });
+
+  test("runAgentAndPoll surfaces an abort during a poll as signal.reason, whatever the fetch rejects with", async () => {
+    const caller = new AbortController();
+    const reason = new Error("stop");
+    const client = new Seclai({
+      apiKey: "k",
+      baseUrl: "https://test.invalid",
+      fetch: async (_input, init) => {
+        if (init?.method === "POST") return jsonResponse(pending);
+        setTimeout(() => caller.abort(reason), 5);
+        return await new Promise<Response>((_resolve, reject) =>
+          init?.signal?.addEventListener("abort", () => reject(new TypeError("fetch failed")), { once: true }),
+        );
+      },
+    });
+    const err = await client
+      .runAgentAndPoll("ag_1", { input: "hi" }, { pollIntervalMs: 1, timeoutMs: 5_000, signal: caller.signal })
+      .catch((e) => e);
+    expect(err).toBe(reason);
+  });
+
+  test("runAgentAndPoll cuts the wait between polls at the deadline", async () => {
+    let gets = 0;
+    const client = makeClient((req) => {
+      if (req.method === "POST") return jsonResponse(pending);
+      gets++;
+      return jsonResponse({ id: "run_1", status: "running" });
+    });
+    const started = Date.now();
+    const err = await client
+      .runAgentAndPoll("ag_1", { input: "hi" }, { pollIntervalMs: 10_000, timeoutMs: 50 })
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(SeclaiStreamingError);
+    expect(Date.now() - started).toBeLessThan(2_000);
+    expect(gets).toBe(1); // the poll at the deadline
+    expect(err.run).toEqual({ id: "run_1", status: "running" });
+  });
+
+  test("runAgentAndPoll throws with the runAgent() response in run when timeoutMs elapses before any poll", async () => {
+    let gets = 0;
+    const client = makeClient(async (req) => {
+      if (req.method === "POST") {
+        await new Promise((r) => setTimeout(r, 30));
+        return jsonResponse(pending);
+      }
+      gets++;
+      return jsonResponse({ id: "run_1", status: "running" });
+    });
+    const err = await client
+      .runAgentAndPoll("ag_1", { input: "hi" }, { pollIntervalMs: 5, timeoutMs: 10 })
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(SeclaiStreamingError);
+    expect(err.run).toEqual(pending);
+    expect(err.runId).toBe("run_1");
+    expect(gets).toBe(0);
+  });
+
+  test("runAgentAndPoll with includeStepOutputs bounds the fetch for an ended start run by timeoutMs", async () => {
+    const client = new Seclai({
+      apiKey: "k",
+      baseUrl: "https://test.invalid",
+      fetch: async (input, init) =>
+        init?.method === "POST" ? jsonResponse(completed) : hangUntilAborted(input, init),
+    });
+    const started = Date.now();
+    const result = await client.runAgentAndPoll("ag_1", { input: "hi" }, { timeoutMs: 30, includeStepOutputs: true });
+    expect(result).toEqual(completed);
+    expect(Date.now() - started).toBeLessThan(2_000);
+  }, 5_000);
+
+  test("runAgentAndPoll with includeStepOutputs sends no fetch for an ended start run once timeoutMs has elapsed", async () => {
+    let gets = 0;
+    const client = makeClient(async (req) => {
+      if (req.method === "POST") {
+        await new Promise((r) => setTimeout(r, 30));
+        return jsonResponse(completed);
+      }
+      gets++;
+      return new Response("boom", { status: 500 });
+    });
+    const result = await client.runAgentAndPoll("ag_1", { input: "hi" }, { timeoutMs: 10, includeStepOutputs: true });
+    expect(result).toEqual(completed);
+    expect(gets).toBe(0);
+  });
+
+  test("runAgentAndPoll with includeStepOutputs throws a failing fetch for an ended start run before the deadline", async () => {
+    const client = makeClient((req) =>
+      req.method === "POST" ? jsonResponse(completed) : new Response("boom", { status: 500 }),
+    );
+    await expect(
+      client.runAgentAndPoll("ag_1", { input: "hi" }, { timeoutMs: 5_000, includeStepOutputs: true }),
+    ).rejects.toBeInstanceOf(SeclaiAPIStatusError);
+  });
+
+  test("runAgentAndPoll leaves no listener on the caller's signal", async () => {
+    const caller = countedSignal();
+    let gets = 0;
+    const client = makeClient((req) => {
+      if (req.method === "POST") return jsonResponse(pending);
+      gets++;
+      return jsonResponse(gets < 3 ? { id: "run_1", status: "running" } : completed);
+    });
+    await client.runAgentAndPoll("ag_1", { input: "hi" }, { pollIntervalMs: 5, timeoutMs: 5_000, signal: caller.signal });
+    const ended = makeClient(() => jsonResponse(completed));
+    await ended.runAgentAndPoll("ag_1", { input: "hi" }, { timeoutMs: 5_000, includeStepOutputs: true, signal: caller.signal });
+    expect(caller.listeners()).toBe(0);
+  });
+});
+
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Knowledge Bases
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -3423,14 +3910,58 @@ describe("Models — media filters & generation tiers", () => {
   });
 
   test("getGenerationTiers sends GET /models/generation-tiers", async () => {
+    const tier = { modality: "image", tier: "fast", model_id: "m_1", aspect_ratios: ["1:1", "16:9"] };
     const client = makeClient((req) => {
       expect(req.method).toBe("GET");
       expect(new URL(req.url).pathname).toBe("/models/generation-tiers");
-      return jsonResponse({ tiers: [{ modality: "image", tier: "fast", model: "m_1" }] });
+      return jsonResponse({ tiers: [tier] });
     });
-    const tiers = await client.getGenerationTiers() as Record<string, unknown>;
-    expect(tiers["tiers"]).toEqual([{ modality: "image", tier: "fast", model: "m_1" }]);
+    const tiers = await client.getGenerationTiers();
+    expect(tiers.tiers).toEqual([tier]);
+    expect(tiers.tiers[0]?.aspect_ratios).toEqual(["1:1", "16:9"]);
   });
+
+  // vitest strips types without checking them, so compile a caller's code.
+  test("getGenerationTiers returns GenerationTierListResponse, exported with GenerationTierResponse", async () => {
+    const ts = (await import("typescript")).default;
+    const { mkdtempSync, writeFileSync, rmSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const { fileURLToPath } = await import("node:url");
+    const index = fileURLToPath(new URL("../src/index", import.meta.url));
+    const dir = mkdtempSync(join(tmpdir(), "seclai-types-"));
+    try {
+      const file = join(dir, "caller.ts");
+      writeFileSync(file, [
+        `import type { Seclai, GenerationTierListResponse, GenerationTierResponse } from ${JSON.stringify(index)};`,
+        "export async function read(client: Seclai): Promise<string[] | undefined> {",
+        "  const list: GenerationTierListResponse = await client.getGenerationTiers();",
+        "  const tier: GenerationTierResponse | undefined = list.tiers[0];",
+        "  const ratios: string[] | undefined = tier?.aspect_ratios;",
+        "  // @ts-expect-error not a tier field",
+        "  void tier?.no_such_field;",
+        "  return ratios;",
+        "}",
+      ].join("\n"));
+      const program = ts.createProgram([file], {
+        target: ts.ScriptTarget.ES2022,
+        module: ts.ModuleKind.ESNext,
+        moduleResolution: ts.ModuleResolutionKind.Bundler,
+        lib: ["lib.es2022.d.ts", "lib.dom.d.ts", "lib.dom.iterable.d.ts"],
+        strict: true,
+        noUncheckedIndexedAccess: true,
+        exactOptionalPropertyTypes: true,
+        skipLibCheck: true,
+        noEmit: true,
+      });
+      const messages = ts
+        .getPreEmitDiagnostics(program)
+        .map((d) => ts.flattenDiagnosticMessageText(d.messageText, "\n"));
+      expect(messages).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 60_000);
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

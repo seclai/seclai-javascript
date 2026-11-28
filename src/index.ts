@@ -350,6 +350,8 @@ export type {
   EmbeddingStorageCreditsResponse,
   RerankerModelResponse,
   RerankerModelListResponse,
+  GenerationTierResponse,
+  GenerationTierListResponse,
   VariantCategoryResponse,
   VariantOptionResponse,
   PlaygroundCreateRequest,

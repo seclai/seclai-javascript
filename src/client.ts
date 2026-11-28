@@ -49,6 +49,7 @@ import type {
   EmbeddingModelListResponse,
   ListSourceContentsOptions,
   RerankerModelListResponse,
+  GenerationTierListResponse,
   SourceContentStatusListResponse,
   SourceContentStatusResponse,
   AgentTraceSearchRequest,
@@ -462,55 +463,159 @@ function createSseParser(onMessage: (msg: SseMessage) => void) {
     dataLines = [];
   }
 
+  function processLine(rawLine: string) {
+    let line = rawLine;
+    if (line.endsWith("\r")) line = line.slice(0, -1);
+
+    if (line === "") {
+      dispatch();
+      return;
+    }
+
+    if (line.startsWith(":")) return;
+
+    const colon = line.indexOf(":");
+    const field = colon === -1 ? line : line.slice(0, colon);
+    let value = colon === -1 ? "" : line.slice(colon + 1);
+    if (value.startsWith(" ")) value = value.slice(1);
+
+    if (field === "event") {
+      eventName = value;
+    } else if (field === "data") {
+      dataLines.push(value);
+    }
+  }
+
   function feed(textChunk: string) {
     buffer += textChunk;
     while (true) {
       const newlineIdx = buffer.indexOf("\n");
       if (newlineIdx === -1) return;
-
-      let line = buffer.slice(0, newlineIdx);
+      const line = buffer.slice(0, newlineIdx);
       buffer = buffer.slice(newlineIdx + 1);
-
-      if (line.endsWith("\r")) line = line.slice(0, -1);
-
-      if (line === "") {
-        dispatch();
-        continue;
-      }
-
-      if (line.startsWith(":")) continue;
-
-      const colon = line.indexOf(":");
-      const field = colon === -1 ? line : line.slice(0, colon);
-      let value = colon === -1 ? "" : line.slice(colon + 1);
-      if (value.startsWith(" ")) value = value.slice(1);
-
-      if (field === "event") {
-        eventName = value;
-      } else if (field === "data") {
-        dataLines.push(value);
-      }
+      processLine(line);
     }
   }
 
-  return { feed, end: dispatch };
+  /**
+   * The stream closed: parse a final line that has no trailing newline, then
+   * dispatch the event its lines make up.
+   */
+  function end() {
+    if (buffer !== "") {
+      const line = buffer;
+      buffer = "";
+      processLine(line);
+    }
+    dispatch();
+  }
+
+  /**
+   * The stream broke: dispatch the event whose complete lines were read. Text
+   * after the last newline may be cut mid-line, so it is not parsed.
+   */
+  function abandon() {
+    buffer = "";
+    dispatch();
+  }
+
+  return { feed, end, abandon };
 }
 
-function anySignal(signals: Array<AbortSignal | undefined>): AbortSignal | undefined {
+/**
+ * A signal that aborts when any of `signals` does, and a `cleanup` that removes
+ * the listeners it added, so a caller's long-lived signal does not collect one
+ * per call.
+ */
+function anySignal(signals: Array<AbortSignal | undefined>): { signal: AbortSignal | undefined; cleanup: () => void } {
   const present = signals.filter(Boolean) as AbortSignal[];
-  if (present.length === 0) return undefined;
-  if (present.length === 1) return present[0];
+  if (present.length === 0) return { signal: undefined, cleanup: () => {} };
+  if (present.length === 1) return { signal: present[0], cleanup: () => {} };
   const controller = new AbortController();
   const onAbort = () => controller.abort();
+  const listening: AbortSignal[] = [];
+  const cleanup = () => {
+    for (const s of listening) s.removeEventListener("abort", onAbort);
+    listening.length = 0;
+  };
   for (const s of present) {
     if (s.aborted) {
+      cleanup();
       controller.abort();
       break;
     }
     s.addEventListener("abort", onAbort, { once: true });
+    listening.push(s);
   }
-  return controller.signal;
+  return { signal: controller.signal, cleanup };
 }
+
+/** A fresh signal that aborts with `signal`, and a `cleanup` that unlinks it. */
+function requestSignal(signal: AbortSignal | undefined): { signal: AbortSignal | undefined; cleanup: () => void } {
+  if (!signal) return { signal: undefined, cleanup: () => {} };
+  const controller = new AbortController();
+  if (signal.aborted) {
+    controller.abort(signal.reason);
+    return { signal: controller.signal, cleanup: () => {} };
+  }
+  const onAbort = () => controller.abort(signal.reason);
+  signal.addEventListener("abort", onAbort, { once: true });
+  return { signal: controller.signal, cleanup: () => signal.removeEventListener("abort", onAbort) };
+}
+
+/** Wait `ms`, or reject with `signal.reason` once `signal` aborts. Leaves no listener behind. */
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason);
+      return;
+    }
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal!.reason);
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+function isTerminalStatus(status: unknown): boolean {
+  return status === "completed" || status === "failed" || status === "cancelled";
+}
+
+function isRunSnapshot(data: unknown): data is AgentRunResponse {
+  return data !== null && typeof data === "object" && !Array.isArray(data);
+}
+
+/** The message of the timeout {@link Seclai.runStreamingAgent} and {@link Seclai.runStreamingAgentAndWait} throw. */
+function streamTimeoutMessage(timeoutMs: number): string {
+  return `Timed out after ${timeoutMs}ms waiting for streaming agent run to complete.`;
+}
+
+/**
+ * The error a wait helper throws when it gives up on a run that has not
+ * finished: `reason`, then whether `run` carries a reported answer.
+ */
+function incompleteRunError(reason: string, run: AgentRunResponse | undefined, runId?: string): SeclaiStreamingError {
+  const state = run?.result_reported_at ? "A result had been reported; see `run`." : "No result had been reported.";
+  return new SeclaiStreamingError(`${reason} ${state}`, runId ?? run?.run_id, run);
+}
+
+/** Timeout errors thrown by the stream iterator, so the wait helper can attach its snapshot. */
+const streamTimeouts = new WeakSet<object>();
+
+/** What the stream iterator reports to the wait helper built on it. */
+type StreamProgress = {
+  /** The server answered with plain JSON; the single `done` event carries it. */
+  jsonReply: boolean;
+  /** The SSE body is being read, so a failure from here on is a broken stream. */
+  reading: boolean;
+  /** `timeoutMs` elapsed, though the body may have ended without an error. */
+  timedOut: boolean;
+};
 
 function toBlob(
   file: Blob | Uint8Array | ArrayBuffer | BufferSource,
@@ -1250,11 +1355,11 @@ export class Seclai {
   /**
    * Run an agent in streaming mode (SSE) and wait for the final result.
    *
-   * Consumes the entire SSE stream and returns only the terminal `done` payload.
-   * For real-time event access, use {@link runStreamingAgent} instead. The body
-   * takes no `include_reasoning` or `include_commentary`, and one passed anyway
-   * is not sent: this method returns no `stream_reasoning` or
-   * `stream_commentary` events.
+   * Reads the events of {@link runStreamingAgent} and returns the run from the
+   * terminal `done` event. For real-time event access, use
+   * {@link runStreamingAgent} instead. The body takes no `include_reasoning`
+   * or `include_commentary`, and one passed anyway is not sent: this method
+   * returns no `stream_reasoning` or `stream_commentary` events.
    *
    * A `result` event carries the run's answer in `output` once
    * `result_reported_at` is set, and can arrive while later steps still run.
@@ -1263,17 +1368,23 @@ export class Seclai {
    * its `status` is not terminal and the run can still fail, so check
    * `result_reported_at`, not `status`.
    *
-   * If `timeoutMs` elapses, this throws {@link SeclaiStreamingError} with the
-   * latest snapshot in `run`: the `result` snapshot if one arrived, else the
-   * `init` snapshot. An abort from `signal` rethrows the abort error.
+   * The latest snapshot is the `result` event's run if one arrived, else the
+   * `init` event's run. When the server sends an `error`
+   * event, this throws {@link SeclaiStreamingError} with the server's error
+   * text in its message; when the server sends a `timeout` event, or
+   * `timeoutMs` elapses, it throws {@link SeclaiStreamingError} too. Each
+   * carries the latest snapshot in `run`. An abort from `signal` rethrows the
+   * abort error. Every way out of this method closes the response body.
    *
    * By default, a stream that ends before `done` returns the latest snapshot
-   * when its status is not `pending`, so the run returned may not have
-   * finished: check `status` and `result_reported_at`. A stream that breaks
-   * throws the fetch error. Pass `throwOnIncomplete: true` to throw
-   * {@link SeclaiStreamingError} with the snapshot in `run` in both cases
-   * instead; it is recommended, and becomes the default in the next major
-   * version.
+   * when its status is not `pending`, so the run returned may
+   * not have finished: check `status` and `result_reported_at`. A stream that
+   * breaks throws the fetch error, unless a `done` event, or with
+   * `returnOnResult` a `result` event, was read in full before it
+   * broke. Pass `throwOnIncomplete: true` to throw
+   * {@link SeclaiStreamingError} with the latest snapshot in `run` in both
+   * cases instead; it is recommended, and becomes the default in the next
+   * major version.
    *
    * @param agentId - Agent identifier.
    * @param body - Streaming run request payload, without `include_reasoning`
@@ -1282,9 +1393,10 @@ export class Seclai {
    * @returns The run from the `done` event; with `returnOnResult`, the
    *   `result` snapshot; without `throwOnIncomplete`, possibly an unfinished
    *   snapshot (see above).
-   * @throws {@link SeclaiStreamingError} If `timeoutMs` elapses, or, with
-   *   `throwOnIncomplete`, the stream ends or breaks, before the run finished.
-   *   Its `run` holds the latest snapshot.
+   * @throws {@link SeclaiStreamingError} If the server sends an `error` or
+   *   `timeout` event, `timeoutMs` elapses, or, with `throwOnIncomplete`, the
+   *   stream ends or breaks, before the run finished. Its `run` holds the
+   *   latest snapshot.
    *
    * @example
    * ```ts
@@ -1326,149 +1438,68 @@ export class Seclai {
       include_commentary: _commentary,
       ...runBody
     } = body as AgentRunStreamRequest;
-    const url = buildURL(this.baseUrl, `/agents/${agentId}/runs/stream`);
-
-    const authHdrs = await this.authHeaders();
-    const headers = this.requestHeaders([
-      this.defaultHeaders,
-      authHdrs,
-      { accept: "text/event-stream", "content-type": "application/json" },
-    ]);
-
     const timeoutMs = opts?.timeoutMs ?? 60_000;
-    const timeoutController = new AbortController();
-    let timedOut = false;
-    const timeoutId = setTimeout(() => {
-      timedOut = true;
-      timeoutController.abort();
-    }, timeoutMs);
+    const streamOpts: { timeoutMs: number; signal?: AbortSignal } = { timeoutMs };
+    if (opts?.signal) streamOpts.signal = opts.signal;
+    const progress: StreamProgress = { jsonReply: false, reading: false, timedOut: false };
 
-    const signal = anySignal([opts?.signal, timeoutController.signal]);
-
-    let lastSeen: AgentRunResponse | undefined;
+    // The latest snapshot, as released: the result event's run, else the init
+    // event's, else none. Update events do not count.
+    let initial: AgentRunResponse | undefined;
     let reported: AgentRunResponse | undefined;
+    const snapshot = () => reported ?? initial;
 
     try {
-      const init: RequestInit = { method: "POST", headers, body: JSON.stringify(runBody) };
-      if (signal) init.signal = signal;
-
-      const response = await this.fetcher(url, init);
-
-      // Handle error responses
-      const contentType = response.headers.get("content-type") ?? "";
-      const isJson = contentType.includes("application/json");
-
-      if (!response.ok) {
-        const responseText = await safeText(response);
-        if (response.status === 422) {
-          const validation = await safeJson(response);
-          throw new SeclaiAPIValidationError({
-            message: "Validation error",
-            statusCode: response.status,
-            method: "POST",
-            url: url.toString(),
-            responseText,
-            headers: new Headers(response.headers),
-            validationError: validation,
-          });
+      // Returning or throwing inside the loop closes the iterator, which
+      // cancels the reader.
+      for await (const { event, data } of this.streamRunEvents(agentId, runBody, streamOpts, progress)) {
+        if (event === "error" || event === "timeout") {
+          const info = isRunSnapshot(data) ? (data as { run_id?: unknown; error?: unknown }) : {};
+          const runId = typeof info.run_id === "string" ? info.run_id : undefined;
+          if (event === "timeout") {
+            throw incompleteRunError("The server timed out the streaming agent run before it finished.", snapshot(), runId);
+          }
+          const text = typeof info.error === "string" ? info.error : typeof data === "string" ? data : undefined;
+          const reason = text
+            ? `The streaming agent run failed on the server: ${text}${/[.!?]$/.test(text) ? "" : "."}`
+            : "The streaming agent run failed on the server.";
+          throw incompleteRunError(reason, snapshot(), runId);
         }
-        throw new SeclaiAPIStatusError({
-          message: `Request failed with status ${response.status}`,
-          statusCode: response.status,
-          method: "POST",
-          url: url.toString(),
-          responseText,
-          headers: new Headers(response.headers),
-        });
-      }
-
-      // If server returned JSON instead of SSE
-      if (isJson) {
-        const run = (await response.json()) as AgentRunResponse;
-        const status = (run as any).status;
-        const finished =
-          status === "completed" || status === "failed" || status === "cancelled" ||
-          Boolean(opts?.returnOnResult && run.result_reported_at);
-        if (opts?.throwOnIncomplete && !finished) {
-          const state = run.result_reported_at ? "A result had been reported; see `run`." : "No result had been reported.";
-          throw new SeclaiStreamingError(`The server answered with JSON for a run that has not finished. ${state}`, run.run_id, run);
+        if (!isRunSnapshot(data)) continue;
+        if (event === "init") {
+          initial = data;
+        } else if (event === "result") {
+          reported = data;
+          if (opts?.returnOnResult) return data;
+        } else if (event === "done") {
+          const finished = isTerminalStatus(data.status) || Boolean(opts?.returnOnResult && data.result_reported_at);
+          if (progress.jsonReply && opts?.throwOnIncomplete && !finished) {
+            throw incompleteRunError("The server answered with JSON for a run that has not finished.", data);
+          }
+          return data;
         }
-        return run;
       }
-
-      if (!response.body) {
-        throw new SeclaiConfigurationError(
-          "Streaming response body is not available in this environment. Provide a fetch implementation that supports ReadableStream bodies."
-        );
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-
-      let final: AgentRunResponse | undefined;
-
-      const parser = createSseParser((msg) => {
-        if (!msg.data) return;
-        if (msg.event === "init" || msg.event === "result" || msg.event === "done") {
-          try {
-            const parsed = JSON.parse(msg.data) as AgentRunResponse;
-            lastSeen = parsed;
-            if (msg.event === "result") reported = parsed;
-            if (msg.event === "done") final = parsed;
-          } catch { /* ignore malformed JSON */ }
-        }
-      });
-
-      let readFailure: string | undefined;
-      try {
-        while (!final && !(opts?.returnOnResult && reported)) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          if (value) parser.feed(decoder.decode(value, { stream: true }));
-        }
-      } catch (err) {
-        // The caller asked to stop: keep the abort error. Without
-        // throwOnIncomplete, a broken read throws the fetch error, as released.
-        if (opts?.signal?.aborted || (!opts?.throwOnIncomplete && !timedOut)) throw err;
-        readFailure = err instanceof Error ? err.message : String(err);
-      }
-
-      // Flush the decoder, and dispatch an event whose complete lines were read
-      // but whose terminating blank line has not arrived. Text after the last
-      // newline is not parsed.
-      parser.feed(decoder.decode());
-      parser.end();
-
-      if (final) return final;
-      if (opts?.returnOnResult && reported) {
-        reader.cancel().catch(() => {});
-        return reported;
-      }
-      // Released behaviour without throwOnIncomplete: the stream ended early.
-      if (!opts?.throwOnIncomplete && !timedOut && lastSeen?.status && lastSeen.status !== "pending") {
-        return lastSeen;
-      }
-
-      const run = reported ?? lastSeen;
-      const state = reported ? "A result had been reported; see `run`." : "No result had been reported.";
-      const reason = timedOut
-        ? `Timed out after ${timeoutMs}ms before the streaming agent run finished.`
-        : readFailure !== undefined
-          ? `Stream failed before the run finished: ${readFailure}.`
-          : "Stream ended before receiving a 'done' event.";
-      throw new SeclaiStreamingError(`${reason} ${state}`, run?.run_id, run);
     } catch (err) {
-      if (timedOut && !opts?.signal?.aborted && !(err instanceof SeclaiStreamingError)) {
-        throw new SeclaiStreamingError(
-          `Timed out after ${timeoutMs}ms waiting for streaming agent run to complete.`,
-          lastSeen?.run_id,
-          reported ?? lastSeen,
-        );
+      // The caller asked to stop: keep the abort error.
+      if (opts?.signal?.aborted) throw err;
+      if (streamTimeouts.has(err as object)) throw incompleteRunError(streamTimeoutMessage(timeoutMs), snapshot());
+      // A failure after the body was being read is a broken stream. Without
+      // throwOnIncomplete it throws the fetch error, as released.
+      if (opts?.throwOnIncomplete && progress.reading && !(err instanceof SeclaiStreamingError)) {
+        const message = err instanceof Error ? err.message : String(err);
+        throw incompleteRunError(`Stream failed before the run finished: ${message}.`, snapshot());
       }
       throw err;
-    } finally {
-      clearTimeout(timeoutId);
     }
+
+    // A body the timeout did not cut ended after it: still a timeout, as released.
+    if (progress.timedOut) throw incompleteRunError(streamTimeoutMessage(timeoutMs), snapshot());
+    // Released behaviour without throwOnIncomplete: the stream ended early.
+    const latest = snapshot();
+    if (!opts?.throwOnIncomplete && latest?.status && latest.status !== "pending") {
+      return latest;
+    }
+    throw incompleteRunError("Stream ended before receiving a 'done' event.", snapshot());
   }
 
   /**
@@ -1479,6 +1510,13 @@ export class Seclai {
    * `include_commentary` in `body` to also receive `stream_reasoning` or
    * `stream_commentary` events.
    *
+   * The server ends the stream after `done`, after `error` (data
+   * `{ run_id, error }`, the stream failed on the server) or after `timeout`
+   * (data `{ run_id }`); all three are yielded like any other event. When the
+   * server answers with plain JSON instead of SSE, its run is yielded as one
+   * `done` event. Leaving the loop early (`break`, `return` or a throw)
+   * closes the response body.
+   *
    * From `apiVersion` `2026-11-14`, an agent whose definition fails to validate
    * is refused with HTTP 409 ({@link SeclaiAPIStatusError}) before any event,
    * and no run is created.
@@ -1487,6 +1525,9 @@ export class Seclai {
    * @param body - Streaming run request payload.
    * @param opts - Timeout and abort signal options.
    * @yields {@link AgentRunEvent} for each SSE message.
+   * @throws {@link SeclaiStreamingError} If `timeoutMs` elapses. An event read
+   *   in full before the stream broke or timed out is yielded first, unless
+   *   `signal` was aborted.
    *
    * @example
    * ```ts
@@ -1506,6 +1547,20 @@ export class Seclai {
     body: AgentRunStreamRequest,
     opts?: { timeoutMs?: number; signal?: AbortSignal },
   ): AsyncGenerator<AgentRunEvent, void, undefined> {
+    yield* this.streamRunEvents(agentId, body, opts);
+  }
+
+  /**
+   * The stream behind {@link runStreamingAgent} and
+   * {@link runStreamingAgentAndWait}: one request, reader and parser for both.
+   * `progress` tells the wait helper what the events alone do not.
+   */
+  private async *streamRunEvents(
+    agentId: string,
+    body: AgentRunStreamRequest,
+    opts: { timeoutMs?: number; signal?: AbortSignal } | undefined,
+    progress?: StreamProgress,
+  ): AsyncGenerator<AgentRunEvent, void, undefined> {
     const url = buildURL(this.baseUrl, `/agents/${agentId}/runs/stream`);
 
     const authHdrs = await this.authHeaders();
@@ -1520,10 +1575,12 @@ export class Seclai {
     let timedOut = false;
     const timeoutId = setTimeout(() => {
       timedOut = true;
+      if (progress) progress.timedOut = true;
       timeoutController.abort();
     }, timeoutMs);
 
-    const signal = anySignal([opts?.signal, timeoutController.signal]);
+    const { signal, cleanup } = anySignal([opts?.signal, timeoutController.signal]);
+    let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
 
     try {
       const init: RequestInit = { method: "POST", headers, body: JSON.stringify(body) };
@@ -1561,17 +1618,19 @@ export class Seclai {
       // If server returned JSON instead of SSE, yield it as a single "done" event
       if (isJson) {
         const data = (await response.json()) as AgentRunResponse;
+        if (progress) progress.jsonReply = true;
         yield { event: "done", data };
         return;
       }
 
       if (!response.body) {
         throw new SeclaiConfigurationError(
-          "Streaming response body is not available in this environment."
+          "Streaming response body is not available in this environment. Provide a fetch implementation that supports ReadableStream bodies."
         );
       }
 
-      const reader = response.body.getReader();
+      reader = response.body.getReader();
+      if (progress) progress.reading = true;
       const decoder = new TextDecoder();
       const events: AgentRunEvent[] = [];
 
@@ -1587,8 +1646,25 @@ export class Seclai {
       });
 
       while (true) {
-        const { value, done } = await reader.read();
+        let chunk: ReadableStreamReadResult<Uint8Array>;
+        try {
+          chunk = await reader.read();
+        } catch (err) {
+          // Keep an event whose lines were read in full before the failure,
+          // unless the caller aborted: then only the abort error is thrown.
+          if (!opts?.signal?.aborted) {
+            parser.feed(decoder.decode());
+            parser.abandon();
+            while (events.length > 0) yield events.shift()!;
+          }
+          throw err;
+        }
+        const { value, done } = chunk;
         if (value) parser.feed(decoder.decode(value, { stream: true }));
+        if (done) {
+          parser.feed(decoder.decode());
+          parser.end();
+        }
 
         // Yield all events that were parsed from this chunk
         while (events.length > 0) {
@@ -1597,21 +1673,17 @@ export class Seclai {
 
         if (done) break;
       }
-      parser.end();
-
-      // Yield any remaining events from end()
-      while (events.length > 0) {
-        yield events.shift()!;
-      }
     } catch (err) {
       if (timedOut) {
-        throw new SeclaiStreamingError(
-          `Timed out after ${timeoutMs}ms waiting for streaming agent run to complete.`
-        );
+        const timeout = new SeclaiStreamingError(streamTimeoutMessage(timeoutMs));
+        streamTimeouts.add(timeout);
+        throw timeout;
       }
       throw err;
     } finally {
       clearTimeout(timeoutId);
+      cleanup();
+      reader?.cancel().catch(() => {});
     }
   }
 
@@ -1628,22 +1700,23 @@ export class Seclai {
    * `result_reported_at` is set, `output` holds the answer. Pass
    * `returnOnResult: true` to return as soon as a run has it set, the run
    * `runAgent()` returns included. With `includeStepOutputs`, when that run
-   * would end the poll and `signal` is not aborted, it is fetched again at
-   * once for its step outputs.
+   * would end the poll, it is fetched again at once for its step outputs.
    * Such a run may still be in progress: its `status` is not terminal and the
    * run can still fail, so check `result_reported_at`, not `status`.
    *
    * When `timeoutMs` elapses first, this throws {@link SeclaiStreamingError}
    * with the latest run it has (the `runAgent()` response if no poll ran) in
    * `run`. If that run has `result_reported_at`
-   * set, its `output` is the answer.
+   * set, its `output` is the answer. The wait between polls is cut short at
+   * the deadline, so the last poll is sent when `timeoutMs` elapses.
    *
-   * `signal` is checked at the top of each poll, after the check for a run
-   * that ends the poll. A run that has ended the poll by then, whether the
-   * start run or a polled one, is returned even after an abort; the start run
-   * then comes back without step outputs, even when `includeStepOutputs` is
-   * set. Otherwise an abort throws `SeclaiError("Polling aborted.")`, which is
-   * not an `AbortError` and does not carry `signal.reason`.
+   * `signal` is passed to every request and to the wait between polls. An
+   * abort throws `signal.reason`, as `signal.throwIfAborted()` does (by
+   * default an `AbortError`): an already-aborted signal starts no run. A run
+   * that has ended the poll is returned even after an abort. When the start
+   * run has ended it and `includeStepOutputs` is set, the fetch for its step
+   * outputs is cut off, with a `fetch` that honours `signal`, by an abort or
+   * by `timeoutMs`, and the start run then comes back without step outputs.
    *
    * @param agentId - Agent identifier.
    * @param body - Run request payload.
@@ -1653,9 +1726,8 @@ export class Seclai {
    * @throws {@link SeclaiStreamingError} If `timeoutMs` elapses before the run
    *   finished. Its `run` holds the latest run it has (the `runAgent()`
    *   response if no poll ran).
-   * @throws {@link SeclaiError} `"Polling aborted."` If `signal` is aborted and,
-   *   at the next poll's check, the run has not ended the poll. It is not an
-   *   `AbortError` and does not carry `signal.reason`.
+   * @throws `signal.reason` If `signal` is aborted before the run has ended
+   *   the poll.
    */
   async runAgentAndPoll(
     agentId: string,
@@ -1678,42 +1750,74 @@ export class Seclai {
   ): Promise<AgentRunResponse> {
     const pollInterval = opts?.pollIntervalMs ?? 2_000;
     const timeout = opts?.timeoutMs ?? 300_000;
-    const startTime = Date.now();
+    const signal = opts?.signal;
+    const deadline = Date.now() + timeout;
 
-    const run = await this.runAgent(agentId, body);
+    signal?.throwIfAborted();
+    // Each request gets its own signal linked to the caller's, removed when it
+    // settles, so a fetch that leaves its listener on the signal it was given
+    // leaves none on the caller's. Whatever a fetch implementation rejects with
+    // on an abort, throw the abort error.
+    const abortable = async <T>(send: (s: AbortSignal | undefined) => Promise<T>): Promise<T> => {
+      const linked = requestSignal(signal);
+      try {
+        return await send(linked.signal);
+      } catch (err) {
+        signal?.throwIfAborted();
+        throw err;
+      } finally {
+        linked.cleanup();
+      }
+    };
+    const pollOpts = (s: AbortSignal | undefined) => {
+      const o: { query?: Record<string, unknown>; signal?: AbortSignal } = {};
+      if (opts?.includeStepOutputs) o.query = { include_step_outputs: true };
+      if (s) o.signal = s;
+      return o;
+    };
+    const endsPoll = (r: AgentRunResponse) =>
+      isTerminalStatus(r.status) || Boolean(opts?.returnOnResult && r.result_reported_at);
+
+    // runAgent(), with the signal.
+    const run = (await abortable((s) => {
+      const startOpts: { json: unknown; signal?: AbortSignal } = { json: body };
+      if (s) startOpts.signal = s;
+      return this.request("POST", `/agents/${agentId}/runs`, startOpts);
+    })) as AgentRunResponse;
     const runId = (run as any).id ?? (run as any).run_id;
     if (!runId) throw new SeclaiError("Agent run response did not contain an id.");
 
     // The initial response is checked too: a fast run can already be done. It
     // carries no step outputs, so when they are asked for and it would end the
-    // poll, fetch the run first.
+    // poll, fetch the run first, within what is left of timeoutMs. Past the
+    // deadline or after an abort, the start run is returned without them.
     let current = run;
-    if (opts?.includeStepOutputs) {
-      const status = (run as any).status;
-      if (status === "completed" || status === "failed" || status === "cancelled" ||
-          (opts.returnOnResult && run.result_reported_at)) {
-        // After an abort, skip the fetch: the loop returns the start response.
-        if (!opts.signal?.aborted) current = await this.getAgentRun(runId, { includeStepOutputs: true });
+    if (opts?.includeStepOutputs && endsPoll(run)) {
+      const left = deadline - Date.now();
+      if (left > 0 && !signal?.aborted) {
+        const limit = new AbortController();
+        const timer = setTimeout(() => limit.abort(), left);
+        const bounded = anySignal([signal, limit.signal]);
+        try {
+          current = (await this.request("GET", `/agents/runs/${runId}`, pollOpts(bounded.signal))) as AgentRunResponse;
+        } catch (err) {
+          if (!limit.signal.aborted && !signal?.aborted) throw err;
+        } finally {
+          clearTimeout(timer);
+          bounded.cleanup();
+        }
       }
     }
     while (true) {
-      const status = (current as any).status;
-      if (status === "completed" || status === "failed" || status === "cancelled") {
-        return current;
-      }
-      if (opts?.returnOnResult && current.result_reported_at) return current;
+      if (endsPoll(current)) return current;
 
-      if (opts?.signal?.aborted) throw new SeclaiError("Polling aborted.");
-      if (Date.now() - startTime > timeout) {
-        const state = current.result_reported_at ? "A result had been reported; see `run`." : "No result had been reported.";
-        throw new SeclaiStreamingError(`Polling timed out after ${timeout}ms. ${state}`, runId, current);
-      }
+      signal?.throwIfAborted();
+      const left = deadline - Date.now();
+      if (left <= 0) throw incompleteRunError(`Polling timed out after ${timeout}ms.`, current, runId);
 
-      await new Promise((r) => setTimeout(r, pollInterval));
+      await sleep(Math.min(pollInterval, left), signal);
 
-      current = await this.getAgentRun(runId,
-        opts?.includeStepOutputs ? { includeStepOutputs: true } : undefined,
-      );
+      current = (await abortable((s) => this.request("GET", `/agents/runs/${runId}`, pollOpts(s)))) as AgentRunResponse;
     }
   }
 
@@ -3666,8 +3770,8 @@ export class Seclai {
    *
    * Global routing/pricing (the same for every account); read-only.
    */
-  async getGenerationTiers(): Promise<Record<string, unknown>> {
-    return keyedList<Record<string, unknown>>(await this.request("GET", "/models/generation-tiers"), "tiers");
+  async getGenerationTiers(): Promise<GenerationTierListResponse> {
+    return keyedList<GenerationTierListResponse>(await this.request("GET", "/models/generation-tiers"), "tiers");
   }
 
   /**

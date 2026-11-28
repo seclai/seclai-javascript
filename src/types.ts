@@ -972,6 +972,12 @@ export type RerankerModelResponse = components["schemas"]["RerankerModelResponse
 /** The reranker models, with the default and pricing that apply to all of them. */
 export type RerankerModelListResponse = VersionedList<components["schemas"]["RerankerModelListResponse"], "models">;
 
+/** A media-generation quality tier and the model and cost it resolves to. */
+export type GenerationTierResponse = components["schemas"]["GenerationTierResponse"];
+
+/** The media-generation quality tiers {@link Seclai.getGenerationTiers} returns. */
+export type GenerationTierListResponse = VersionedList<components["schemas"]["GenerationTierListResponse"], "tiers">;
+
 /** Variant category for model pricing tiers. */
 export type VariantCategoryResponse = components["schemas"]["VariantCategoryResponse"];
 
