@@ -381,8 +381,9 @@ The SDK provides two streaming patterns over the SSE `/runs/stream` endpoint:
 sends an `error` event (the run's stream failed on the server) it throws
 `SeclaiStreamingError` with the server's error text in its message, and when the
 server sends a `timeout` event, or `timeoutMs` elapses first, it throws
-`SeclaiStreamingError` too. Its `run` holds the latest snapshot: the `result`
-snapshot if one arrived, else the `init` snapshot. An abort
+`SeclaiStreamingError` too (an HTTP error status that arrives as `timeoutMs`
+elapses is thrown as itself, as `SeclaiAPIStatusError`). Its `run` holds the
+latest snapshot: the `result` snapshot if one arrived, else the `init` snapshot. An abort
 through `signal` rethrows the abort error.
 
 By default, a stream that ends before `done` returns the latest snapshot when

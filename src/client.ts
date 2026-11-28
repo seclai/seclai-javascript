@@ -1421,6 +1421,8 @@ export class Seclai {
    *   stream ends or breaks, before the run finished. Its `run` holds the
    *   latest snapshot. On `timeoutMs`, when the request or read was cut off,
    *   its `cause` is the error it ended with.
+   * @throws {@link SeclaiAPIStatusError} For an HTTP error status, also one
+   *   that arrives as `timeoutMs` elapses.
    *
    * @example
    * ```ts
@@ -1735,19 +1737,19 @@ export class Seclai {
    * run can still fail, so check `result_reported_at`, not `status`.
    *
    * When `timeoutMs` elapses first, this throws {@link SeclaiStreamingError}
-   * with the latest run it has (the `runAgent()` response if no poll answered) in
-   * `run`. If that run has `result_reported_at`
-   * set, its `output` is the answer. No poll is sent at or after the
-   * deadline: a wait between polls that reaches it ends the call with the
-   * timeout, so a `timeoutMs` no greater than `pollIntervalMs` sends no poll.
-   * With a `fetch` that honours `signal`, a poll still in flight at the
-   * deadline is aborted and the timeout is thrown. Any error but an HTTP
-   * error status that a poll ends with once the deadline has passed is the
-   * timeout's `cause`; an HTTP error status a poll gets after the deadline is
-   * thrown as itself, and a caller abort throws `signal.reason` instead. `timeoutMs` does not cut off the start request
-   * (the server may already have created the run) or the fetch for an ended
-   * start run's step outputs; only `signal` does. A request is not cut off
-   * while more than 2^31-1 ms remain.
+   * with the latest run it has (the `runAgent()` response if no poll answered)
+   * in `run`. If that run has `result_reported_at` set, its `output` is the
+   * answer. No poll is sent at or after the deadline: a wait between polls that
+   * reaches it ends the call with the timeout, so a `timeoutMs` no greater than
+   * `pollIntervalMs` sends no poll. With a `fetch` that honours `signal`, a
+   * poll still in flight at the deadline is aborted and the timeout is thrown.
+   * Any error but an HTTP error status that a poll ends with once the deadline
+   * has passed is the timeout's `cause`; an HTTP error status a poll gets after
+   * the deadline is thrown as itself, and a caller abort throws `signal.reason`
+   * instead. `timeoutMs` does not cut off the start request (the server may
+   * already have created the run) or the fetch for an ended start run's step
+   * outputs; only `signal` does. A request is not cut off while more than
+   * 2^31-1 ms remain.
    *
    * `signal` is passed to every request and to the wait between polls. An
    * abort throws `signal.reason`, as `signal.throwIfAborted()` does (by
