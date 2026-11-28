@@ -1395,7 +1395,8 @@ export class Seclai {
    * `init` event's run. When the server sends an `error`
    * event, this throws {@link SeclaiStreamingError} with the server's error
    * text in its message; when the server sends a `timeout` event, or
-   * `timeoutMs` elapses, it throws {@link SeclaiStreamingError} too. Each
+   * `timeoutMs` elapses (unless an HTTP error status arrives as it elapses),
+   * it throws {@link SeclaiStreamingError} too. Each
    * carries the latest snapshot in `run`. An abort from `signal` rethrows the
    * abort error. Every way out of this method closes the response body.
    *
@@ -1417,7 +1418,8 @@ export class Seclai {
    *   `result` snapshot; without `throwOnIncomplete`, possibly an unfinished
    *   snapshot (see above).
    * @throws {@link SeclaiStreamingError} If the server sends an `error` or
-   *   `timeout` event, `timeoutMs` elapses, or, with `throwOnIncomplete`, the
+   *   `timeout` event, `timeoutMs` elapses (unless an HTTP error status
+   *   arrives as it elapses), or, with `throwOnIncomplete`, the
    *   stream ends or breaks, before the run finished. Its `run` holds the
    *   latest snapshot. On `timeoutMs`, when the request or read was cut off,
    *   its `cause` is the error it ended with.
