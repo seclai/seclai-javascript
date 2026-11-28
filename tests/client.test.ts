@@ -1093,6 +1093,26 @@ describe("Streaming — stream endings", () => {
     expect(caller.listeners()).toBe(0);
   });
 
+  test("runStreamingAgent and runStreamingAgentAndWait throw a 401 whose body read is cut by timeoutMs as SeclaiAPIStatusError", async () => {
+    // The status arrives; its body is still being read when the timer fires.
+    const client = makeClient((req) => {
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          req.signal?.addEventListener("abort", () => controller.error(new DOMException("aborted", "AbortError")), { once: true });
+        },
+      });
+      return new Response(stream as any, { status: 401, headers: { "content-type": "application/json" } });
+    });
+    const fromWait = await client.runStreamingAgentAndWait("ag_1", { input: "hi" }, { timeoutMs: 20 }).catch((e) => e);
+    const fromIterator = await (async () => {
+      for await (const _ of client.runStreamingAgent("ag_1", { input: "hi" }, { timeoutMs: 20 })) void _;
+    })().catch((e) => e);
+    for (const err of [fromWait, fromIterator]) {
+      expect(err).toBeInstanceOf(SeclaiAPIStatusError);
+      expect(err.statusCode).toBe(401);
+    }
+  }, 5_000);
+
   test("runStreamingAgentAndWait throws one timeout error, whether timeoutMs elapses during the request or the read", async () => {
     const duringRequest = new Seclai({ apiKey: "k", baseUrl: "https://test.invalid", fetch: hangUntilAborted });
     const duringRead = makeClient((req) => {
