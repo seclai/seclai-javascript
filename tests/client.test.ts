@@ -1318,6 +1318,23 @@ describe("Polling — abort and deadline", () => {
     expect(err.run).toEqual(pending);
   }, 5_000);
 
+  test("runAgentAndPoll keeps the error a poll ended with after the deadline as the timeout's cause", async () => {
+    const failure = new TypeError("fetch failed");
+    const client = new Seclai({
+      apiKey: "k",
+      baseUrl: "https://test.invalid",
+      // Ignores signal, and fails after the deadline.
+      fetch: async (_input, init) => {
+        if (init?.method === "POST") return jsonResponse(pending);
+        await new Promise((r) => setTimeout(r, 60));
+        throw failure;
+      },
+    });
+    const err = await client.runAgentAndPoll("ag_1", { input: "hi" }, { pollIntervalMs: 5, timeoutMs: 30 }).catch((e) => e);
+    expect(err).toBeInstanceOf(SeclaiStreamingError);
+    expect(err.cause).toBe(failure);
+  });
+
   test.each([
     ["timeoutMs and pollIntervalMs Infinity", { timeoutMs: Infinity, pollIntervalMs: Infinity }],
     ["a pollIntervalMs over 2^31-1 ms", { timeoutMs: Infinity, pollIntervalMs: 3_000_000_000 }],

@@ -1725,8 +1725,9 @@ export class Seclai {
    * deadline: a wait between polls that reaches it ends the call with the
    * timeout, so a `timeoutMs` no greater than `pollIntervalMs` sends no poll.
    * With a `fetch` that honours `signal`, a poll still in flight at the
-   * deadline is aborted and the timeout is thrown; an HTTP error status a
-   * poll gets after the deadline is thrown as itself. `timeoutMs` does not cut off the start request
+   * deadline is aborted and the timeout is thrown, with the error the poll
+   * ended with as its `cause`; an HTTP error status a poll gets after the
+   * deadline is thrown as itself. `timeoutMs` does not cut off the start request
    * (the server may already have created the run) or the fetch for an ended
    * start run's step outputs; only `signal` does. A request is not cut off
    * while more than 2^31-1 ms remain.
@@ -1801,7 +1802,12 @@ export class Seclai {
         throwIfAborted(signal);
         // A status that arrived is thrown as itself; anything else once the
         // deadline has fired is the cut-off, whatever the fetch turned it into.
-        if (limit.signal.aborted && !(err instanceof SeclaiAPIStatusError)) throw timedOut();
+        if (limit.signal.aborted && !(err instanceof SeclaiAPIStatusError)) {
+          // Keep what the request ended with, which may not be the abort.
+          const timeoutError = timedOut();
+          timeoutError.cause = err;
+          throw timeoutError;
+        }
         throw err;
       } finally {
         clearTimeout(timer);
