@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 
 import {
   Seclai,
@@ -838,16 +838,15 @@ describe("Polling", () => {
   });
 
   test("runAgentAndPoll with includeStepOutputs sends no extra GET for a pending initial response", async () => {
-    let gets = 0;
+    const searches: string[] = [];
     const client = makeClient((req) => {
       if (req.method === "POST") return jsonResponse({ id: "run_1", status: "pending" });
-      gets++;
-      return jsonResponse({ id: "run_1", status: "running" });
+      searches.push(new URL(req.url).search);
+      return jsonResponse({ id: "run_1", status: "completed" });
     });
-    await expect(
-      client.runAgentAndPoll("ag_1", { input: "hi" }, { pollIntervalMs: 50, timeoutMs: 20, includeStepOutputs: true }),
-    ).rejects.toBeInstanceOf(SeclaiStreamingError);
-    expect(gets).toBe(1);
+    await client.runAgentAndPoll("ag_1", { input: "hi" }, { pollIntervalMs: 5, timeoutMs: 5_000, includeStepOutputs: true });
+    // Only the poll, which carries the step outputs itself.
+    expect(searches).toEqual(["?include_step_outputs=true"]);
   });
 
   test("runAgentAndPoll with includeStepOutputs returns a finished start run without fetching after an abort", async () => {
@@ -1051,6 +1050,35 @@ describe("Streaming — stream endings", () => {
     for await (const _ of client.runStreamingAgent("ag_1", { input: "hi" }, { timeoutMs: 5_000 })) break;
     expect(body!.cancelled()).toBe(true);
   });
+
+  test.each([false, true])(
+    "runStreamingAgent and runStreamingAgentAndWait throw the caller's abort reason (aborted before the call: %s)",
+    async (before) => {
+      // Like the standard fetch: rejects with the signal's reason.
+      const client = new Seclai({
+        apiKey: "k",
+        baseUrl: "https://test.invalid",
+        fetch: (_input, init) =>
+          new Promise<Response>((_resolve, reject) => {
+            const signal = init!.signal!;
+            if (signal.aborted) reject(signal.reason);
+            else signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+          }),
+      });
+      const reason = new Error("user cancelled");
+      for (const call of [
+        (signal: AbortSignal) => client.runStreamingAgentAndWait("ag_1", { input: "hi" }, { signal }),
+        async (signal: AbortSignal) => {
+          for await (const _ of client.runStreamingAgent("ag_1", { input: "hi" }, { signal })) void _;
+        },
+      ]) {
+        const caller = new AbortController();
+        if (before) caller.abort(reason);
+        else setTimeout(() => caller.abort(reason), 5);
+        expect(await call(caller.signal).catch((e) => e)).toBe(reason);
+      }
+    },
+  );
 
   test("runStreamingAgentAndWait and runStreamingAgent leave no listener on the caller's signal", async () => {
     const client = makeClient((req) => makeSseResponse([sse("init", initRun), sse("done", doneRun)]));
@@ -1263,6 +1291,156 @@ describe("Polling — abort and deadline", () => {
     expect(caller.listeners()).toBe(0);
   });
 
+  test("runAgentAndPoll does not cut off the start request at timeoutMs, only on the caller's abort (#25)", async () => {
+    const client = new Seclai({ apiKey: "k", baseUrl: "https://test.invalid", fetch: hangUntilAborted });
+    const caller = new AbortController();
+    const reason = new Error("stop");
+    setTimeout(() => caller.abort(reason), 80);
+    const started = Date.now();
+    const err = await client.runAgentAndPoll("ag_1", { input: "hi" }, { timeoutMs: 10, signal: caller.signal }).catch((e) => e);
+    expect(err).toBe(reason);
+    expect(Date.now() - started).toBeGreaterThanOrEqual(70);
+  }, 5_000);
+
+  test("runAgentAndPoll throws a poll's own error, not the timeout, when it arrives after the deadline (#25)", async () => {
+    const client = new Seclai({
+      apiKey: "k",
+      baseUrl: "https://test.invalid",
+      // Ignores signal: the 500 arrives after the deadline.
+      fetch: async (_input, init) => {
+        if (init?.method === "POST") return jsonResponse(pending);
+        await new Promise((r) => setTimeout(r, 60));
+        return new Response("boom", { status: 500 });
+      },
+    });
+    const err = await client.runAgentAndPoll("ag_1", { input: "hi" }, { pollIntervalMs: 5, timeoutMs: 30 }).catch((e) => e);
+    expect(err).toBeInstanceOf(SeclaiAPIStatusError);
+    expect(err.statusCode).toBe(500);
+  });
+
+  test("runAgentAndPoll throws the timeout with the start response when a poll does not answer by timeoutMs (#25)", async () => {
+    const caller = countedSignal();
+    const client = new Seclai({
+      apiKey: "k",
+      baseUrl: "https://test.invalid",
+      fetch: async (input, init) => (init?.method === "POST" ? jsonResponse(pending) : hangUntilAborted(input, init)),
+    });
+    const err = await client
+      .runAgentAndPoll("ag_1", { input: "hi" }, { pollIntervalMs: 5, timeoutMs: 40, signal: caller.signal })
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(SeclaiStreamingError);
+    expect(err.run).toEqual(pending);
+    expect(err.runId).toBe("run_1");
+    expect(caller.listeners()).toBe(0);
+  }, 5_000);
+
+  test("runAgentAndPoll with timeoutMs: Infinity cuts off no request (#25)", async () => {
+    let gets = 0;
+    const client = new Seclai({
+      apiKey: "k",
+      baseUrl: "https://test.invalid",
+      // Honours signal, and answers after a few ms.
+      fetch: (_input, init) =>
+        new Promise<Response>((resolve, reject) => {
+          const body = init?.method === "POST" ? pending : ++gets < 2 ? { id: "run_1", status: "running" } : completed;
+          const t = setTimeout(() => resolve(jsonResponse(body)), 20);
+          init?.signal?.addEventListener("abort", () => {
+            clearTimeout(t);
+            reject(new DOMException("aborted", "AbortError"));
+          }, { once: true });
+        }),
+    });
+    const result = await client.runAgentAndPoll("ag_1", { input: "hi" }, { pollIntervalMs: 5, timeoutMs: Infinity });
+    expect(result).toEqual(completed);
+  });
+
+  test("runAgentAndPoll with includeStepOutputs and timeoutMs: Infinity fetches the step outputs of an ended start run", async () => {
+    const withSteps = { ...completed, steps: [{ output: "step output" }] };
+    const client = new Seclai({
+      apiKey: "k",
+      baseUrl: "https://test.invalid",
+      // Honours signal, and answers after a few ms.
+      fetch: async (_input, init) => {
+        if (init?.method === "POST") return jsonResponse(completed);
+        return await new Promise<Response>((resolve, reject) => {
+          const t = setTimeout(() => resolve(jsonResponse(withSteps)), 20);
+          init?.signal?.addEventListener("abort", () => {
+            clearTimeout(t);
+            reject(new DOMException("aborted", "AbortError"));
+          }, { once: true });
+        });
+      },
+    });
+    const result = await client.runAgentAndPoll("ag_1", { input: "hi" }, { timeoutMs: Infinity, includeStepOutputs: true });
+    expect(result).toEqual(withSteps);
+  });
+
+  /** A signal like a polyfill's: no throwIfAborted, no reason, and listeners called with no event. */
+  function legacySignal() {
+    const listeners = new Set<() => void>();
+    const signal = {
+      aborted: false,
+      addEventListener: (_type: string, l: () => void) => listeners.add(l),
+      removeEventListener: (_type: string, l: () => void) => listeners.delete(l),
+    };
+    const abort = () => {
+      signal.aborted = true;
+      for (const l of [...listeners]) l();
+    };
+    return { signal: signal as unknown as AbortSignal, abort };
+  }
+
+  test("runStreamingAgentAndWait stops at an abort of a signal whose listeners get no event", async () => {
+    const client = new Seclai({
+      apiKey: "k",
+      baseUrl: "https://test.invalid",
+      fetch: (_input, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          init!.signal!.addEventListener("abort", () => reject(init!.signal!.reason), { once: true });
+        }),
+    });
+    const legacy = legacySignal();
+    setTimeout(legacy.abort, 5);
+    const started = Date.now();
+    const err = await client
+      .runStreamingAgentAndWait("ag_1", { input: "hi" }, { signal: legacy.signal, timeoutMs: 2000 })
+      .catch((e) => e);
+    expect((err as Error).name).toBe("AbortError");
+    expect(Date.now() - started).toBeLessThan(1000);
+  });
+
+  test("runAgentAndPoll throws a null abort reason as is", async () => {
+    const client = makeClient(() => jsonResponse(pending));
+    const caller = new AbortController();
+    caller.abort(null);
+    expect(await client.runAgentAndPoll("ag_1", { input: "hi" }, { signal: caller.signal }).catch((e) => e)).toBeNull();
+  });
+
+  test("runAgentAndPoll throws an AbortError for an aborted signal without throwIfAborted or reason, and starts no run", async () => {
+    let requests = 0;
+    const client = makeClient(() => {
+      requests++;
+      return jsonResponse(pending);
+    });
+    const legacy = legacySignal();
+    legacy.abort();
+    const err = await client.runAgentAndPoll("ag_1", { input: "hi" }, { signal: legacy.signal }).catch((e) => e);
+    expect(err).toBeInstanceOf(DOMException);
+    expect(err.name).toBe("AbortError");
+    expect(requests).toBe(0);
+  });
+
+  test("runAgentAndPoll throws an AbortError when a signal without reason aborts during the wait", async () => {
+    const client = makeClient((req) => jsonResponse(req.method === "POST" ? pending : { id: "run_1", status: "running" }));
+    const legacy = legacySignal();
+    setTimeout(legacy.abort, 10);
+    const err = await client
+      .runAgentAndPoll("ag_1", { input: "hi" }, { pollIntervalMs: 10_000, timeoutMs: 60_000, signal: legacy.signal })
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(DOMException);
+    expect(err.name).toBe("AbortError");
+  });
+
   test("runAgentAndPoll with includeStepOutputs returns an ended start run without step outputs when aborted during their fetch", async () => {
     const caller = new AbortController();
     const client = new Seclai({
@@ -1302,21 +1480,72 @@ describe("Polling — abort and deadline", () => {
     expect(err).toBe(reason);
   });
 
-  test("runAgentAndPoll cuts the wait between polls at the deadline", async () => {
+  test("runAgentAndPoll sends no poll when timeoutMs is not above pollIntervalMs, even when the timer fires early", async () => {
+    // A frozen clock makes every wait look like it ended before the deadline.
+    const now = Date.now();
+    const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+    try {
+      let gets = 0;
+      const client = makeClient((req) => {
+        if (req.method === "POST") return jsonResponse({ id: "run_1", status: "pending" });
+        gets++;
+        return jsonResponse({ id: "run_1", status: "completed" });
+      });
+      for (const timeoutMs of [20, 50]) {
+        const err = await client
+          .runAgentAndPoll("ag_1", { input: "hi" }, { pollIntervalMs: 50, timeoutMs })
+          .catch((e) => e);
+        expect(err).toBeInstanceOf(SeclaiStreamingError);
+        expect(err.run).toEqual({ id: "run_1", status: "pending" });
+      }
+      expect(gets).toBe(0);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  test("runAgentAndPoll sends no poll when a wait ends past the deadline", async () => {
+    // The clock jumps past the deadline during the wait, as when the event loop stalls.
+    const start = Date.now();
+    let late = false;
+    const clock = vi.spyOn(Date, "now").mockImplementation(() => (late ? start + 1_000 : start));
+    try {
+      let gets = 0;
+      const client = makeClient((req) => {
+        if (req.method === "POST") return jsonResponse({ id: "run_1", status: "pending" });
+        gets++;
+        return jsonResponse({ id: "run_1", status: "completed" });
+      });
+      setTimeout(() => {
+        late = true;
+      }, 10);
+      const err = await client
+        .runAgentAndPoll("ag_1", { input: "hi" }, { pollIntervalMs: 30, timeoutMs: 50 })
+        .catch((e) => e);
+      expect(err).toBeInstanceOf(SeclaiStreamingError);
+      expect(gets).toBe(0);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  test("runAgentAndPoll ends the wait before the first poll at the deadline with the timeout, sending no poll", async () => {
     let gets = 0;
     const client = makeClient((req) => {
       if (req.method === "POST") return jsonResponse(pending);
       gets++;
-      return jsonResponse({ id: "run_1", status: "running" });
+      return jsonResponse(completed);
     });
     const started = Date.now();
     const err = await client
       .runAgentAndPoll("ag_1", { input: "hi" }, { pollIntervalMs: 10_000, timeoutMs: 50 })
       .catch((e) => e);
     expect(err).toBeInstanceOf(SeclaiStreamingError);
-    expect(Date.now() - started).toBeLessThan(2_000);
-    expect(gets).toBe(1); // the poll at the deadline
-    expect(err.run).toEqual({ id: "run_1", status: "running" });
+    const elapsed = Date.now() - started;
+    expect(elapsed).toBeGreaterThanOrEqual(40);
+    expect(elapsed).toBeLessThan(2_000);
+    expect(gets).toBe(0);
+    expect(err.run).toEqual(pending);
   });
 
   test("runAgentAndPoll throws with the runAgent() response in run when timeoutMs elapses before any poll", async () => {
@@ -1338,20 +1567,29 @@ describe("Polling — abort and deadline", () => {
     expect(gets).toBe(0);
   });
 
-  test("runAgentAndPoll with includeStepOutputs bounds the fetch for an ended start run by timeoutMs", async () => {
+  test("runAgentAndPoll with includeStepOutputs does not cut off the fetch for an ended start run at timeoutMs", async () => {
+    const withSteps = { ...completed, steps: [{ output: "step output" }] };
     const client = new Seclai({
       apiKey: "k",
       baseUrl: "https://test.invalid",
-      fetch: async (input, init) =>
-        init?.method === "POST" ? jsonResponse(completed) : hangUntilAborted(input, init),
+      // Honours signal, and answers after the deadline.
+      fetch: async (_input, init) => {
+        if (init?.method === "POST") return jsonResponse(completed);
+        return await new Promise<Response>((resolve, reject) => {
+          const t = setTimeout(() => resolve(jsonResponse(withSteps)), 50);
+          init?.signal?.addEventListener("abort", () => {
+            clearTimeout(t);
+            reject(new DOMException("aborted", "AbortError"));
+          }, { once: true });
+        });
+      },
     });
-    const started = Date.now();
-    const result = await client.runAgentAndPoll("ag_1", { input: "hi" }, { timeoutMs: 30, includeStepOutputs: true });
-    expect(result).toEqual(completed);
-    expect(Date.now() - started).toBeLessThan(2_000);
-  }, 5_000);
+    const result = await client.runAgentAndPoll("ag_1", { input: "hi" }, { timeoutMs: 10, includeStepOutputs: true });
+    expect(result).toEqual(withSteps);
+  });
 
-  test("runAgentAndPoll with includeStepOutputs sends no fetch for an ended start run once timeoutMs has elapsed", async () => {
+  test("runAgentAndPoll with includeStepOutputs fetches an ended start run's step outputs after timeoutMs has elapsed", async () => {
+    const withSteps = { ...completed, steps: [{ output: "step output" }] };
     let gets = 0;
     const client = makeClient(async (req) => {
       if (req.method === "POST") {
@@ -1359,14 +1597,14 @@ describe("Polling — abort and deadline", () => {
         return jsonResponse(completed);
       }
       gets++;
-      return new Response("boom", { status: 500 });
+      return jsonResponse(withSteps);
     });
     const result = await client.runAgentAndPoll("ag_1", { input: "hi" }, { timeoutMs: 10, includeStepOutputs: true });
-    expect(result).toEqual(completed);
-    expect(gets).toBe(0);
+    expect(result).toEqual(withSteps);
+    expect(gets).toBe(1);
   });
 
-  test("runAgentAndPoll with includeStepOutputs throws a failing fetch for an ended start run before the deadline", async () => {
+  test("runAgentAndPoll with includeStepOutputs throws a failing fetch for an ended start run", async () => {
     const client = makeClient((req) =>
       req.method === "POST" ? jsonResponse(completed) : new Response("boom", { status: 500 }),
     );

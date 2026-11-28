@@ -491,16 +491,20 @@ A run's answer can be ready before its last step finishes: once
 `returnOnResult: true` to return as soon as a run has it set, the one
 `runAgent()` returns included. With `includeStepOutputs`, when that run would end
 the poll, it is fetched again at once, because the `runAgent()` response carries
-no step outputs; with a `fetch` that honours `signal`, when `signal` aborts or
-`timeoutMs` elapses before that fetch
-answers, the run comes back without step outputs. Such a run may still be in
+no step outputs; when `signal` aborts before that fetch answers (with a `fetch`
+that honours `signal`), the run comes back without step outputs. Such a run may still be in
 progress: its `status` is not terminal and the run can still fail, so check
 `result_reported_at`, not `status`. If `timeoutMs` elapses first, it throws
 `SeclaiStreamingError` with the latest run it has (the `runAgent()` response if
-no poll ran) in `run`; the wait between polls is cut short at the deadline.
+no poll answered) in `run`. No poll is sent at or after the deadline: a wait
+that reaches it ends the call, so a `timeoutMs` no greater than `pollIntervalMs`
+sends no poll, and with a `fetch` that honours `signal` a poll in flight at the
+deadline is aborted. `timeoutMs` does not cut off the start request (the server
+may already have created the run) or the step-outputs fetch; only `signal` does.
+A request is not cut off while more than 2^31-1 ms remain.
 `signal` is passed to every request and to the wait between polls, and an abort
-throws `signal.reason`, as `signal.throwIfAborted()` does, unless a run has
-already ended the poll.
+throws `signal.reason`, as `signal.throwIfAborted()` does (an `AbortError` for a
+signal that has no `reason`), unless a run has already ended the poll.
 
 <!-- sdksync:check -->
 ```ts

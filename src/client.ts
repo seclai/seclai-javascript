@@ -532,47 +532,51 @@ function anySignal(signals: Array<AbortSignal | undefined>): { signal: AbortSign
   if (present.length === 0) return { signal: undefined, cleanup: () => {} };
   if (present.length === 1) return { signal: present[0], cleanup: () => {} };
   const controller = new AbortController();
-  const onAbort = () => controller.abort();
-  const listening: AbortSignal[] = [];
+  // Each listener closes over its signal: a polyfill may dispatch an event with no target.
+  const listening: Array<[AbortSignal, () => void]> = [];
   const cleanup = () => {
-    for (const s of listening) s.removeEventListener("abort", onAbort);
+    for (const [s, onAbort] of listening) s.removeEventListener("abort", onAbort);
     listening.length = 0;
   };
   for (const s of present) {
     if (s.aborted) {
       cleanup();
-      controller.abort();
+      controller.abort(s.reason);
       break;
     }
+    const onAbort = () => controller.abort(s.reason);
     s.addEventListener("abort", onAbort, { once: true });
-    listening.push(s);
+    listening.push([s, onAbort]);
   }
   return { signal: controller.signal, cleanup };
 }
 
-/** A fresh signal that aborts with `signal`, and a `cleanup` that unlinks it. */
-function requestSignal(signal: AbortSignal | undefined): { signal: AbortSignal | undefined; cleanup: () => void } {
-  if (!signal) return { signal: undefined, cleanup: () => {} };
-  const controller = new AbortController();
-  if (signal.aborted) {
-    controller.abort(signal.reason);
-    return { signal: controller.signal, cleanup: () => {} };
-  }
-  const onAbort = () => controller.abort(signal.reason);
-  signal.addEventListener("abort", onAbort, { once: true });
-  return { signal: controller.signal, cleanup: () => signal.removeEventListener("abort", onAbort) };
+/**
+ * What an aborted `signal` throws: its `reason`, or an `AbortError` for a
+ * signal that carries none (a polyfill or an older runtime).
+ */
+function abortReason(signal: AbortSignal): unknown {
+  return signal.reason !== undefined ? signal.reason : new DOMException("This operation was aborted", "AbortError");
 }
+
+/** `signal.throwIfAborted()`, for signals that lack it too. */
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) throw abortReason(signal);
+}
+
+/** The longest delay `setTimeout` takes; a longer one fires at once. */
+const MAX_TIMER_MS = 2_147_483_647;
 
 /** Wait `ms`, or reject with `signal.reason` once `signal` aborts. Leaves no listener behind. */
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) {
-      reject(signal.reason);
+      reject(abortReason(signal));
       return;
     }
     const onAbort = () => {
       clearTimeout(timer);
-      reject(signal!.reason);
+      reject(abortReason(signal!));
     };
     const timer = setTimeout(() => {
       signal?.removeEventListener("abort", onAbort);
@@ -1705,18 +1709,26 @@ export class Seclai {
    * run can still fail, so check `result_reported_at`, not `status`.
    *
    * When `timeoutMs` elapses first, this throws {@link SeclaiStreamingError}
-   * with the latest run it has (the `runAgent()` response if no poll ran) in
+   * with the latest run it has (the `runAgent()` response if no poll answered) in
    * `run`. If that run has `result_reported_at`
-   * set, its `output` is the answer. The wait between polls is cut short at
-   * the deadline, so the last poll is sent when `timeoutMs` elapses.
+   * set, its `output` is the answer. No poll is sent at or after the
+   * deadline: a wait between polls that reaches it ends the call with the
+   * timeout, so a `timeoutMs` no greater than `pollIntervalMs` sends no poll.
+   * With a `fetch` that honours `signal`, a poll still in flight at the
+   * deadline is aborted and the timeout is thrown; another error a poll ends
+   * with is thrown as itself. `timeoutMs` does not cut off the start request
+   * (the server may already have created the run) or the fetch for an ended
+   * start run's step outputs; only `signal` does. A request is not cut off
+   * while more than 2^31-1 ms remain.
    *
    * `signal` is passed to every request and to the wait between polls. An
    * abort throws `signal.reason`, as `signal.throwIfAborted()` does (by
-   * default an `AbortError`): an already-aborted signal starts no run. A run
+   * default an `AbortError`), or an `AbortError` for a signal that has no
+   * `reason`: an already-aborted signal starts no run. A run
    * that has ended the poll is returned even after an abort. When the start
-   * run has ended it and `includeStepOutputs` is set, the fetch for its step
-   * outputs is cut off, with a `fetch` that honours `signal`, by an abort or
-   * by `timeoutMs`, and the start run then comes back without step outputs.
+   * run has ended it and `includeStepOutputs` is set, an abort during the
+   * fetch for its step outputs (with a `fetch` that honours `signal`) returns
+   * the start run without step outputs.
    *
    * @param agentId - Agent identifier.
    * @param body - Run request payload.
@@ -1725,7 +1737,7 @@ export class Seclai {
    *   with `result_reported_at` set.
    * @throws {@link SeclaiStreamingError} If `timeoutMs` elapses before the run
    *   finished. Its `run` holds the latest run it has (the `runAgent()`
-   *   response if no poll ran).
+   *   response if no poll answered).
    * @throws `signal.reason` If `signal` is aborted before the run has ended
    *   the poll.
    */
@@ -1753,19 +1765,35 @@ export class Seclai {
     const signal = opts?.signal;
     const deadline = Date.now() + timeout;
 
-    signal?.throwIfAborted();
-    // Each request gets its own signal linked to the caller's, removed when it
-    // settles, so a fetch that leaves its listener on the signal it was given
-    // leaves none on the caller's. Whatever a fetch implementation rejects with
-    // on an abort, throw the abort error.
-    const abortable = async <T>(send: (s: AbortSignal | undefined) => Promise<T>): Promise<T> => {
-      const linked = requestSignal(signal);
+    throwIfAborted(signal);
+    let current: AgentRunResponse | undefined;
+    let runId: string | undefined;
+    const timedOut = () => incompleteRunError(`Polling timed out after ${timeout}ms.`, current, runId);
+    // Each request gets its own signal, linked to the caller's and unlinked
+    // when it settles, so a fetch that leaves its listener on the signal it was
+    // given leaves none on the caller's. A caller abort throws the abort error,
+    // whatever the fetch rejects with. With `bounded`, the request is also cut
+    // off at the deadline, and only the abort that causes throws the timeout:
+    // any other error is thrown as itself. No timer is set while more than
+    // MAX_TIMER_MS remain (setTimeout would fire at once).
+    const abortable = async <T>(bounded: boolean, send: (s: AbortSignal | undefined) => Promise<T>): Promise<T> => {
+      const limit = new AbortController();
+      const left = deadline - Date.now();
+      // A wait that ran late must not send a poll past the deadline.
+      if (bounded && left <= 0) throw timedOut();
+      const timer = bounded && Number.isFinite(left) && left <= MAX_TIMER_MS
+        ? setTimeout(() => limit.abort(), Math.max(left, 0))
+        : undefined;
+      const linked = anySignal([signal, limit.signal]);
       try {
         return await send(linked.signal);
       } catch (err) {
-        signal?.throwIfAborted();
+        throwIfAborted(signal);
+        const cutOff = err === limit.signal.reason || (err as { name?: unknown } | null)?.name === "AbortError";
+        if (limit.signal.aborted && cutOff) throw timedOut();
         throw err;
       } finally {
+        clearTimeout(timer);
         linked.cleanup();
       }
     };
@@ -1778,46 +1806,41 @@ export class Seclai {
     const endsPoll = (r: AgentRunResponse) =>
       isTerminalStatus(r.status) || Boolean(opts?.returnOnResult && r.result_reported_at);
 
-    // runAgent(), with the signal.
-    const run = (await abortable((s) => {
+    // runAgent(), with the signal. timeoutMs does not cut it off: the server may
+    // already have created the run, and there would be no runId to find it by.
+    const run = (await abortable(false, (s) => {
       const startOpts: { json: unknown; signal?: AbortSignal } = { json: body };
       if (s) startOpts.signal = s;
       return this.request("POST", `/agents/${agentId}/runs`, startOpts);
     })) as AgentRunResponse;
-    const runId = (run as any).id ?? (run as any).run_id;
+    runId = (run as any).id ?? (run as any).run_id;
     if (!runId) throw new SeclaiError("Agent run response did not contain an id.");
 
     // The initial response is checked too: a fast run can already be done. It
     // carries no step outputs, so when they are asked for and it would end the
-    // poll, fetch the run first, within what is left of timeoutMs. Past the
-    // deadline or after an abort, the start run is returned without them.
-    let current = run;
-    if (opts?.includeStepOutputs && endsPoll(run)) {
-      const left = deadline - Date.now();
-      if (left > 0 && !signal?.aborted) {
-        const limit = new AbortController();
-        const timer = setTimeout(() => limit.abort(), left);
-        const bounded = anySignal([signal, limit.signal]);
-        try {
-          current = (await this.request("GET", `/agents/runs/${runId}`, pollOpts(bounded.signal))) as AgentRunResponse;
-        } catch (err) {
-          if (!limit.signal.aborted && !signal?.aborted) throw err;
-        } finally {
-          clearTimeout(timer);
-          bounded.cleanup();
-        }
+    // poll, fetch the run first. This is not waiting for the run, so timeoutMs
+    // does not cut it off. After an abort, the start run is returned without them.
+    current = run;
+    if (opts?.includeStepOutputs && endsPoll(run) && !signal?.aborted) {
+      try {
+        current = (await abortable(false, (s) => this.request("GET", `/agents/runs/${runId}`, pollOpts(s)))) as AgentRunResponse;
+      } catch (err) {
+        if (!signal?.aborted) throw err;
       }
     }
     while (true) {
       if (endsPoll(current)) return current;
 
-      signal?.throwIfAborted();
+      throwIfAborted(signal);
       const left = deadline - Date.now();
-      if (left <= 0) throw incompleteRunError(`Polling timed out after ${timeout}ms.`, current, runId);
+      if (left <= pollInterval) {
+        // The wait reaches the deadline: no poll is sent at or after it.
+        if (left > 0) await sleep(left, signal);
+        throw timedOut();
+      }
+      await sleep(pollInterval, signal);
 
-      await sleep(Math.min(pollInterval, left), signal);
-
-      current = (await abortable((s) => this.request("GET", `/agents/runs/${runId}`, pollOpts(s)))) as AgentRunResponse;
+      current = (await abortable(true, (s) => this.request("GET", `/agents/runs/${runId}`, pollOpts(s)))) as AgentRunResponse;
     }
   }
 
