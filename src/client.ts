@@ -618,6 +618,15 @@ function incompleteRunError(reason: string, run: AgentRunResponse | undefined, r
   return new SeclaiStreamingError(`${reason} ${state}`, runId ?? run?.run_id, run);
 }
 
+/**
+ * Set `cause` on `error` the way `new Error(message, { cause })` does: an own
+ * property that is not enumerable, so loggers and `JSON.stringify` skip it.
+ */
+function withCause<E extends Error>(error: E, cause: unknown): E {
+  Object.defineProperty(error, "cause", { value: cause, enumerable: false, writable: true, configurable: true });
+  return error;
+}
+
 /** Timeout errors thrown by the stream iterator, so the wait helper can attach its snapshot. */
 const streamTimeouts = new WeakSet<object>();
 
@@ -1410,7 +1419,8 @@ export class Seclai {
    * @throws {@link SeclaiStreamingError} If the server sends an `error` or
    *   `timeout` event, `timeoutMs` elapses, or, with `throwOnIncomplete`, the
    *   stream ends or breaks, before the run finished. Its `run` holds the
-   *   latest snapshot.
+   *   latest snapshot. On `timeoutMs`, its `cause` is the error the request
+   *   or read ended with.
    *
    * @example
    * ```ts
@@ -1496,7 +1506,9 @@ export class Seclai {
     } catch (err) {
       // The caller asked to stop: keep the abort error.
       if (opts?.signal?.aborted) throw err;
-      if (streamTimeouts.has(err as object)) throw incompleteRunError(streamTimeoutMessage(timeoutMs), snapshot());
+      if (streamTimeouts.has(err as object)) {
+        throw withCause(incompleteRunError(streamTimeoutMessage(timeoutMs), snapshot()), (err as Error).cause);
+      }
       // A failure after the body was being read is a broken stream. Without
       // throwOnIncomplete it throws the fetch error, as released.
       if (opts?.throwOnIncomplete && progress.reading && !(err instanceof SeclaiStreamingError)) {
@@ -1539,7 +1551,8 @@ export class Seclai {
    * @param body - Streaming run request payload.
    * @param opts - Timeout and abort signal options.
    * @yields {@link AgentRunEvent} for each SSE message.
-   * @throws {@link SeclaiStreamingError} If `timeoutMs` elapses. An event read
+   * @throws {@link SeclaiStreamingError} If `timeoutMs` elapses, with the
+   *   error the request or read ended with as its `cause`. An event read
    *   in full before the stream broke or timed out is yielded first, unless
    *   `signal` was aborted.
    *
@@ -1689,7 +1702,8 @@ export class Seclai {
       }
     } catch (err) {
       if (timedOut) {
-        const timeout = new SeclaiStreamingError(streamTimeoutMessage(timeoutMs));
+        // The error the fetch or read ended with is its cause.
+        const timeout = withCause(new SeclaiStreamingError(streamTimeoutMessage(timeoutMs)), err);
         streamTimeouts.add(timeout);
         throw timeout;
       }
@@ -1725,9 +1739,10 @@ export class Seclai {
    * deadline: a wait between polls that reaches it ends the call with the
    * timeout, so a `timeoutMs` no greater than `pollIntervalMs` sends no poll.
    * With a `fetch` that honours `signal`, a poll still in flight at the
-   * deadline is aborted and the timeout is thrown, with the error the poll
-   * ended with as its `cause`; an HTTP error status a poll gets after the
-   * deadline is thrown as itself. `timeoutMs` does not cut off the start request
+   * deadline is aborted and the timeout is thrown. Any error but an HTTP
+   * error status that a poll ends with once the deadline has passed is the
+   * timeout's `cause`; an HTTP error status a poll gets after the deadline is
+   * thrown as itself. `timeoutMs` does not cut off the start request
    * (the server may already have created the run) or the fetch for an ended
    * start run's step outputs; only `signal` does. A request is not cut off
    * while more than 2^31-1 ms remain.
@@ -1748,7 +1763,8 @@ export class Seclai {
    *   with `result_reported_at` set.
    * @throws {@link SeclaiStreamingError} If `timeoutMs` elapses before the run
    *   finished. Its `run` holds the latest run it has (the `runAgent()`
-   *   response if no poll answered).
+   *   response if no poll answered), and its `cause` the error a poll ended
+   *   with at the deadline, if one did.
    * @throws `signal.reason` If `signal` is aborted before the run has ended
    *   the poll.
    */
@@ -1804,9 +1820,7 @@ export class Seclai {
         // deadline has fired is the cut-off, whatever the fetch turned it into.
         if (limit.signal.aborted && !(err instanceof SeclaiAPIStatusError)) {
           // Keep what the request ended with, which may not be the abort.
-          const timeoutError = timedOut();
-          timeoutError.cause = err;
-          throw timeoutError;
+          throw withCause(timedOut(), err);
         }
         throw err;
       } finally {

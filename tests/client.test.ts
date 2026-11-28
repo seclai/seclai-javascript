@@ -1113,6 +1113,15 @@ describe("Streaming — stream endings", () => {
     expect(b.message).toBe(a.message);
     expect(a.run).toBeUndefined();
     expect(b.run).toEqual(initRun);
+    // What the request or read ended with is the timeout's non-enumerable cause.
+    expect(a.cause).toMatchObject({ name: "AbortError" });
+    expect(b.cause).toMatchObject({ message: "aborted" });
+    expect(Object.keys(a)).not.toContain("cause");
+    const fromIterator = await (async () => {
+      for await (const _ of duringRequest.runStreamingAgent("ag_1", { input: "hi" }, { timeoutMs: 10 })) void _;
+    })().catch((e) => e);
+    expect(fromIterator).toBeInstanceOf(SeclaiStreamingError);
+    expect(fromIterator.cause).toMatchObject({ name: "AbortError" });
   });
 
   test("runStreamingAgentAndWait by default returns a done event read in full before the stream broke", async () => {
@@ -1333,6 +1342,7 @@ describe("Polling — abort and deadline", () => {
     const err = await client.runAgentAndPoll("ag_1", { input: "hi" }, { pollIntervalMs: 5, timeoutMs: 30 }).catch((e) => e);
     expect(err).toBeInstanceOf(SeclaiStreamingError);
     expect(err.cause).toBe(failure);
+    expect(Object.keys(err)).not.toContain("cause");
   });
 
   test.each([
@@ -1382,6 +1392,9 @@ describe("Polling — abort and deadline", () => {
     expect(err).toBeInstanceOf(SeclaiStreamingError);
     expect(err.run).toEqual(pending);
     expect(err.runId).toBe("run_1");
+    // The abort the fetch rejected with, kept as the standard, non-enumerable cause.
+    expect(err.cause).toMatchObject({ name: "AbortError" });
+    expect(Object.keys(err)).not.toContain("cause");
     expect(caller.listeners()).toBe(0);
   }, 5_000);
 
