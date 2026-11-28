@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.11.0] - 2026-11-27
+
+### Changed
+
+- **Breaking:** Return `GenerationTierListResponse` from `getGenerationTiers()` in place of `Record<string, unknown>`, so a tier's `aspect_ratios` and other fields are typed. An `as` cast from the old type to an unrelated one, or an assignment that relied on `Record<string, unknown>`, may no longer compile
+- Make an abort through `signal` in `runAgentAndPoll()` throw `signal.reason`, as `signal.throwIfAborted()` does (an `AbortError` unless the caller aborted with a reason of its own, and for a signal that has no `reason`, such as a polyfill's), instead of `SeclaiError("Polling aborted.")`. `signal` now also reaches the start request, each poll and the wait between polls: an already-aborted signal starts no run, an abort during the wait stops it without sending another poll, and with a `fetch` that honours `signal`, an abort during the start request throws, where a start run that had already ended the poll was returned. A run that has ended the poll is still returned after an abort, and with `includeStepOutputs` and a `fetch` that honours `signal`, an abort during the fetch for its step outputs returns the start run without them. `runAgentAndPoll()` now sends its requests itself and no longer calls `runAgent()` or `getAgentRun()`
+- Return the `result` snapshot from `runStreamingAgentAndWait()` with `returnOnResult` when a `result` event and the `done` event arrive in one chunk, where the `done` run was returned
+
+### Added
+
+- Add the type exports `GenerationTierListResponse` and `GenerationTierResponse`
+
+### Fixed
+
+- Throw the caller's abort reason from `runStreamingAgent()` and `runStreamingAgentAndWait()` when `signal` is aborted with one (`controller.abort(reason)`) and the `fetch` rejects with the signal's reason, as the standard `fetch` does, where a generic `AbortError` was thrown. An abort without a reason still throws an `AbortError`
+- Throw `SeclaiStreamingError` from `runStreamingAgentAndWait()` when the server sends an `error` event, with the server's error text in the message, or a `timeout` event, each with the latest snapshot in `run`, with or without `throwOnIncomplete`. Both were read as the stream ending early: without `throwOnIncomplete`, the latest snapshot was returned when its status was not `pending`, so a run that failed on the server came back looking like an unfinished success, without the server's message; with it, the error said only that `done` never arrived
+- Parse a final SSE line that has no trailing newline, in `runStreamingAgent()` and `runStreamingAgentAndWait()`, where it was dropped
+- Close the response body on every way out of `runStreamingAgentAndWait()`, after `done` included, and when a caller leaves a `runStreamingAgent()` loop early
+- Remove the abort listeners `runStreamingAgent()` and `runStreamingAgentAndWait()` add to the caller's `signal` when the call ends, so a signal reused across calls no longer collects one per call
+- Throw one `SeclaiStreamingError` from `runStreamingAgentAndWait()` whether `timeoutMs` elapses during the request or during the read: `Timed out after <n>ms waiting for streaming agent run to complete.`, then whether a result had been reported, with the latest snapshot in `run` and, when the request or read was cut off, the error it ended with as its `cause`. A timeout during the read said `Timed out after <n>ms before the streaming agent run finished.`
+- Keep an event whose lines were read in full before a stream broke or timed out, unless the caller aborted `signal`: `runStreamingAgent()` yields it before throwing, and `runStreamingAgentAndWait()` returns a `done` event read so, or with `returnOnResult` a `result` event, where without `throwOnIncomplete` it threw the fetch error
+- Stop waiting for a run in `runAgentAndPoll()` at the deadline: a wait between polls that reaches it ends the call with the timeout `SeclaiStreamingError`, and with a `fetch` that honours `signal`, a poll still in flight then is aborted and the call throws the same error, with the latest run in `run`. `timeoutMs` could overshoot by up to one `pollIntervalMs`, and a poll the server never answered kept the call waiting without limit, whether or not a `signal` was passed. No poll is sent at or after the deadline, so a run that ends during the last interval now times out, and a `timeoutMs` no greater than `pollIntervalMs` sends no poll. Any other error a poll ends with once the deadline has passed, the abort of a poll in flight included, is the timeout's `cause`, except a caller abort, which throws `signal.reason`, and an HTTP error status a poll gets after the deadline, such as a 500, is thrown as itself. `timeoutMs` does not cut off the start request, since the server may already have created the run, nor the fetch for an ended start run's step outputs; only `signal` does. A request is not cut off while more than 2^31-1 ms remain ([#25](https://github.com/seclai/seclai-javascript/issues/25))
+- Wait out a `pollIntervalMs` over 2^31-1 ms in `runAgentAndPoll()`, which polled in a tight loop because `setTimeout` fires at once for a longer delay
+- Throw an HTTP error status that `runStreamingAgent()` or `runStreamingAgentAndWait()` gets as `timeoutMs` elapses (for example, a 401 whose body is still being read) as `SeclaiAPIStatusError`, as `runAgentAndPoll()` does, where it was thrown as the timeout `SeclaiStreamingError`
+
 ## [1.10.0] - 2026-11-27
 
 ### Changed
@@ -308,6 +333,7 @@ _Stable release. No functional changes since 0.0.1._
 
 _Initial release._
 
+[1.11.0]: https://github.com/seclai/seclai-javascript/releases/tag/1.11.0
 [1.10.0]: https://github.com/seclai/seclai-javascript/releases/tag/1.10.0
 [1.9.0]: https://github.com/seclai/seclai-javascript/releases/tag/1.9.0
 [1.8.0]: https://github.com/seclai/seclai-javascript/releases/tag/1.8.0

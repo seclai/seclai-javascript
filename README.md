@@ -377,14 +377,19 @@ await client.deleteAgentRun("run_id");
 
 The SDK provides two streaming patterns over the SSE `/runs/stream` endpoint:
 
-**Block until done** — returns the run from the `done` event. If `timeoutMs`
-elapses first, it throws `SeclaiStreamingError`, whose `run` holds the latest
-snapshot: the `result` snapshot if one arrived, else the `init` snapshot. An
-abort through `signal` rethrows the abort error.
+**Block until done** — returns the run from the `done` event. When the server
+sends an `error` event (the run's stream failed on the server) it throws
+`SeclaiStreamingError` with the server's error text in its message, and when the
+server sends a `timeout` event, or `timeoutMs` elapses first, it throws
+`SeclaiStreamingError` too. Its `run` holds the latest snapshot: the `result`
+snapshot if one arrived, else the `init` snapshot. An HTTP error status that
+arrives as `timeoutMs` elapses is thrown as itself, as `SeclaiAPIStatusError`.
+An abort through `signal` rethrows the abort error.
 
 By default, a stream that ends before `done` returns the latest snapshot when
-its status is not `pending`, so the run returned may not have finished: check
-`status` and `result_reported_at`. A stream that breaks throws the fetch error.
+its status is not `pending`, so the run returned may not have finished: check `status` and `result_reported_at`. A stream that breaks
+throws the fetch error, unless a `done` event, or with `returnOnResult` a `result`
+event, was read in full before it broke.
 Pass `throwOnIncomplete: true` to throw `SeclaiStreamingError`, with the snapshot
 in `run`, in both cases instead, and also when the server answers with plain
 JSON for a run that has not finished. It is recommended, and becomes the default in
@@ -413,7 +418,9 @@ for await (const event of client.runStreamingAgent(
 ```
 
 When the server answers with plain JSON instead of an SSE stream,
-`runStreamingAgent` yields only a `done` event, so read the answer from it.
+`runStreamingAgent` yields only a `done` event, so read the answer from it. The
+iterator yields the server's `error` and `timeout` events like any other, and
+leaving the loop early closes the response body.
 
 A `result` event carries the run's answer in `output` once `result_reported_at`
 is set. It comes before `done`, and for an agent that reports its result early it
@@ -484,12 +491,21 @@ A run's answer can be ready before its last step finishes: once
 `result_reported_at` is set on `getAgentRun()`, `output` holds the answer. Pass
 `returnOnResult: true` to return as soon as a run has it set, the one
 `runAgent()` returns included. With `includeStepOutputs`, when that run would end
-the poll and `signal` is not aborted, it is fetched again at once, because the
-`runAgent()` response carries no step outputs; after an abort it comes back
-without step outputs. Such a run may still be in progress: its `status`
-is not terminal and the run can still fail, so check `result_reported_at`, not
-`status`. If `timeoutMs` elapses first, it throws `SeclaiStreamingError` with the
-latest run it has (the `runAgent()` response if no poll ran) in `run`.
+the poll, it is fetched again at once, because the `runAgent()` response carries
+no step outputs; when `signal` aborts before that fetch answers (with a `fetch`
+that honours `signal`), the run comes back without step outputs. Such a run may still be in
+progress: its `status` is not terminal and the run can still fail, so check
+`result_reported_at`, not `status`. If `timeoutMs` elapses first, it throws
+`SeclaiStreamingError` with the latest run it has (the `runAgent()` response if
+no poll answered) in `run`. No poll is sent at or after the deadline: a wait
+that reaches it ends the call, so a `timeoutMs` no greater than `pollIntervalMs`
+sends no poll, and with a `fetch` that honours `signal` a poll in flight at the
+deadline is aborted. `timeoutMs` does not cut off the start request (the server
+may already have created the run) or the step-outputs fetch; only `signal` does.
+A request is not cut off while more than 2^31-1 ms remain.
+`signal` is passed to every request and to the wait between polls, and an abort
+throws `signal.reason`, as `signal.throwIfAborted()` does (an `AbortError` for a
+signal that has no `reason`), unless a run has already ended the poll.
 
 <!-- sdksync:check -->
 ```ts
